@@ -1438,8 +1438,15 @@ private fun ThemeChoiceCard(
                 Text(subtitle, color = previewText.copy(alpha = 0.72f), fontSize = 13.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
-                if (isPlus) Text("PLUS", color = previewAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text(if (selectedTheme == theme) "✓ Selezionato" else if (isPlus) "Prova" else "Tocca per scegliere", color = previewAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                if (isPlus) {
+                    Text("PLUS", color = previewAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(if (selectedTheme == theme) "✓ Selezionato" else "Prova", color = previewAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                } else {
+                    Switch(
+                        checked = selectedTheme == theme,
+                        onCheckedChange = { onThemeChanged(theme) }
+                    )
+                }
             }
         }
     }
