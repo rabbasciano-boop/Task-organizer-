@@ -11,93 +11,199 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import kotlin.math.max
 
 object TaskReminderScheduler {
     private const val ACTION_REMINDER = "com.example.taskorganizer.REMINDER"
+    private const val EXTRA_TASK_ID = "task_id"
+    private const val EXTRA_INDEX = "reminder_index"
     private const val EXTRA_TITLE = "title"
     private const val EXTRA_TIME = "time"
+    private const val EXTRA_TASK_START = "task_start"
     private const val EXTRA_ALARM = "alarm"
 
+    /** Schedules the requested reminders and always keeps the final, most useful alert. */
     fun schedule(context: Context, task: OrganizerTask) {
         cancel(context, task)
         if (!task.reminderEnabled || task.completed || task.time == null) return
-        val taskMoment = runCatching { LocalDateTime.of(LocalDate.parse(task.date), LocalTime.parse(task.time)) }.getOrNull() ?: return
-        val startAt = taskMoment.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        var triggerAt = taskMoment.minusMinutes(task.reminderMinutesBefore.toLong()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val taskMoment = runCatching {
+            LocalDateTime.of(LocalDate.parse(task.date), LocalTime.parse(task.time))
+        }.getOrNull() ?: return
+        val taskStartAt = taskMoment.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val triggerTimes = plannedTriggerTimes(taskStartAt, task.reminderMinutesBefore, task.reminderRepeatMinutes)
         val alarmManager = context.getSystemService(AlarmManager::class.java)
-        var index = 0
-        while (triggerAt <= startAt && index < MAX_SCHEDULED_REMINDERS) {
+        triggerTimes.forEachIndexed { index, triggerAt ->
             if (triggerAt > System.currentTimeMillis()) {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, reminderIntent(context, task, index))
+                val pendingIntent = reminderIntent(context, task, index, taskStartAt)
+                // A repeating reminder stays battery-friendly; its final scheduled alert is the precise alarm.
+                val useExactAlarm = task.alarmEnabled && index == triggerTimes.lastIndex && canUseExactAlarms(context, alarmManager)
+                if (useExactAlarm) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                } else {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                }
             }
-            if (task.reminderRepeatMinutes <= 0) break
-            triggerAt += task.reminderRepeatMinutes * 60_000L
-            index++
         }
     }
 
+    /** Cancels only PendingIntents that already exist. */
     fun cancel(context: Context, task: OrganizerTask) {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
-        repeat(MAX_SCHEDULED_REMINDERS) { index -> alarmManager.cancel(reminderIntent(context, task, index)) }
+        repeat(MAX_SCHEDULED_REMINDERS) { index ->
+            existingReminderIntent(context, task.id, index)?.let { pendingIntent ->
+                alarmManager.cancel(pendingIntent)
+                pendingIntent.cancel()
+            }
+        }
     }
 
     fun rescheduleAll(context: Context) {
         EncryptedTaskStore(context).load().tasks.forEach { schedule(context, it) }
     }
 
-    private fun reminderIntent(context: Context, task: OrganizerTask, index: Int): PendingIntent {
-        val intent = Intent(context, TaskReminderReceiver::class.java)
-            .setAction(ACTION_REMINDER)
-            .putExtra(EXTRA_TITLE, task.title)
-            .putExtra(EXTRA_TIME, task.time)
-            .putExtra(EXTRA_ALARM, task.alarmEnabled)
-        return PendingIntent.getBroadcast(context, task.id.hashCode() + index, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    fun ensureNotificationChannels(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel("task_reminders", "Promemoria attività", NotificationManager.IMPORTANCE_HIGH)
+        )
+        val alarmChannel = NotificationChannel("task_alarm_reminders", "Sveglie attività", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Promemoria con suono e vibrazione"
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 700)
+            setSound(
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
+            )
+        }
+        manager.createNotificationChannel(alarmChannel)
     }
 
+    fun notificationsAllowed(context: Context): Boolean {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val permissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        return permissionGranted && manager.areNotificationsEnabled()
+    }
+
+    fun canUseExactAlarms(context: Context): Boolean = canUseExactAlarms(context, context.getSystemService(AlarmManager::class.java))
+
+    private fun canUseExactAlarms(context: Context, alarmManager: AlarmManager): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
+
+    private fun plannedTriggerTimes(startAt: Long, minutesBefore: Int, repeatMinutes: Int): List<Long> {
+        val firstTrigger = startAt - minutesBefore.coerceAtLeast(0) * MINUTE_MILLIS
+        if (repeatMinutes <= 0) return listOf(firstTrigger)
+
+        val allTriggers = mutableListOf<Long>()
+        var trigger = firstTrigger
+        while (trigger <= startAt) {
+            allTriggers += trigger
+            trigger += repeatMinutes * MINUTE_MILLIS
+        }
+        if (allTriggers.lastOrNull() != startAt) allTriggers += startAt
+        return if (allTriggers.size <= MAX_SCHEDULED_REMINDERS) allTriggers
+        else allTriggers.take(MAX_SCHEDULED_REMINDERS - 1) + startAt
+    }
+
+    private fun reminderIntent(context: Context, task: OrganizerTask, index: Int, taskStartAt: Long): PendingIntent {
+        val intent = reminderBroadcastIntent(context, task.id, index)
+            .putExtra(EXTRA_TITLE, task.title)
+            .putExtra(EXTRA_TIME, task.time)
+            .putExtra(EXTRA_TASK_START, taskStartAt)
+            .putExtra(EXTRA_ALARM, task.alarmEnabled)
+        return PendingIntent.getBroadcast(context, index, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun existingReminderIntent(context: Context, taskId: String, index: Int): PendingIntent? =
+        PendingIntent.getBroadcast(
+            context,
+            index,
+            reminderBroadcastIntent(context, taskId, index),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    private fun reminderBroadcastIntent(context: Context, taskId: String, index: Int): Intent =
+        Intent(context, TaskReminderReceiver::class.java)
+            .setAction(ACTION_REMINDER)
+            .setData(android.net.Uri.parse("taskorganizer://reminder/$taskId/$index"))
+            .putExtra(EXTRA_TASK_ID, taskId)
+            .putExtra(EXTRA_INDEX, index)
+
+    internal fun taskId(intent: Intent) = intent.getStringExtra(EXTRA_TASK_ID).orEmpty()
+    internal fun reminderIndex(intent: Intent) = intent.getIntExtra(EXTRA_INDEX, 0)
     internal fun title(intent: Intent) = intent.getStringExtra(EXTRA_TITLE).orEmpty()
     internal fun time(intent: Intent) = intent.getStringExtra(EXTRA_TIME).orEmpty()
+    internal fun taskStartAt(intent: Intent) = intent.getLongExtra(EXTRA_TASK_START, 0L)
     internal fun isAlarm(intent: Intent) = intent.getBooleanExtra(EXTRA_ALARM, false)
 
+    internal fun remainingLabel(startAt: Long, now: Long = System.currentTimeMillis()): String {
+        val remaining = max(0L, startAt - now)
+        if (remaining < MINUTE_MILLIS) return "Ora"
+        val minutes = (remaining + MINUTE_MILLIS - 1) / MINUTE_MILLIS
+        return when {
+            minutes < 60 -> "Tra $minutes min"
+            minutes % 60L == 0L -> "Tra ${minutes / 60} ${if (minutes == 60L) "ora" else "ore"}"
+            else -> "Tra ${minutes / 60} h e ${minutes % 60} min"
+        }
+    }
+
     private const val MAX_SCHEDULED_REMINDERS = 48
+    private const val MINUTE_MILLIS = 60_000L
 }
 
 class TaskReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (!TaskReminderScheduler.notificationsAllowed(context)) return
+        TaskReminderScheduler.ensureNotificationChannels(context)
         val manager = context.getSystemService(NotificationManager::class.java)
         val isAlarm = TaskReminderScheduler.isAlarm(intent)
         val channelId = if (isAlarm) "task_alarm_reminders" else "task_reminders"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(NotificationChannel("task_reminders", "Promemoria attività", NotificationManager.IMPORTANCE_HIGH))
-            val alarmChannel = NotificationChannel("task_alarm_reminders", "Sveglie attività", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Promemoria con suono e vibrazione"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 700)
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-                    AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
-                )
-            }
-            manager.createNotificationChannel(alarmChannel)
-        }
-        val openApp = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, channelId) else Notification.Builder(context)
-        manager.notify(intent.dataString?.hashCode() ?: TaskReminderScheduler.title(intent).hashCode(), builder
+        val openApp = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val publicVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, channelId) else Notification.Builder(context)
+        publicVersion
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(if (isAlarm) "Promemoria importante tra 15 minuti" else "Tra 15 minuti")
+            .setContentTitle("Task Organizer")
+            .setContentText("Hai un promemoria")
+
+        val timing = TaskReminderScheduler.remainingLabel(TaskReminderScheduler.taskStartAt(intent))
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, channelId) else Notification.Builder(context)
+        val notification = builder
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(if (isAlarm) "Promemoria importante · $timing" else timing)
             .setContentText("${TaskReminderScheduler.title(intent)} alle ${TaskReminderScheduler.time(intent)}")
-            .setContentIntent(openApp).setAutoCancel(true)
+            .setContentIntent(openApp)
+            .setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion.build())
             .setCategory(if (isAlarm) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
             .setDefaults(if (isAlarm) Notification.DEFAULT_ALL else 0)
-            .build())
+            .build()
+        manager.notify(TaskReminderScheduler.taskId(intent), TaskReminderScheduler.reminderIndex(intent), notification)
     }
 }
 
 class ReminderBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        TaskReminderScheduler.rescheduleAll(context)
+        val pendingResult = goAsync()
+        Thread {
+            try {
+                TaskReminderScheduler.rescheduleAll(context.applicationContext)
+            } catch (_: Exception) {
+                // The encrypted archive remains untouched; recovery is available when the app opens.
+            } finally {
+                pendingResult.finish()
+            }
+        }.start()
     }
 }

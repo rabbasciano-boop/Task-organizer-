@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -160,14 +161,14 @@ private fun Modifier.organizerBackground(): Modifier = auroraBackgroundBrush()?.
 class MainActivity : ComponentActivity() {
     private var shouldLockOnResume by mutableStateOf(false)
     private var widgetQuickAdd by mutableStateOf(false)
+    private var notificationPermissionAllowed by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         widgetQuickAdd = intent.getBooleanExtra(EXTRA_OPEN_NEW_TASK, false)
         enableEdgeToEdge()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
+        TaskReminderScheduler.ensureNotificationChannels(this)
+        notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
         setContent {
             val preferences = remember { getSharedPreferences("task_organizer_settings", MODE_PRIVATE) }
             val security = remember { AppSecurity(this) }
@@ -248,7 +249,9 @@ class MainActivity : ComponentActivity() {
                                 accountMessage = message
                                 onFinished(deleted)
                             }
-                        }
+                        },
+                        notificationPermissionAllowed = notificationPermissionAllowed,
+                        onRequestNotificationPermission = ::requestNotificationPermission
                     )
                 } else {
                     AppLockScreen(
@@ -265,6 +268,34 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         if (AppSecurity(this).hasPin()) shouldLockOnResume = true
+    }
+
+    override fun onResume() {
+        super.onResume()
+        notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
+            notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (TaskReminderScheduler.notificationsAllowed(this)) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val preferences = getSharedPreferences("task_organizer_settings", MODE_PRIVATE)
+            if (!preferences.getBoolean("notification_permission_requested", false)) {
+                preferences.edit().putBoolean("notification_permission_requested", true).apply()
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
+                return
+            }
+        }
+        startActivity(
+            android.content.Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        )
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -302,6 +333,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN_NEW_TASK = "open_new_task"
+        private const val NOTIFICATION_PERMISSION_REQUEST = 1
     }
 }
 
@@ -416,7 +448,9 @@ private fun TaskOrganizerApp(
     accountMessage: String?,
     onGoogleSignIn: () -> Unit,
     onSignOut: (onFinished: () -> Unit) -> Unit,
-    onDeleteAccount: (onFinished: (Boolean) -> Unit) -> Unit
+    onDeleteAccount: (onFinished: (Boolean) -> Unit) -> Unit,
+    notificationPermissionAllowed: Boolean,
+    onRequestNotificationPermission: () -> Unit
 ) {
     val context = LocalContext.current
     val store = remember { EncryptedTaskStore(context) }
@@ -583,7 +617,9 @@ private fun TaskOrganizerApp(
                 applyArchive(updated)
             },
             onCancel = { editorOpen = false },
-            onSave = ::saveTask
+            onSave = ::saveTask,
+            notificationPermissionAllowed = notificationPermissionAllowed,
+            onRequestNotificationPermission = onRequestNotificationPermission
         )
         return
     }
@@ -1708,8 +1744,11 @@ private fun TaskEditorScreen(
     onAddCustomCategory: (String, String) -> Unit,
     onDeleteCustomCategory: (String) -> Unit,
     onCancel: () -> Unit,
-    onSave: (OrganizerTask) -> Unit
+    onSave: (OrganizerTask) -> Unit,
+    notificationPermissionAllowed: Boolean,
+    onRequestNotificationPermission: () -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember(task?.id) { mutableStateOf(task?.title.orEmpty()) }
     var date by remember(task?.id) { mutableStateOf(task?.date?.let(::formatItalianDate) ?: LocalDate.now().format(ItalianDateFormatter)) }
     var time by remember(task?.id) { mutableStateOf(task?.time.orEmpty()) }
@@ -1742,6 +1781,14 @@ private fun TaskEditorScreen(
             Switch(checked = reminderEnabled && time.isNotBlank(), onCheckedChange = { reminderEnabled = it }, enabled = time.isNotBlank())
         }
         if (reminderEnabled && time.isNotBlank()) {
+            if (!notificationPermissionAllowed) {
+                Text("Le notifiche sono disattivate: puoi comunque salvare l'attività, ma Android non potrà avvisarti.", color = Danger, fontSize = 13.sp)
+                OutlinedButton(
+                    onClick = onRequestNotificationPermission,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) { Text("Attiva notifiche", color = Gold, fontWeight = FontWeight.SemiBold) }
+            }
             val advanceOptions = linkedMapOf(0 to "All'orario", 5 to "5 minuti prima", 10 to "10 minuti prima", 15 to "15 minuti prima", 30 to "30 minuti prima", 60 to "1 ora prima", 120 to "2 ore prima", 1440 to "1 giorno prima")
             val repeatOptions = linkedMapOf(0 to "Non ripetere", 5 to "Ogni 5 minuti", 10 to "Ogni 10 minuti", 15 to "Ogni 15 minuti", 30 to "Ogni 30 minuti", 60 to "Ogni ora")
             OptionField("Avvisami", advanceOptions[reminderMinutesBefore] ?: "15 minuti prima", advanceOptions.values.toList()) { choice ->
@@ -1761,6 +1808,19 @@ private fun TaskEditorScreen(
                 onCheckedChange = { alarmEnabled = it },
                 enabled = reminderEnabled && time.isNotBlank()
             )
+        }
+        if (alarmEnabled && reminderEnabled && time.isNotBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !TaskReminderScheduler.canUseExactAlarms(context)) {
+            Text("Per far suonare la sveglia all'orario esatto, abilita “Sveglie e promemoria” nelle impostazioni Android.", color = SoftText, fontSize = 13.sp)
+            OutlinedButton(
+                onClick = {
+                    context.startActivity(
+                        android.content.Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                            .setData(android.net.Uri.parse("package:${context.packageName}"))
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) { Text("Consenti sveglie precise", color = Gold, fontWeight = FontWeight.SemiBold) }
         }
         CategoryField(
             value = category,
@@ -2122,7 +2182,9 @@ private fun TaskOrganizerPreview() {
             accountMessage = null,
             onGoogleSignIn = {},
             onSignOut = { it() },
-            onDeleteAccount = { it(false) }
+            onDeleteAccount = { it(false) },
+            notificationPermissionAllowed = true,
+            onRequestNotificationPermission = {}
         )
     }
 }
