@@ -3,16 +3,17 @@ package com.example.taskorganizer
 import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.biometric.BiometricManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -167,6 +168,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         widgetQuickAdd = intent.getBooleanExtra(EXTRA_OPEN_NEW_TASK, false)
         enableEdgeToEdge()
+        updateSecureWindow()
         TaskReminderScheduler.ensureNotificationChannels(this)
         notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
         setContent {
@@ -251,7 +253,8 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         notificationPermissionAllowed = notificationPermissionAllowed,
-                        onRequestNotificationPermission = ::requestNotificationPermission
+                        onRequestNotificationPermission = ::requestNotificationPermission,
+                        onSecurityChanged = ::updateSecureWindow
                     )
                 } else {
                     AppLockScreen(
@@ -305,9 +308,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun canUseBiometrics(): Boolean = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
-            getSystemService(BiometricManager::class.java)?.canAuthenticate() == BiometricManager.BIOMETRIC_SUCCESS
-        else -> Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ->
+            BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS
+        else -> false
+    }
+
+    private fun updateSecureWindow() {
+        if (AppSecurity(this).hasPin()) {
+            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 
     private fun authenticateWithBiometrics(onResult: (Boolean, String?) -> Unit) {
@@ -450,7 +461,8 @@ private fun TaskOrganizerApp(
     onSignOut: (onFinished: () -> Unit) -> Unit,
     onDeleteAccount: (onFinished: (Boolean) -> Unit) -> Unit,
     notificationPermissionAllowed: Boolean,
-    onRequestNotificationPermission: () -> Unit
+    onRequestNotificationPermission: () -> Unit,
+    onSecurityChanged: () -> Unit
 ) {
     val context = LocalContext.current
     val store = remember { EncryptedTaskStore(context) }
@@ -585,6 +597,7 @@ private fun TaskOrganizerApp(
         store.clear()
         profile.edit().clear().apply()
         security.clear()
+        onSecurityChanged()
         TaskWidgetUpdater.updateAll(context)
     }
 
@@ -725,7 +738,7 @@ private fun TaskOrganizerApp(
                         }
                     }
                 )
-                else -> SettingsScreen(selectedTheme, onThemeChanged, security, biometricAvailable)
+                else -> SettingsScreen(selectedTheme, onThemeChanged, security, biometricAvailable, onSecurityChanged)
             }
         }
     }
@@ -1458,7 +1471,8 @@ private fun SettingsScreen(
     selectedTheme: OrganizerTheme,
     onThemeChanged: (OrganizerTheme) -> Unit,
     security: AppSecurity,
-    biometricAvailable: Boolean
+    biometricAvailable: Boolean,
+    onSecurityChanged: () -> Unit
 ) {
     var pinDialogOpen by remember { mutableStateOf(false) }
     var disableDialogOpen by remember { mutableStateOf(false) }
@@ -1531,6 +1545,7 @@ private fun SettingsScreen(
                 security.setPin(it)
                 pinEnabled = true
                 pinDialogOpen = false
+                onSecurityChanged()
             }
         )
     }
@@ -1546,6 +1561,7 @@ private fun SettingsScreen(
                     pinEnabled = false
                     biometricEnabled = false
                     disableDialogOpen = false
+                    onSecurityChanged()
                 }) { Text("Disattiva", color = Danger) }
             },
             dismissButton = { TextButton(onClick = { disableDialogOpen = false }) { Text("Annulla", color = SoftText) } }
@@ -1686,12 +1702,22 @@ private fun AppLockScreen(
                 if (error.isNotBlank()) Text(error, color = Danger, fontSize = 13.sp, textAlign = TextAlign.Center)
                 Button(
                     onClick = {
-                        if (security.verifyPin(pin)) {
-                            pin = ""
-                            error = ""
-                            onUnlocked()
-                        } else {
-                            error = "PIN non corretto. Riprova."
+                        when (val result = security.verifyPinWithRateLimit(pin)) {
+                            PinVerification.Verified -> {
+                                pin = ""
+                                error = ""
+                                onUnlocked()
+                            }
+                            is PinVerification.Incorrect -> {
+                                error = if (result.delayMillis > 0) {
+                                    "Troppi tentativi. Attendi ${formatLockDelay(result.delayMillis)} prima di riprovare."
+                                } else {
+                                    "PIN non corretto. Riprova."
+                                }
+                            }
+                            is PinVerification.Locked -> {
+                                error = "Troppi tentativi. Attendi ${formatLockDelay((result.untilMillis - System.currentTimeMillis()).coerceAtLeast(0L))} prima di riprovare."
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -1710,6 +1736,11 @@ private fun AppLockScreen(
             }
         }
     }
+}
+
+private fun formatLockDelay(milliseconds: Long): String {
+    val seconds = ((milliseconds + 999) / 1000).coerceAtLeast(1)
+    return if (seconds < 60) "$seconds secondi" else "${(seconds + 59) / 60} minuti"
 }
 
 @Composable
@@ -2184,7 +2215,8 @@ private fun TaskOrganizerPreview() {
             onSignOut = { it() },
             onDeleteAccount = { it(false) },
             notificationPermissionAllowed = true,
-            onRequestNotificationPermission = {}
+            onRequestNotificationPermission = {},
+            onSecurityChanged = {}
         )
     }
 }
