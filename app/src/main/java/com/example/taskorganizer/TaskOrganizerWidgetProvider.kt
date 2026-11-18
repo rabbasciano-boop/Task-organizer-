@@ -51,20 +51,28 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
         val taskId = intent.getStringExtra(EXTRA_TASK_ID).orEmpty()
         if (taskId.isBlank()) return
 
-        val store = EncryptedTaskStore(context)
-        val archive = store.load()
-        val task = archive.tasks.firstOrNull { it.id == taskId } ?: return
-        val changed = task.copy(completed = !task.completed)
-        store.save(
-            archive.tasks.map { if (it.id == taskId) changed else it },
-            archive.customCategories,
-            archive.customCategoryIcons,
-            archive.deletedTasks,
-            archive.listItems
-        )
-        if (changed.completed) TaskReminderScheduler.cancel(context, changed)
-        else TaskReminderScheduler.schedule(context, changed)
-        TaskWidgetUpdater.updateAll(context)
+        val pendingResult = goAsync()
+        Thread {
+            try {
+                val appContext = context.applicationContext
+                val store = EncryptedTaskStore(appContext)
+                var changedTask: OrganizerTask? = null
+                store.update { archive ->
+                    val task = archive.tasks.firstOrNull { it.id == taskId } ?: return@update archive
+                    changedTask = task.copy(completed = !task.completed)
+                    archive.copy(tasks = archive.tasks.map { if (it.id == taskId) changedTask!! else it })
+                }
+                changedTask?.let { changed ->
+                    if (changed.completed) TaskReminderScheduler.cancel(appContext, changed)
+                    else TaskReminderScheduler.schedule(appContext, changed)
+                }
+                TaskWidgetUpdater.updateAll(appContext)
+            } catch (_: Exception) {
+                // The app retains the encrypted archive unchanged. It can offer recovery on next open.
+            } finally {
+                pendingResult.finish()
+            }
+        }.start()
     }
 
     companion object {

@@ -51,13 +51,56 @@ data class TaskArchive(
     val listItems: List<OrganizerListItem> = emptyList()
 )
 
+/** The UI must distinguish a new empty archive from an existing archive that cannot be read. */
+sealed interface TaskArchiveLoadResult {
+    data class Loaded(val archive: TaskArchive) : TaskArchiveLoadResult
+    data class Unreadable(val error: Exception) : TaskArchiveLoadResult
+}
+
 /** Stores the organizer only in the app-private folder, encrypted with an Android Keystore key. */
 class EncryptedTaskStore(context: Context) {
     private val appContext = context.applicationContext
     private val dataFile = File(appContext.filesDir, "task-organizer.enc")
     private val atomicFile = AtomicFile(dataFile)
 
-    fun load(): TaskArchive {
+    fun load(): TaskArchive = synchronized(archiveLock) { loadUnlocked() }
+
+    fun loadSafely(): TaskArchiveLoadResult = try {
+        TaskArchiveLoadResult.Loaded(load())
+    } catch (error: Exception) {
+        TaskArchiveLoadResult.Unreadable(error)
+    }
+
+    /**
+     * Applies a small change to the latest archive while holding the same lock used by the widget.
+     * This avoids writing an old in-memory copy over a change made from a widget.
+     */
+    fun update(transform: (TaskArchive) -> TaskArchive): TaskArchive = synchronized(archiveLock) {
+        val updated = transform(loadUnlocked())
+        saveUnlocked(updated)
+        updated
+    }
+
+    /**
+     * Used only after the person explicitly chooses to start again from the recovery screen.
+     * The unreadable encrypted file is copied first and is never silently replaced.
+     */
+    fun preserveUnreadableArchiveAndClear(): Boolean = synchronized(archiveLock) {
+        if (!dataFile.exists()) return true
+        return try {
+            val recoveryFile = File(
+                dataFile.parentFile,
+                "task-organizer-unreadable-${System.currentTimeMillis()}.enc"
+            )
+            dataFile.copyTo(recoveryFile)
+            atomicFile.delete()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun loadUnlocked(): TaskArchive {
         // Never convert an unreadable existing archive into an empty list:
         // otherwise a later save could overwrite the user's real data.
         if (!dataFile.exists()) return TaskArchive()
@@ -70,10 +113,24 @@ class EncryptedTaskStore(context: Context) {
         customCategoryIcons: Map<String, String>,
         deletedTasks: List<OrganizerTask> = emptyList(),
         listItems: List<OrganizerListItem> = emptyList()
-    ) {
+    ) = synchronized(archiveLock) {
+        saveUnlocked(TaskArchive(tasks, customCategories, customCategoryIcons, deletedTasks, listItems))
+    }
+
+    private fun saveUnlocked(archive: TaskArchive) {
         val stream = atomicFile.startWrite()
         try {
-            stream.write(encrypt(encode(tasks, customCategories, customCategoryIcons, deletedTasks, listItems)))
+            stream.write(
+                encrypt(
+                    encode(
+                        archive.tasks,
+                        archive.customCategories,
+                        archive.customCategoryIcons,
+                        archive.deletedTasks,
+                        archive.listItems
+                    )
+                )
+            )
             stream.flush()
             stream.fd.sync()
             atomicFile.finishWrite(stream)
@@ -85,7 +142,7 @@ class EncryptedTaskStore(context: Context) {
 
     /** Called only after an explicit confirmed deletion from the account screen. */
     fun clear() {
-        atomicFile.delete()
+        synchronized(archiveLock) { atomicFile.delete() }
     }
 
     private fun encode(
@@ -229,5 +286,6 @@ class EncryptedTaskStore(context: Context) {
 
     private companion object {
         const val KEY_ALIAS = "task_organizer_local_key"
+        val archiveLock = Any()
     }
 }
