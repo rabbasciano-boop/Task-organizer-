@@ -40,7 +40,7 @@ class AppSecurity(context: Context) {
         }
 
         val failedAttempts = preferences.getInt(FAILED_ATTEMPTS, 0) + 1
-        val delay = delayFor(failedAttempts)
+        val delay = PinAttemptPolicy.delayFor(failedAttempts)
         preferences.edit()
             .putInt(FAILED_ATTEMPTS, failedAttempts)
             .putLong(LOCKED_UNTIL, if (delay > 0) now + delay else 0L)
@@ -67,14 +67,6 @@ class AppSecurity(context: Context) {
             .apply()
     }
 
-    private fun delayFor(failedAttempts: Int): Long = when (failedAttempts) {
-        1, 2 -> 0L
-        3 -> 30_000L
-        4 -> 60_000L
-        5 -> 5 * 60_000L
-        else -> 15 * 60_000L
-    }
-
     private fun derive(pin: String, salt: ByteArray): ByteArray {
         val specification = PBEKeySpec(pin.toCharArray(), salt, ITERATIONS, HASH_BITS)
         return try {
@@ -94,6 +86,16 @@ class AppSecurity(context: Context) {
         const val SALT_SIZE = 16
         const val ITERATIONS = 210_000
         const val HASH_BITS = 256
+    }
+}
+
+internal object PinAttemptPolicy {
+    fun delayFor(failedAttempts: Int): Long = when (failedAttempts) {
+        1, 2 -> 0L
+        3 -> 30_000L
+        4 -> 60_000L
+        5 -> 5 * 60_000L
+        else -> 15 * 60_000L
     }
 }
 
