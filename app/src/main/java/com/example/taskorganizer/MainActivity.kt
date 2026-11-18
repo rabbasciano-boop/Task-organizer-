@@ -1,6 +1,8 @@
 package com.example.taskorganizer
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.hardware.biometrics.BiometricManager
 import android.hardware.biometrics.BiometricPrompt
 import android.content.pm.PackageManager
@@ -40,6 +42,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -87,8 +92,12 @@ import java.time.YearMonth
 import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import java.text.NumberFormat
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 private val NightBlue get() = OrganizerPalette.background
 private val CardBlue get() = OrganizerPalette.card
@@ -529,11 +538,13 @@ private fun TaskOrganizerApp(
                 0 -> TodayScreen(
                     tasks = tasks,
                     nickname = nickname,
-                    accountInitial = signedInAccount?.email?.firstOrNull()?.uppercase(),
+                    signedInAccount = signedInAccount,
                     onAdd = openNewTask,
                     onChange = ::changeTask,
                     onEdit = openEditTask,
-                    onOpenLists = { listsOpen = true }
+                    onOpenLists = { listsOpen = true },
+                    onManageAccount = { selectedTab = 3 },
+                    onOpenPrivacy = { privacyInfoOpen = true }
                 )
                 1 -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::changeTask, openEditTask, ::deleteTask, ::restoreTask, ::permanentlyDeleteTask)
                 2 -> CalendarScreen(tasks, openNewTask, openEditTask)
@@ -593,11 +604,13 @@ private fun PageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, co
 private fun TodayScreen(
     tasks: List<OrganizerTask>,
     nickname: String,
-    accountInitial: String?,
+    signedInAccount: SignedInAccount?,
     onAdd: () -> Unit,
     onChange: (OrganizerTask) -> Unit,
     onEdit: (OrganizerTask) -> Unit,
-    onOpenLists: () -> Unit
+    onOpenLists: () -> Unit,
+    onManageAccount: () -> Unit,
+    onOpenPrivacy: () -> Unit
 ) {
     val today = LocalDate.now().toString()
     val todayTasks = tasks.filter { it.date == today }.sortedBy { it.time ?: "99:99" }
@@ -610,18 +623,37 @@ private fun TodayScreen(
     }.sortedWith(compareBy<OrganizerTask> { it.date }.thenBy { it.time ?: "99:99" })
     val weekCompleted = weekTasks.count { it.completed }
     val weekRemaining = weekTasks.size - weekCompleted
+    var profileMenuOpen by remember { mutableStateOf(false) }
 
     PageColumn {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Task Organizer", color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            if (accountInitial != null) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Success.copy(alpha = 0.14f)),
-                    shape = RoundedCornerShape(50.dp),
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Text(accountInitial, color = Success, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            signedInAccount?.let { account ->
+                Box(contentAlignment = Alignment.TopEnd) {
+                    AccountAvatar(
+                        photoUrl = account.photoUrl,
+                        initial = account.email.firstOrNull()?.uppercase() ?: "U",
+                        onClick = { profileMenuOpen = true }
+                    )
+                    DropdownMenu(
+                        expanded = profileMenuOpen,
+                        onDismissRequest = { profileMenuOpen = false },
+                        containerColor = CardBlue,
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                            Text(account.displayName, color = MainText, fontWeight = FontWeight.Bold)
+                            Text(account.email, color = SoftText, fontSize = 12.sp)
+                        }
+                        HorizontalDivider(color = CardBlueLight)
+                        DropdownMenuItem(
+                            text = { Text("Gestisci account", color = MainText) },
+                            onClick = { profileMenuOpen = false; onManageAccount() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Privacy e dati", color = MainText) },
+                            onClick = { profileMenuOpen = false; onOpenPrivacy() }
+                        )
                     }
                 }
             }
@@ -654,8 +686,6 @@ private fun TodayScreen(
 
         OutlinedButton(onClick = onOpenLists, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
             Text("☑  Liste e spesa", color = Gold, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.size(8.dp))
-            Text("PLUS", color = SoftText, fontSize = 11.sp)
         }
 
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(24.dp)) {
@@ -704,6 +734,40 @@ private fun TodayScreen(
 }
 
 @Composable
+private fun AccountAvatar(photoUrl: String?, initial: String, onClick: () -> Unit) {
+    var profileImage by remember(photoUrl) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(photoUrl) {
+        profileImage = photoUrl?.let { address ->
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    (URL(address).openConnection() as HttpURLConnection).run {
+                        connectTimeout = 4_000
+                        readTimeout = 4_000
+                        inputStream.use(BitmapFactory::decodeStream)
+                    }
+                }.getOrNull()
+            }
+        }
+    }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Success.copy(alpha = 0.14f)),
+        shape = RoundedCornerShape(50.dp),
+        modifier = Modifier.size(36.dp).clickable(onClick = onClick)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            profileImage?.let { image ->
+                Image(
+                    bitmap = image.asImageBitmap(),
+                    contentDescription = "Account Google collegato",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } ?: Text(initial, color = Success, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
 private fun ListsScreen(
     items: List<OrganizerListItem>,
     onBack: () -> Unit,
@@ -724,7 +788,7 @@ private fun ListsScreen(
         PageColumn(safeBottom = true, safeTop = true) {
             TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna all'organizer", color = Gold) }
             Text("Liste", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Funzione Plus · disponibile per i test", color = SoftText, fontSize = 13.sp)
+            Text("Organizza le cose da fare e la spesa in un unico posto.", color = SoftText, fontSize = 13.sp)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = { listType = "todo"; adding = false },
@@ -1168,7 +1232,7 @@ private fun AccountScreen(
             }
         }
         Text("DATI", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        InfoCard("Archivio locale cifrato", "Le attività restano su questo telefono e sono protette da una chiave del dispositivo.", "Attivo")
+        InfoCard("Archivio locale cifrato", "Le attività restano su questo telefono e sono protette da una chiave del dispositivo.", "Sempre protetto")
         OutlinedButton(onClick = onOpenPrivacy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) {
             Text("Privacy e dati", color = Gold, fontWeight = FontWeight.Bold)
         }
@@ -1230,7 +1294,7 @@ private fun PrivacyInfoScreen(onBack: () -> Unit) {
             Text("Privacy e dati", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Informazioni sempre disponibili e comprensibili.", color = SoftText)
             InfoCard("Dati sul telefono", "Attività, note, liste, categorie, preferenze e PIN restano nel telefono in un archivio cifrato. Non vengono inviati agli sviluppatori.", "Locale e cifrato")
-            InfoCard("Account facoltativo", "Google o Microsoft saranno usati soltanto se vorrai attivare backup, calendario o servizi collegati. Il login non caricherà automaticamente le tue attività.", "A tua scelta")
+            InfoCard("Account facoltativo", "Google o Microsoft saranno usati soltanto se vorrai attivare backup, calendario o servizi collegati. Il login non caricherà automaticamente le tue attività; nome, email e foto profilo restano visibili solo nell'app.", "A tua scelta")
             InfoCard("Niente tracciamento", "Non vendiamo dati, non mostriamo pubblicità e non analizziamo le tue attività. Le notifiche saranno richieste solo quando deciderai di usarle.", "Nessuna pubblicità")
             InfoCard("Il tuo controllo", "Quando uscirai dall'account potrai scegliere se mantenere o cancellare i dati locali. L'eliminazione dell'account sarà una procedura separata e protetta.", "Decidi tu")
             OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
@@ -1249,6 +1313,7 @@ private fun SettingsScreen(
 ) {
     var pinDialogOpen by remember { mutableStateOf(false) }
     var disableDialogOpen by remember { mutableStateOf(false) }
+    var pinEnabled by remember { mutableStateOf(security.hasPin()) }
     var biometricEnabled by remember { mutableStateOf(security.isBiometricEnabled()) }
     PageColumn {
         Text("Opzioni", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -1274,21 +1339,24 @@ private fun SettingsScreen(
             colors = CardDefaults.cardColors(containerColor = CardBlue),
             shape = RoundedCornerShape(20.dp)
         ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Blocco app", color = MainText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    if (security.hasPin()) "Il tuo PIN protegge l'accesso quando riapri l'app." else "Aggiungi un PIN personale per proteggere le tue attività.",
-                    color = SoftText,
-                    fontSize = 14.sp
-                )
-                if (security.hasPin()) {
-                    Text("PIN attivo · Tocca per cambiarlo", color = Gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                } else {
-                    Text("Attiva il PIN", color = Gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Row(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Blocco app", color = MainText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (pinEnabled) "Il PIN protegge l'accesso quando riapri l'app. Tocca la scheda per cambiarlo." else "Attiva un PIN personale per proteggere le tue attività.",
+                        color = SoftText,
+                        fontSize = 14.sp
+                    )
                 }
+                Switch(
+                    checked = pinEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) pinDialogOpen = true else disableDialogOpen = true
+                    }
+                )
             }
         }
-        if (security.hasPin() && biometricAvailable) {
+        if (pinEnabled && biometricAvailable) {
             Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
                 Row(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -1302,21 +1370,17 @@ private fun SettingsScreen(
                 }
             }
         }
-        if (security.hasPin()) {
-            TextButton(onClick = { disableDialogOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Disattiva blocco app", color = Danger)
-            }
-        }
         Text("INFORMAZIONI", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         InfoCard("Compatibilità", "L'app funziona da Android 7.0 in poi. L'impronta richiede Android 9 o successivo e un telefono compatibile.", "Android 7.0+")
     }
     if (pinDialogOpen) {
         PinSetupDialog(
             security = security,
-            changing = security.hasPin(),
+            changing = pinEnabled,
             onDismiss = { pinDialogOpen = false },
             onSave = {
                 security.setPin(it)
+                pinEnabled = true
                 pinDialogOpen = false
             }
         )
@@ -1330,6 +1394,7 @@ private fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     security.clear()
+                    pinEnabled = false
                     biometricEnabled = false
                     disableDialogOpen = false
                 }) { Text("Disattiva", color = Danger) }
@@ -1374,7 +1439,7 @@ private fun ThemeChoiceCard(
             }
             Column(horizontalAlignment = Alignment.End) {
                 if (isPlus) Text("PLUS", color = previewAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text(if (selectedTheme == theme) "Attivo" else if (isPlus) "Prova" else "Attiva", color = previewAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (selectedTheme == theme) "✓ Selezionato" else if (isPlus) "Prova" else "Tocca per scegliere", color = previewAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }

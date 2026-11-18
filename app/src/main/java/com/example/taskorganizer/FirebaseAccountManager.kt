@@ -15,7 +15,11 @@ import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.launch
 
 /** Handles the optional identity session only. Organizer data remains in EncryptedTaskStore. */
-data class SignedInAccount(val displayName: String, val email: String)
+data class SignedInAccount(
+    val displayName: String,
+    val email: String,
+    val photoUrl: String? = null
+)
 
 class FirebaseAccountManager(private val activity: ComponentActivity) {
     private val auth = FirebaseAuth.getInstance()
@@ -24,7 +28,8 @@ class FirebaseAccountManager(private val activity: ComponentActivity) {
     fun currentAccount(): SignedInAccount? = auth.currentUser?.let { user ->
         SignedInAccount(
             displayName = user.displayName?.ifBlank { null } ?: "Utente Google",
-            email = user.email?.ifBlank { null } ?: "Account Google"
+            email = user.email?.ifBlank { null } ?: "Account Google",
+            photoUrl = user.photoUrl?.toString()
         )
     }
 
