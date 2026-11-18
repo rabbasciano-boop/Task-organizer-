@@ -1,0 +1,31 @@
+# Android Studio and local machine settings
+.idea/
+*.iml
+local.properties
+.externalNativeBuild/
+.cxx/
+captures/
+
+# Gradle and generated build files
+.gradle/
+build/
+**/build/
+
+# Firebase configuration and credentials kept only on the developer machine
+app/google-services.json
+*.jks
+*.keystore
+*.p12
+*.pem
+key.properties
+
+# Build outputs and diagnostics
+*.apk
+*.aab
+*.ap_
+*.hprof
+*.log
+
+# Operating-system files
+.DS_Store
+Thumbs.db
