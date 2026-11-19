@@ -51,6 +51,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -462,9 +463,18 @@ private fun ArchiveRecoveryScreen(onRetry: () -> Unit, onStartFresh: (onFinished
 @Composable
 private fun ArchiveLoadingScreen() {
     Box(modifier = Modifier.fillMaxSize().organizerBackground(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            CircularProgressIndicator(color = Gold)
-            Text("Apro il tuo archivio protetto…", color = MainText)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Image(
+                painter = painterResource(R.drawable.splash_mark),
+                contentDescription = "Task Organizer",
+                modifier = Modifier.size(180.dp),
+                contentScale = ContentScale.Fit
+            )
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(0.42f).height(5.dp),
+                color = Gold,
+                trackColor = CardBlueLight
+            )
         }
     }
 }
