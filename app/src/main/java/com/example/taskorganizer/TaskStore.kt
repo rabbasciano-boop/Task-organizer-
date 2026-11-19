@@ -6,13 +6,18 @@ import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.KeyStore
+import java.security.SecureRandom
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
 
 data class OrganizerTask(
     val id: String = UUID.randomUUID().toString(),
@@ -32,7 +37,8 @@ data class OrganizerTask(
     val cardColor: String = "default",
     val examStatus: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val deletedAt: Long = 0L
+    val deletedAt: Long = 0L,
+    val recurrence: String = "none"
 )
 
 data class OrganizerListItem(
@@ -80,6 +86,53 @@ class EncryptedTaskStore(context: Context) {
         val updated = transform(loadUnlocked())
         saveUnlocked(updated)
         updated
+    }
+
+    /**
+     * Creates a portable encrypted copy of organizer data. The password is never stored and the
+     * local Keystore key, PIN, profile and sign-in state are deliberately excluded.
+     */
+    fun exportPasswordProtectedBackup(password: CharArray): ByteArray = synchronized(archiveLock) {
+        require(password.size >= MIN_BACKUP_PASSWORD_LENGTH) { "La password deve contenere almeno 8 caratteri." }
+        val archive = loadUnlocked()
+        val salt = ByteArray(BACKUP_SALT_SIZE).also(SecureRandom()::nextBytes)
+        val iv = ByteArray(BACKUP_IV_SIZE).also(SecureRandom()::nextBytes)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, backupSecretKey(password, salt), GCMParameterSpec(128, iv))
+        val encrypted = cipher.doFinal(
+            encode(archive.tasks, archive.customCategories, archive.customCategoryIcons, archive.deletedTasks, archive.listItems)
+        )
+        ByteArrayOutputStream().use { output ->
+            output.write(BACKUP_MAGIC)
+            output.write(BACKUP_VERSION)
+            output.write(salt.size)
+            output.write(iv.size)
+            output.write(salt)
+            output.write(iv)
+            output.write(encrypted)
+            output.toByteArray()
+        }
+    }
+
+    /** Replaces local organizer data only after a complete, password-verified backup is decoded. */
+    fun importPasswordProtectedBackup(data: ByteArray, password: CharArray): TaskArchive = synchronized(archiveLock) {
+        require(password.size >= MIN_BACKUP_PASSWORD_LENGTH) { "La password deve contenere almeno 8 caratteri." }
+        require(data.size >= BACKUP_MAGIC.size + 3) { "File di backup non valido." }
+        require(data.copyOfRange(0, BACKUP_MAGIC.size).contentEquals(BACKUP_MAGIC)) { "Questo file non è un backup di Task Organizer." }
+        var position = BACKUP_MAGIC.size
+        require(data[position++].toInt() == BACKUP_VERSION) { "Versione del backup non supportata." }
+        val saltSize = data[position++].toInt() and 0xFF
+        val ivSize = data[position++].toInt() and 0xFF
+        require(saltSize == BACKUP_SALT_SIZE && ivSize in 12..32 && data.size > position + saltSize + ivSize) { "File di backup non valido." }
+        val salt = data.copyOfRange(position, position + saltSize)
+        position += saltSize
+        val iv = data.copyOfRange(position, position + ivSize)
+        position += ivSize
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, backupSecretKey(password, salt), GCMParameterSpec(128, iv))
+        val archive = decode(cipher.doFinal(data.copyOfRange(position, data.size)))
+        saveUnlocked(archive)
+        archive
     }
 
     /** Removes items that have remained in the recycle bin for longer than 30 days. */
@@ -219,7 +272,8 @@ class EncryptedTaskStore(context: Context) {
                 cardColor = item.optString("cardColor", "default"),
                 examStatus = item.optString("examStatus").ifBlank { null },
                 createdAt = item.optLong("createdAt", System.currentTimeMillis()),
-                deletedAt = if (deleted) item.optLong("deletedAt", System.currentTimeMillis()) else 0L
+                deletedAt = if (deleted) item.optLong("deletedAt", System.currentTimeMillis()) else 0L,
+                recurrence = item.optString("recurrence", "none")
             )
         }
         val tasks = tasksFrom(archive.getJSONArray("tasks"))
@@ -271,6 +325,7 @@ class EncryptedTaskStore(context: Context) {
         .put("examStatus", task.examStatus ?: "")
         .put("createdAt", task.createdAt)
         .put("deletedAt", task.deletedAt)
+        .put("recurrence", task.recurrence)
 
     private fun encrypt(plainText: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -308,10 +363,28 @@ class EncryptedTaskStore(context: Context) {
         return generator.generateKey()
     }
 
+    private fun backupSecretKey(password: CharArray, salt: ByteArray): SecretKey {
+        val specification = PBEKeySpec(password, salt, BACKUP_ITERATIONS, 256)
+        return try {
+            SecretKeySpec(
+                SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(specification).encoded,
+                "AES"
+            )
+        } finally {
+            specification.clearPassword()
+        }
+    }
+
     private companion object {
         const val KEY_ALIAS = "task_organizer_local_key"
         const val RECOVERY_PREFIX = "task-organizer-unreadable-"
         const val TRASH_RETENTION_MILLIS = 30L * 24 * 60 * 60 * 1000
+        const val MIN_BACKUP_PASSWORD_LENGTH = 8
+        const val BACKUP_VERSION = 1
+        const val BACKUP_SALT_SIZE = 32
+        const val BACKUP_IV_SIZE = 12
+        const val BACKUP_ITERATIONS = 310_000
+        val BACKUP_MAGIC = byteArrayOf('T'.code.toByte(), 'O'.code.toByte(), 'B'.code.toByte(), 'K'.code.toByte())
         val archiveLock = Any()
     }
 }

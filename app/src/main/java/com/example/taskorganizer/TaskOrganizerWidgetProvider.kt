@@ -1,6 +1,7 @@
 package com.example.taskorganizer
 
 import android.app.PendingIntent
+import android.app.AlarmManager
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.BroadcastReceiver
@@ -18,6 +19,7 @@ import android.os.Bundle
 import android.widget.RemoteViews
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneId
 
 enum class WidgetForm { SMALL, MEDIUM, LARGE }
 
@@ -143,17 +145,23 @@ object TaskWidgetUpdater {
         val success: Int
     )
 
-    fun updateAll(context: Context, archive: TaskArchive? = null) {
+    fun updateAll(context: Context, archive: TaskArchive? = null): Boolean {
         val manager = AppWidgetManager.getInstance(context)
         val latestArchive = archive ?: loadArchive(context)
+        var hasWidgets = false
         listOf(
             TaskOrganizerProgressWidgetProvider::class.java to WidgetForm.SMALL,
             TaskOrganizerOverviewWidgetProvider::class.java to WidgetForm.MEDIUM,
             TaskOrganizerAgendaWidgetProvider::class.java to WidgetForm.LARGE
         ).forEach { (provider, form) ->
             val component = ComponentName(context, provider)
-            manager.getAppWidgetIds(component).forEach { update(context, manager, it, form, latestArchive) }
+            manager.getAppWidgetIds(component).forEach {
+                hasWidgets = true
+                update(context, manager, it, form, latestArchive)
+            }
         }
+        WidgetMidnightRefresh.schedule(context, hasWidgets)
+        return hasWidgets
     }
 
     fun areTaskTitlesHidden(context: Context): Boolean =
@@ -382,4 +390,25 @@ object TaskWidgetUpdater {
     }
 
     private fun formatDate(date: LocalDate): String = "${date.dayOfMonth.toString().padStart(2, '0')}/${date.monthValue.toString().padStart(2, '0')}"
+}
+
+/** A battery-friendly fallback for phones that delay the DATE_CHANGED broadcast. */
+private object WidgetMidnightRefresh {
+    private const val REQUEST_CODE = 703
+
+    fun schedule(context: Context, widgetsInstalled: Boolean) {
+        val alarmManager = context.getSystemService(AlarmManager::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE,
+            Intent(context, WidgetRefreshReceiver::class.java).setAction("com.example.taskorganizer.widget.MIDNIGHT_REFRESH"),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (!widgetsInstalled) {
+            alarmManager.cancel(pendingIntent)
+            return
+        }
+        val nextMidnight = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextMidnight, pendingIntent)
+    }
 }

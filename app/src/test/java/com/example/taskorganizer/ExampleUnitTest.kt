@@ -41,3 +41,18 @@ class PinAttemptPolicyTest {
         assertEquals(15 * 60_000L, PinAttemptPolicy.delayFor(20))
     }
 }
+
+class RecurrenceTimingTest {
+    @Test
+    fun createsTheCorrectNextOccurrence() {
+        assertEquals("2026-12-01", RecurrenceTiming.nextDate("2026-11-30", "daily"))
+        assertEquals("2026-12-07", RecurrenceTiming.nextDate("2026-11-30", "weekly"))
+        assertEquals("2026-12-30", RecurrenceTiming.nextDate("2026-11-30", "monthly"))
+    }
+
+    @Test
+    fun doesNotCreateAnOccurrenceForOneOffActivities() {
+        assertEquals(null, RecurrenceTiming.nextDate("2026-11-30", "none"))
+        assertEquals(null, RecurrenceTiming.nextDate("not-a-date", "daily"))
+    }
+}

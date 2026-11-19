@@ -13,6 +13,8 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -48,6 +50,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -522,6 +525,7 @@ private fun TaskOrganizerApp(
     var editorTask by remember { mutableStateOf<OrganizerTask?>(null) }
     var editorOpen by remember { mutableStateOf(false) }
     var listsOpen by remember { mutableStateOf(false) }
+    var backupOpen by remember { mutableStateOf(false) }
     var privacyInfoOpen by remember { mutableStateOf(false) }
     var storageError by remember { mutableStateOf<String?>(null) }
     val tabs = listOf("Oggi", "Attività", "Calendario", "Account", "Opzioni")
@@ -594,13 +598,33 @@ private fun TaskOrganizerApp(
     }
 
     fun changeTask(task: OrganizerTask) {
+        var recurringTaskId: String? = null
         updateArchive(change = { disk ->
             val index = disk.tasks.indexOfFirst { it.id == task.id }
-            if (index < 0) disk else disk.copy(tasks = disk.tasks.toMutableList().also { it[index] = task })
+            if (index < 0) {
+                disk
+            } else {
+                val previous = disk.tasks[index]
+                val nextDate = if (!previous.completed && task.completed) RecurrenceTiming.nextDate(task.date, task.recurrence) else null
+                val nextTask = nextDate?.let { date ->
+                    task.copy(
+                        id = java.util.UUID.randomUUID().toString(),
+                        date = date,
+                        completed = false,
+                        createdAt = System.currentTimeMillis(),
+                        deletedAt = 0L
+                    )
+                }
+                recurringTaskId = nextTask?.id
+                disk.copy(tasks = disk.tasks.toMutableList().also { it[index] = task } + listOfNotNull(nextTask))
+            }
         }) { updated ->
             if (updated.tasks.any { it.id == task.id }) {
                 refreshWidgets(updated)
                 TaskReminderScheduler.schedule(context, task)
+                recurringTaskId?.let { id ->
+                    updated.tasks.firstOrNull { it.id == id }?.let { TaskReminderScheduler.schedule(context, it) }
+                }
             }
         }
     }
@@ -678,6 +702,23 @@ private fun TaskOrganizerApp(
 
     if (privacyInfoOpen) {
         PrivacyInfoScreen(onBack = { privacyInfoOpen = false })
+        return
+    }
+
+    if (backupOpen) {
+        BackupScreen(
+            store = store,
+            onBack = { backupOpen = false },
+            onImported = { importedArchive ->
+                val previousTasks = (tasks + deletedTasks).toList()
+                applyArchive(importedArchive)
+                appScope.launch(Dispatchers.IO) {
+                    previousTasks.forEach { TaskReminderScheduler.cancel(context, it) }
+                    importedArchive.tasks.forEach { TaskReminderScheduler.schedule(context, it) }
+                    TaskWidgetUpdater.updateAll(context, importedArchive)
+                }
+            }
+        )
         return
     }
 
@@ -804,9 +845,10 @@ private fun TaskOrganizerApp(
                                 nickname = "Utente"
                             }
                         }
-                    }
+                    },
+                    onOpenBackup = { backupOpen = true }
                 )
-                else -> SettingsScreen(selectedTheme, onThemeChanged, security, biometricAvailable, onSecurityChanged)
+                else -> SettingsScreen(selectedTheme, onThemeChanged, security, biometricAvailable, onSecurityChanged, onOpenBackup = { backupOpen = true })
             }
         }
     }
@@ -814,8 +856,14 @@ private fun TaskOrganizerApp(
 
 @Composable
 private fun NavMark(index: Int, selected: Boolean) {
-    val marks = listOf("●", "≡", "□", "◌", "⚙")
-    Text(marks[index], color = if (selected) Gold else SoftText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    val icons = listOf(R.drawable.ic_nav_today, R.drawable.ic_nav_activities, R.drawable.ic_nav_calendar, R.drawable.ic_nav_account, R.drawable.ic_nav_settings)
+    val descriptions = listOf("Oggi", "Attività", "Calendario", "Account", "Opzioni")
+    Icon(
+        painter = painterResource(icons[index]),
+        contentDescription = descriptions[index],
+        tint = if (selected) Gold else SoftText,
+        modifier = Modifier.size(22.dp)
+    )
 }
 
 @Composable
@@ -1277,7 +1325,7 @@ private fun TrashDialog(
         title = { Text("Cestino", color = MainText) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Le attività nel Cestino possono essere ripristinate.", color = SoftText, fontSize = 13.sp)
+                Text("Le attività nel Cestino possono essere ripristinate per 30 giorni.", color = SoftText, fontSize = 13.sp)
                 tasks.forEach { task ->
                     Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(14.dp)) {
                         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
@@ -1461,7 +1509,8 @@ private fun AccountScreen(
     accountMessage: String?,
     onGoogleSignIn: () -> Unit,
     onSignOut: (deleteLocalData: Boolean) -> Unit,
-    onDeleteAccount: (deleteLocalData: Boolean) -> Unit
+    onDeleteAccount: (deleteLocalData: Boolean) -> Unit,
+    onOpenBackup: () -> Unit
 ) {
     var nicknameDialogOpen by remember { mutableStateOf(false) }
     var nicknameDraft by remember(nickname) { mutableStateOf(nickname) }
@@ -1509,7 +1558,10 @@ private fun AccountScreen(
         OutlinedButton(onClick = onOpenPrivacy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) {
             Text("Privacy e dati", color = Gold, fontWeight = FontWeight.Bold)
         }
-        InfoCard("Backup cifrato", "Potrai salvare una copia cifrata su Google Drive o OneDrive, dopo aver scelto un account.", "Plus · Prossimamente")
+        InfoCard("Backup cifrato", "Crea un file protetto da password e conservalo dove preferisci: Drive, OneDrive, disco esterno o altro spazio personale.", "Disponibile")
+        OutlinedButton(onClick = onOpenBackup, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) {
+            Text("Apri backup", color = Gold, fontWeight = FontWeight.Bold)
+        }
         Text("COLLEGAMENTI", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         InfoCard("Calendario personale", "Potrai collegare Google Calendar o Outlook per vedere gli impegni personali senza mescolare i dati con quelli del PC.", "Prossimamente")
     }
@@ -1583,7 +1635,8 @@ private fun SettingsScreen(
     onThemeChanged: (OrganizerTheme) -> Unit,
     security: AppSecurity,
     biometricAvailable: Boolean,
-    onSecurityChanged: () -> Unit
+    onSecurityChanged: () -> Unit,
+    onOpenBackup: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1630,6 +1683,18 @@ private fun SettingsScreen(
         }
         Text("ATTIVITÀ", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         InfoCard("Promemoria e sveglie", "Li imposti in ogni attività: puoi scegliere anticipo, ripetizione, notifica o sveglia.", "Disponibile")
+        Text("DATI E BACKUP", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenBackup),
+            colors = CardDefaults.cardColors(containerColor = CardBlue),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Backup cifrato", color = MainText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("Crea una copia protetta da password oppure ripristina un tuo backup. PIN, account e foto profilo non vengono mai inclusi.", color = SoftText, fontSize = 13.sp)
+                Text("Apri backup →", color = Gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
         Text("SICUREZZA APP", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Card(
             modifier = Modifier.fillMaxWidth().clickable { pinDialogOpen = true },
@@ -1702,6 +1767,217 @@ private fun SettingsScreen(
         )
     }
 }
+
+@Composable
+private fun BackupScreen(
+    store: EncryptedTaskStore,
+    onBack: () -> Unit,
+    onImported: (TaskArchive) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exportPassword by remember { mutableStateOf("") }
+    var exportConfirmation by remember { mutableStateOf("") }
+    var pendingExportPassword by remember { mutableStateOf<String?>(null) }
+    var importedBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var importPassword by remember { mutableStateOf("") }
+    var importConfirmOpen by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var working by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val password = pendingExportPassword
+        pendingExportPassword = null
+        if (uri == null || password == null) return@rememberLauncherForActivityResult
+        working = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val passwordChars = password.toCharArray()
+                    val encrypted = try {
+                        store.exportPasswordProtectedBackup(passwordChars)
+                    } finally {
+                        passwordChars.fill('\u0000')
+                    }
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        output.write(encrypted)
+                        output.flush()
+                    } ?: error("Non è stato possibile creare il file scelto.")
+                }
+            }
+            working = false
+            result.onSuccess {
+                exportPassword = ""
+                exportConfirmation = ""
+                message = "Backup creato. Conservalo in un luogo sicuro: senza la password non potrà essere recuperato."
+            }.onFailure {
+                message = "Non è stato possibile creare il backup. Controlla lo spazio disponibile e riprova."
+            }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        working = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use(::readBackupBytes)
+                        ?: error("Non è stato possibile leggere il file scelto.")
+                }
+            }
+            working = false
+            result.onSuccess {
+                importedBytes = it
+                importPassword = ""
+                message = "File selezionato. Inserisci la password del backup per controllarlo e ripristinarlo."
+            }.onFailure {
+                importedBytes = null
+                message = "Il file non può essere letto: scegli un backup di Task Organizer integro."
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
+        PageColumn(safeBottom = true, safeTop = true) {
+            TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle opzioni", color = Gold) }
+            Text("Backup cifrato", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("I backup contengono solo attività, liste e categorie. PIN, account e foto profilo restano esclusi.", color = SoftText)
+            InfoCard("La password è solo tua", "Non viene salvata nell'app e non può essere recuperata. Puoi conservare il file dove preferisci, anche su Drive o OneDrive.", "Protetto")
+
+            Text("CREA UNA COPIA", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = exportPassword,
+                onValueChange = { exportPassword = it },
+                label = { Text("Password del backup") },
+                placeholder = { Text("Almeno 8 caratteri") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                colors = editorFieldColors(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = exportConfirmation,
+                onValueChange = { exportConfirmation = it },
+                label = { Text("Ripeti la password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                colors = editorFieldColors(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = {
+                    when {
+                        exportPassword.length < 8 -> message = "Scegli una password di almeno 8 caratteri."
+                        exportPassword != exportConfirmation -> message = "Le due password non coincidono."
+                        else -> {
+                            pendingExportPassword = exportPassword
+                            exportLauncher.launch("task-organizer-backup-${LocalDate.now()}.tob")
+                        }
+                    }
+                },
+                enabled = !working,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
+            ) { Text("Crea backup", fontWeight = FontWeight.Bold) }
+
+            HorizontalDivider(color = CardBlueLight)
+            Text("RIPRISTINA UNA COPIA", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("Il ripristino sostituisce tutte le attività e le liste presenti su questo telefono.", color = SoftText, fontSize = 13.sp)
+            OutlinedButton(
+                onClick = { importLauncher.launch(arrayOf("application/octet-stream", "application/*")) },
+                enabled = !working,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("Scegli un file di backup", color = Gold, fontWeight = FontWeight.Bold) }
+            if (importedBytes != null) {
+                OutlinedTextField(
+                    value = importPassword,
+                    onValueChange = { importPassword = it },
+                    label = { Text("Password del backup scelto") },
+                    placeholder = { Text("Almeno 8 caratteri") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    colors = editorFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = {
+                        if (importPassword.length < 8) message = "Inserisci la password usata per creare il backup."
+                        else importConfirmOpen = true
+                    },
+                    enabled = !working,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = CardBlueLight, contentColor = MainText)
+                ) { Text("Ripristina backup", fontWeight = FontWeight.Bold) }
+            }
+            if (working) CircularProgressIndicator(color = Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
+            message?.let { Text(it, color = SoftText, fontSize = 13.sp) }
+        }
+    }
+    if (importConfirmOpen) {
+        AlertDialog(
+            onDismissRequest = { importConfirmOpen = false },
+            containerColor = CardBlue,
+            title = { Text("Ripristinare il backup?", color = MainText) },
+            text = { Text("Le attività, le liste e le categorie attuali su questo telefono verranno sostituite. Prima crea un backup, se vuoi conservarle.", color = SoftText) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val data = importedBytes ?: return@TextButton
+                    val password = importPassword
+                    importConfirmOpen = false
+                    working = true
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val passwordChars = password.toCharArray()
+                                try {
+                                    store.importPasswordProtectedBackup(data, passwordChars)
+                                } finally {
+                                    passwordChars.fill('\u0000')
+                                }
+                            }
+                        }
+                        working = false
+                        result.onSuccess { archive ->
+                            importPassword = ""
+                            importedBytes = null
+                            onImported(archive)
+                            message = "Backup ripristinato. Promemoria e widget sono stati aggiornati."
+                        }.onFailure {
+                            message = "Password errata oppure backup non valido. I dati attuali non sono stati modificati."
+                        }
+                    }
+                }) { Text("Sostituisci dati", color = Danger) }
+            },
+            dismissButton = { TextButton(onClick = { importConfirmOpen = false }) { Text("Annulla", color = SoftText) } }
+        )
+    }
+}
+
+private fun readBackupBytes(input: java.io.InputStream): ByteArray {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(8 * 1024)
+    var total = 0
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) break
+        total += read
+        require(total <= MAX_BACKUP_FILE_BYTES) { "Il file è troppo grande." }
+        output.write(buffer, 0, read)
+    }
+    return output.toByteArray()
+}
+
+private const val MAX_BACKUP_FILE_BYTES = 10 * 1024 * 1024
 
 @Composable
 private fun ThemeChoiceCard(
@@ -1928,6 +2204,7 @@ private fun TaskEditorScreen(
     var reminderRepeatMinutes by remember(task?.id) { mutableStateOf(task?.reminderRepeatMinutes ?: 0) }
     var alarmEnabled by remember(task?.id) { mutableStateOf(task?.alarmEnabled ?: false) }
     var cardColor by remember(task?.id) { mutableStateOf(task?.cardColor ?: DefaultCardColor) }
+    var recurrence by remember(task?.id) { mutableStateOf(task?.recurrence ?: "none") }
     var error by remember(task?.id) { mutableStateOf("") }
 
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
@@ -2004,6 +2281,10 @@ private fun TaskEditorScreen(
             onDeleteCustomCategory = onDeleteCustomCategory
         )
         OptionField("Priorità", priority, listOf("Bassa", "Media", "Alta")) { priority = it }
+        val recurrenceOptions = linkedMapOf("none" to "Non ripetere", "daily" to "Ogni giorno", "weekly" to "Ogni settimana", "monthly" to "Ogni mese")
+        OptionField("Ripetizione", recurrenceOptions[recurrence] ?: "Non ripetere", recurrenceOptions.values.toList()) { choice ->
+            recurrence = recurrenceOptions.entries.firstOrNull { it.value == choice }?.key ?: "none"
+        }
         TaskColorPicker(selectedColor = cardColor, onSelected = { cardColor = it })
         if (category == "Esami") {
             OptionField("Stato dell'esame", examStatus, listOf("Da prenotare", "Prenotato", "Fatto")) { examStatus = it }
@@ -2031,7 +2312,7 @@ private fun TaskEditorScreen(
                             id = task?.id ?: java.util.UUID.randomUUID().toString(), title = title.trim(), date = parsedDate.toString(),
                             time = normalizedTime, endTime = normalizedEndTime, category = category, categoryIcon = categoryIcon, priority = priority, note = note.trim(),
                             completed = task?.completed ?: false, reminderEnabled = reminderEnabled && normalizedTime != null, reminderMinutesBefore = reminderMinutesBefore, reminderRepeatMinutes = reminderRepeatMinutes, alarmEnabled = alarmEnabled && reminderEnabled && normalizedTime != null, cardColor = cardColor, examStatus = if (category == "Esami") examStatus else null,
-                            createdAt = task?.createdAt ?: System.currentTimeMillis()
+                            createdAt = task?.createdAt ?: System.currentTimeMillis(), deletedAt = task?.deletedAt ?: 0L, recurrence = recurrence
                         )
                     )
                 }

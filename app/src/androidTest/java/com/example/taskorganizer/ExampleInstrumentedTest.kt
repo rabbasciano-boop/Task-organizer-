@@ -72,6 +72,34 @@ class EncryptedTaskStoreInstrumentedTest {
         }
     }
 
+    @Test
+    fun exportsAndImportsAPasswordProtectedBackup() {
+        val (testContext, store) = isolatedStore()
+        try {
+            val task = OrganizerTask(title = "Backup test", date = "2026-12-01", recurrence = "weekly")
+            store.save(listOf(task), listOf("Studio"), mapOf("Studio" to "📚"))
+
+            val password = "password-di-prova".toCharArray()
+            val backup = try {
+                store.exportPasswordProtectedBackup(password)
+            } finally {
+                password.fill('\u0000')
+            }
+            store.clear()
+            val importPassword = "password-di-prova".toCharArray()
+            val restored = try {
+                store.importPasswordProtectedBackup(backup, importPassword)
+            } finally {
+                importPassword.fill('\u0000')
+            }
+
+            assertEquals(listOf(task), restored.tasks)
+            assertEquals(listOf("Studio"), restored.customCategories)
+        } finally {
+            cleanUp(testContext, store)
+        }
+    }
+
     private class IsolatedTestContext(base: Context) : ContextWrapper(base) {
         override fun getApplicationContext(): Context = this
 
