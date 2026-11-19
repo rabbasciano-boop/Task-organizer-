@@ -46,6 +46,10 @@ I test su dispositivo sono intenzionalmente disattivati: vanno avviati solo su u
 
 In **Opzioni > Backup cifrato** puoi creare un file `.tob`. Conserva la password separatamente: non viene salvata e non può essere recuperata. Importare un backup sostituisce le attività, liste e categorie presenti sul telefono.
 
+## Revisioni tecniche
+
+Lo stato delle quattro revisioni di sicurezza e affidabilità è documentato in [docs/reviews/README.md](docs/reviews/README.md).
+
 ## Preparazione alla pubblicazione
 
 Prima di Google Play occorrono un identificativo definitivo, una chiave di rilascio conservata fuori dal repository, una build release verificata, gli SHA Firebase della chiave finale e le pagine web per privacy e cancellazione account.
