@@ -147,14 +147,22 @@ class TaskReminderReceiver : BroadcastReceiver() {
         )
         val publicVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, channelId) else Notification.Builder(context)
         publicVersion
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(R.drawable.ic_stat_task_organizer)
             .setContentTitle("Task Organizer")
             .setContentText("Hai un promemoria")
 
         val timing = TaskReminderScheduler.remainingLabel(TaskReminderScheduler.taskStartAt(intent))
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, channelId) else Notification.Builder(context)
+        if (isAlarm && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder
+                .setSound(
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                    AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
+                )
+                .setDefaults(Notification.DEFAULT_VIBRATE)
+        }
         val notification = builder
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(R.drawable.ic_stat_task_organizer)
             .setContentTitle(if (isAlarm) "Promemoria importante · $timing" else timing)
             .setContentText("${TaskReminderScheduler.title(intent)} alle ${TaskReminderScheduler.time(intent)}")
             .setContentIntent(openApp)
@@ -162,7 +170,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setPublicVersion(publicVersion.build())
             .setCategory(if (isAlarm) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
-            .setDefaults(if (isAlarm) Notification.DEFAULT_ALL else 0)
+            .setDefaults(if (isAlarm && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.DEFAULT_ALL else 0)
             .build()
         manager.notify(TaskReminderScheduler.taskId(intent), TaskReminderScheduler.reminderIndex(intent), notification)
     }

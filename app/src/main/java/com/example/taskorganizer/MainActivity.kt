@@ -106,6 +106,8 @@ import javax.net.ssl.HttpsURLConnection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private val NightBlue get() = OrganizerPalette.background
@@ -480,6 +482,7 @@ private fun TaskOrganizerApp(
     val context = LocalContext.current
     val store = remember { EncryptedTaskStore(context) }
     val appScope = rememberCoroutineScope()
+    val archiveUpdateMutex = remember { Mutex() }
     val profile = remember { context.getSharedPreferences("task_organizer_profile", android.content.Context.MODE_PRIVATE) }
     var nickname by remember { mutableStateOf(profile.getString("nickname", "Utente").orEmpty().ifBlank { "Utente" }) }
     var archiveLoadResult by remember { mutableStateOf<TaskArchiveLoadResult?>(null) }
@@ -536,14 +539,20 @@ private fun TaskOrganizerApp(
         listItems.addAll(updated.listItems)
     }
 
+    fun refreshWidgets(archive: TaskArchive) {
+        appScope.launch(Dispatchers.IO) { TaskWidgetUpdater.updateAll(context, archive) }
+    }
+
     fun updateArchive(change: (TaskArchive) -> TaskArchive, afterSaved: (TaskArchive) -> Unit = {}) {
         appScope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { store.update(change) } }
-            result.onSuccess { savedArchive ->
-                applyArchive(savedArchive)
-                afterSaved(savedArchive)
-            }.onFailure {
-                storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
+            archiveUpdateMutex.withLock {
+                val result = withContext(Dispatchers.IO) { runCatching { store.update(change) } }
+                result.onSuccess { savedArchive ->
+                    applyArchive(savedArchive)
+                    afterSaved(savedArchive)
+                }.onFailure {
+                    storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
+                }
             }
         }
     }
@@ -576,8 +585,8 @@ private fun TaskOrganizerApp(
         updateArchive(change = { disk ->
             val index = disk.tasks.indexOfFirst { it.id == task.id }
             disk.copy(tasks = if (index >= 0) disk.tasks.toMutableList().also { it[index] = task } else disk.tasks + task)
-        }) {
-            TaskWidgetUpdater.updateAll(context)
+        }) { savedArchive ->
+            refreshWidgets(savedArchive)
             TaskReminderScheduler.schedule(context, task)
             editorOpen = false
             selectedTab = 1
@@ -590,7 +599,7 @@ private fun TaskOrganizerApp(
             if (index < 0) disk else disk.copy(tasks = disk.tasks.toMutableList().also { it[index] = task })
         }) { updated ->
             if (updated.tasks.any { it.id == task.id }) {
-                TaskWidgetUpdater.updateAll(context)
+                refreshWidgets(updated)
                 TaskReminderScheduler.schedule(context, task)
             }
         }
@@ -600,10 +609,10 @@ private fun TaskOrganizerApp(
         updateArchive(change = { disk ->
             disk.copy(
                 tasks = disk.tasks.filterNot { it.id == task.id },
-                deletedTasks = disk.deletedTasks.filterNot { it.id == task.id } + task
+                deletedTasks = disk.deletedTasks.filterNot { it.id == task.id } + task.copy(deletedAt = System.currentTimeMillis())
             )
-        }) {
-            TaskWidgetUpdater.updateAll(context)
+        }) { savedArchive ->
+            refreshWidgets(savedArchive)
             TaskReminderScheduler.cancel(context, task)
         }
     }
@@ -611,11 +620,11 @@ private fun TaskOrganizerApp(
     fun restoreTask(task: OrganizerTask) {
         updateArchive(change = { disk ->
             disk.copy(
-                tasks = disk.tasks.filterNot { it.id == task.id } + task,
+                tasks = disk.tasks.filterNot { it.id == task.id } + task.copy(deletedAt = 0L),
                 deletedTasks = disk.deletedTasks.filterNot { it.id == task.id }
             )
-        }) {
-            TaskWidgetUpdater.updateAll(context)
+        }) { savedArchive ->
+            refreshWidgets(savedArchive)
             TaskReminderScheduler.schedule(context, task)
         }
     }
@@ -623,8 +632,8 @@ private fun TaskOrganizerApp(
     fun permanentlyDeleteTask(task: OrganizerTask) {
         updateArchive(change = { disk ->
             disk.copy(deletedTasks = disk.deletedTasks.filterNot { it.id == task.id })
-        }) {
-            TaskWidgetUpdater.updateAll(context)
+        }) { savedArchive ->
+            refreshWidgets(savedArchive)
         }
     }
 
@@ -650,7 +659,7 @@ private fun TaskOrganizerApp(
                 customCategoryIcons.clear()
                 listItems.clear()
                 onSecurityChanged()
-                TaskWidgetUpdater.updateAll(context)
+                refreshWidgets(TaskArchive())
             }.onFailure {
                 storageError = "Non è stato possibile completare la cancellazione dei dati locali. Controlla lo spazio disponibile e riprova."
             }
@@ -712,11 +721,7 @@ private fun TaskOrganizerApp(
                 updateArchive(change = { disk ->
                     val index = disk.listItems.indexOfFirst { it.id == item.id }
                     if (index < 0) disk else disk.copy(listItems = disk.listItems.toMutableList().also { it[index] = item })
-                }) { savedArchive ->
-                    if (savedArchive.listItems.any { it.id == item.id }) {
-                        TaskWidgetUpdater.updateAll(context)
-                    }
-                }
+                })
             },
             onDelete = { item ->
                 updateArchive(change = { disk ->

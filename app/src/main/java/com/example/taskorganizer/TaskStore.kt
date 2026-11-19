@@ -31,7 +31,8 @@ data class OrganizerTask(
     val alarmEnabled: Boolean = false,
     val cardColor: String = "default",
     val examStatus: String? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val deletedAt: Long = 0L
 )
 
 data class OrganizerListItem(
@@ -66,7 +67,7 @@ class EncryptedTaskStore(context: Context) {
     fun load(): TaskArchive = synchronized(archiveLock) { loadUnlocked() }
 
     fun loadSafely(): TaskArchiveLoadResult = try {
-        TaskArchiveLoadResult.Loaded(load())
+        TaskArchiveLoadResult.Loaded(loadAndPruneExpiredTrash())
     } catch (error: Exception) {
         TaskArchiveLoadResult.Unreadable(error)
     }
@@ -79,6 +80,17 @@ class EncryptedTaskStore(context: Context) {
         val updated = transform(loadUnlocked())
         saveUnlocked(updated)
         updated
+    }
+
+    /** Removes items that have remained in the recycle bin for longer than 30 days. */
+    private fun loadAndPruneExpiredTrash(now: Long = System.currentTimeMillis()): TaskArchive = synchronized(archiveLock) {
+        val archive = loadUnlocked()
+        val retained = archive.deletedTasks.filter { task ->
+            val deletedAt = task.deletedAt.takeIf { it > 0L } ?: now
+            now - deletedAt < TRASH_RETENTION_MILLIS
+        }
+        if (retained.size == archive.deletedTasks.size) return archive
+        return archive.copy(deletedTasks = retained).also(::saveUnlocked)
     }
 
     /**
@@ -147,6 +159,7 @@ class EncryptedTaskStore(context: Context) {
         synchronized(archiveLock) {
             atomicFile.delete()
             recoveryFiles().forEach(File::delete)
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(KEY_ALIAS)
         }
     }
 
@@ -181,12 +194,12 @@ class EncryptedTaskStore(context: Context) {
         customCategories.distinct().forEach { categories.put(it) }
         val categoryIcons = JSONObject()
         customCategoryIcons.forEach { (category, icon) -> categoryIcons.put(category, icon) }
-        return JSONObject().put("version", 5).put("tasks", items).put("deletedTasks", deletedItems).put("listItems", listEntries).put("customCategories", categories).put("customCategoryIcons", categoryIcons).toString().toByteArray(Charsets.UTF_8)
+        return JSONObject().put("version", 6).put("tasks", items).put("deletedTasks", deletedItems).put("listItems", listEntries).put("customCategories", categories).put("customCategoryIcons", categoryIcons).toString().toByteArray(Charsets.UTF_8)
     }
 
     private fun decode(bytes: ByteArray): TaskArchive {
         val archive = JSONObject(bytes.toString(Charsets.UTF_8))
-        fun tasksFrom(items: JSONArray): List<OrganizerTask> = List(items.length()) { index ->
+        fun tasksFrom(items: JSONArray, deleted: Boolean = false): List<OrganizerTask> = List(items.length()) { index ->
             val item = items.getJSONObject(index)
             OrganizerTask(
                 id = item.getString("id"),
@@ -205,11 +218,12 @@ class EncryptedTaskStore(context: Context) {
                 alarmEnabled = item.optBoolean("alarmEnabled", false),
                 cardColor = item.optString("cardColor", "default"),
                 examStatus = item.optString("examStatus").ifBlank { null },
-                createdAt = item.optLong("createdAt", System.currentTimeMillis())
+                createdAt = item.optLong("createdAt", System.currentTimeMillis()),
+                deletedAt = if (deleted) item.optLong("deletedAt", System.currentTimeMillis()) else 0L
             )
         }
         val tasks = tasksFrom(archive.getJSONArray("tasks"))
-        val deletedTasks = archive.optJSONArray("deletedTasks")?.let(::tasksFrom).orEmpty()
+        val deletedTasks = archive.optJSONArray("deletedTasks")?.let { tasksFrom(it, deleted = true) }.orEmpty()
         val listItems = archive.optJSONArray("listItems")?.let { entries ->
             List(entries.length()) { index ->
                 val item = entries.getJSONObject(index)
@@ -256,6 +270,7 @@ class EncryptedTaskStore(context: Context) {
         .put("cardColor", task.cardColor)
         .put("examStatus", task.examStatus ?: "")
         .put("createdAt", task.createdAt)
+        .put("deletedAt", task.deletedAt)
 
     private fun encrypt(plainText: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -296,6 +311,7 @@ class EncryptedTaskStore(context: Context) {
     private companion object {
         const val KEY_ALIAS = "task_organizer_local_key"
         const val RECOVERY_PREFIX = "task-organizer-unreadable-"
+        const val TRASH_RETENTION_MILLIS = 30L * 24 * 60 * 60 * 1000
         val archiveLock = Any()
     }
 }

@@ -26,7 +26,10 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
     protected abstract val form: WidgetForm
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        appWidgetIds.forEach { id -> TaskWidgetUpdater.update(context, appWidgetManager, id, form) }
+        updateOnWorker(context) {
+            val archive = TaskWidgetUpdater.loadArchive(context)
+            appWidgetIds.forEach { id -> TaskWidgetUpdater.update(context, appWidgetManager, id, form, archive) }
+        }
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -34,7 +37,9 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetId: Int,
         newOptions: Bundle
-    ) = TaskWidgetUpdater.update(context, appWidgetManager, appWidgetId, form)
+    ) = updateOnWorker(context) {
+        TaskWidgetUpdater.update(context, appWidgetManager, appWidgetId, form)
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
@@ -44,7 +49,9 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
             if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID && filter in setOf("all", "today", "todo", "done")) {
                 context.getSharedPreferences(WIDGET_PREFERENCES, Context.MODE_PRIVATE)
                     .edit().putString("filter_$widgetId", filter).apply()
-                TaskWidgetUpdater.update(context, AppWidgetManager.getInstance(context), widgetId, WidgetForm.LARGE)
+                updateOnWorker(context) {
+                    TaskWidgetUpdater.update(context, AppWidgetManager.getInstance(context), widgetId, WidgetForm.LARGE)
+                }
             }
             return
         }
@@ -58,7 +65,7 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
                 val appContext = context.applicationContext
                 val store = EncryptedTaskStore(appContext)
                 var changedTask: OrganizerTask? = null
-                store.update { archive ->
+                val savedArchive = store.update { archive ->
                     val task = archive.tasks.firstOrNull { it.id == taskId } ?: return@update archive
                     changedTask = task.copy(completed = !task.completed)
                     archive.copy(tasks = archive.tasks.map { if (it.id == taskId) changedTask!! else it })
@@ -67,9 +74,20 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
                     if (changed.completed) TaskReminderScheduler.cancel(appContext, changed)
                     else TaskReminderScheduler.schedule(appContext, changed)
                 }
-                TaskWidgetUpdater.updateAll(appContext)
+                TaskWidgetUpdater.updateAll(appContext, savedArchive)
             } catch (_: Exception) {
                 // The app retains the encrypted archive unchanged. It can offer recovery on next open.
+            } finally {
+                pendingResult.finish()
+            }
+        }.start()
+    }
+
+    private fun updateOnWorker(context: Context, action: () -> Unit) {
+        val pendingResult = goAsync()
+        Thread {
+            try {
+                action()
             } finally {
                 pendingResult.finish()
             }
@@ -125,15 +143,16 @@ object TaskWidgetUpdater {
         val success: Int
     )
 
-    fun updateAll(context: Context) {
+    fun updateAll(context: Context, archive: TaskArchive? = null) {
         val manager = AppWidgetManager.getInstance(context)
+        val latestArchive = archive ?: loadArchive(context)
         listOf(
             TaskOrganizerProgressWidgetProvider::class.java to WidgetForm.SMALL,
             TaskOrganizerOverviewWidgetProvider::class.java to WidgetForm.MEDIUM,
             TaskOrganizerAgendaWidgetProvider::class.java to WidgetForm.LARGE
         ).forEach { (provider, form) ->
             val component = ComponentName(context, provider)
-            manager.getAppWidgetIds(component).forEach { update(context, manager, it, form) }
+            manager.getAppWidgetIds(component).forEach { update(context, manager, it, form, latestArchive) }
         }
     }
 
@@ -147,7 +166,20 @@ object TaskWidgetUpdater {
             .apply()
     }
 
+    fun loadArchive(context: Context): TaskArchive =
+        runCatching { EncryptedTaskStore(context).load() }.getOrDefault(TaskArchive())
+
     fun update(context: Context, manager: AppWidgetManager, appWidgetId: Int, form: WidgetForm) {
+        update(context, manager, appWidgetId, form, loadArchive(context))
+    }
+
+    fun update(
+        context: Context,
+        manager: AppWidgetManager,
+        appWidgetId: Int,
+        form: WidgetForm,
+        archive: TaskArchive
+    ) {
         val layout = when (form) {
             WidgetForm.SMALL -> R.layout.widget_small
             WidgetForm.MEDIUM -> R.layout.widget_medium
@@ -155,7 +187,7 @@ object TaskWidgetUpdater {
         }
         val palette = palette(context)
         val today = LocalDate.now()
-        val tasks = runCatching { EncryptedTaskStore(context).load().tasks }.getOrElse { emptyList() }
+        val tasks = archive.tasks
         val todayTasks = tasks.filter { it.date == today.toString() }.sortedWith(compareBy<OrganizerTask> { it.time == null }.thenBy { it.time ?: "" })
         val completed = todayTasks.count { it.completed }
         val progress = if (todayTasks.isEmpty()) 0 else (completed * 100 / todayTasks.size)
