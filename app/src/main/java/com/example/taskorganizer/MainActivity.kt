@@ -1603,9 +1603,9 @@ private fun CalendarScreen(
     val firstDayOffset = displayedMonth.atDay(1).dayOfWeek.value - 1
     val daysInMonth = displayedMonth.lengthOfMonth()
     val gridCells = (0 until 42).toList()
-    val selectedTasks by remember {
+    val selectedTasks by remember(selectedDateValue) {
         derivedStateOf {
-            tasks.filter { it.date == selectedDate.toString() }.sortedBy { it.time ?: "99:99" }
+            tasks.filter { it.date == selectedDateValue }.sortedBy { it.time ?: "99:99" }
         }
     }
     val previousMonthDescription = stringResource(R.string.previous_month)
