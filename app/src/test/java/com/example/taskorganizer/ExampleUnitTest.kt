@@ -3,6 +3,7 @@ package com.example.taskorganizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 class ReminderTimingTest {
     @Test
@@ -44,15 +45,25 @@ class PinAttemptPolicyTest {
 
 class RecurrenceTimingTest {
     @Test
-    fun createsTheCorrectNextOccurrence() {
-        assertEquals("2026-12-01", RecurrenceTiming.nextDate("2026-11-30", "daily"))
-        assertEquals("2026-12-07", RecurrenceTiming.nextDate("2026-11-30", "weekly"))
-        assertEquals("2026-12-30", RecurrenceTiming.nextDate("2026-11-30", "monthly"))
+    fun createsTheFirstFutureOccurrenceForOverdueActivities() {
+        val task = OrganizerTask(id = "daily", title = "Acqua", date = "2026-11-01", recurrence = "daily")
+        val updated = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(task)), task.id, LocalDate.of(2026, 11, 19))
+
+        assertEquals(listOf("2026-11-01", "2026-11-20"), updated.tasks.map { it.date }.sorted())
     }
 
     @Test
-    fun doesNotCreateAnOccurrenceForOneOffActivities() {
-        assertEquals(null, RecurrenceTiming.nextDate("2026-11-30", "none"))
-        assertEquals(null, RecurrenceTiming.nextDate("not-a-date", "daily"))
+    fun monthlyRecurrenceKeepsTheOriginalDayAndDoesNotDuplicate() {
+        val task = OrganizerTask(id = "monthly", title = "Bolletta", date = "2027-01-31", recurrence = "monthly")
+        val first = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(task)), task.id, LocalDate.of(2027, 1, 31))
+        val afterUndo = RecurrenceTiming.toggleTask(first, task.id, LocalDate.of(2027, 1, 31))
+        val afterSecondCompletion = RecurrenceTiming.toggleTask(afterUndo, task.id, LocalDate.of(2027, 1, 31))
+
+        assertEquals(2, afterSecondCompletion.tasks.size)
+        assertTrue(afterSecondCompletion.tasks.any { it.date == "2027-02-28" })
+
+        val february = afterSecondCompletion.tasks.first { it.date == "2027-02-28" }
+        val march = RecurrenceTiming.toggleTask(afterSecondCompletion, february.id, LocalDate.of(2027, 2, 28))
+        assertTrue(march.tasks.any { it.date == "2027-03-31" })
     }
 }

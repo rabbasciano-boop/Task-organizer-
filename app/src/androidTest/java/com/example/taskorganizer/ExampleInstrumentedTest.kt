@@ -21,7 +21,7 @@ class EncryptedTaskStoreInstrumentedTest {
         val baseContext = InstrumentationRegistry.getInstrumentation().targetContext
         val testContext = IsolatedTestContext(baseContext)
         testContext.filesDir.mkdirs()
-        val store = EncryptedTaskStore(testContext)
+        val store = EncryptedTaskStore(testContext, keyAlias = "task_organizer_test_key")
         store.clear()
         testContext.filesDir.listFiles()
             ?.filter { it.name.startsWith("task-organizer-unreadable-") }

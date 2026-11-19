@@ -38,7 +38,9 @@ data class OrganizerTask(
     val examStatus: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val deletedAt: Long = 0L,
-    val recurrence: String = "none"
+    val recurrence: String = "none",
+    val seriesId: String? = null,
+    val recurrenceAnchorDate: String? = null
 )
 
 data class OrganizerListItem(
@@ -65,7 +67,7 @@ sealed interface TaskArchiveLoadResult {
 }
 
 /** Stores the organizer only in the app-private folder, encrypted with an Android Keystore key. */
-class EncryptedTaskStore(context: Context) {
+class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_ALIAS) {
     private val appContext = context.applicationContext
     private val dataFile = File(appContext.filesDir, "task-organizer.enc")
     private val atomicFile = AtomicFile(dataFile)
@@ -207,12 +209,22 @@ class EncryptedTaskStore(context: Context) {
         }
     }
 
-    /** Called only after an explicit confirmed deletion from the account screen. */
+    /** Removes organizer files without touching the Keystore key. Safe for isolated test data. */
     fun clear() {
         synchronized(archiveLock) {
             atomicFile.delete()
             recoveryFiles().forEach(File::delete)
-            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(KEY_ALIAS)
+        }
+    }
+
+    /** Called only after an explicit confirmed deletion from the account screen. */
+    fun clearAll() {
+        synchronized(archiveLock) {
+            atomicFile.delete()
+            recoveryFiles().forEach(File::delete)
+            // The encrypted files are already gone, so a Keystore failure must not prevent the
+            // rest of the privacy cleanup (preferences and PIN) from continuing.
+            runCatching { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(keyAlias) }
         }
     }
 
@@ -273,7 +285,9 @@ class EncryptedTaskStore(context: Context) {
                 examStatus = item.optString("examStatus").ifBlank { null },
                 createdAt = item.optLong("createdAt", System.currentTimeMillis()),
                 deletedAt = if (deleted) item.optLong("deletedAt", System.currentTimeMillis()) else 0L,
-                recurrence = item.optString("recurrence", "none")
+                recurrence = item.optString("recurrence", "none"),
+                seriesId = item.optString("seriesId").ifBlank { null },
+                recurrenceAnchorDate = item.optString("recurrenceAnchorDate").ifBlank { null }
             )
         }
         val tasks = tasksFrom(archive.getJSONArray("tasks"))
@@ -326,6 +340,8 @@ class EncryptedTaskStore(context: Context) {
         .put("createdAt", task.createdAt)
         .put("deletedAt", task.deletedAt)
         .put("recurrence", task.recurrence)
+        .put("seriesId", task.seriesId ?: "")
+        .put("recurrenceAnchorDate", task.recurrenceAnchorDate ?: "")
 
     private fun encrypt(plainText: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -347,12 +363,12 @@ class EncryptedTaskStore(context: Context) {
 
     private fun secretKey(): SecretKey {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        (keyStore.getKey(keyAlias, null) as? SecretKey)?.let { return it }
 
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         generator.init(
             KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
+                keyAlias,
                 KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
             )
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)

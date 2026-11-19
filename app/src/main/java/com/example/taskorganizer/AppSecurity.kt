@@ -2,6 +2,7 @@ package com.example.taskorganizer
 
 import android.content.Context
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Base64
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -10,7 +11,8 @@ import javax.crypto.spec.PBEKeySpec
 
 /** Keeps only a salted, deliberately slow PIN verifier; the PIN itself is never stored. */
 class AppSecurity(context: Context) {
-    private val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val preferences = appContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
     fun hasPin(): Boolean = preferences.contains(PIN_HASH) && preferences.contains(PIN_SALT)
 
@@ -23,6 +25,8 @@ class AppSecurity(context: Context) {
             .remove(LOCKED_UNTIL)
             .remove(LOCKED_UNTIL_ELAPSED)
             .remove(LOCK_STARTED_ELAPSED)
+            .remove(LOCK_BOOT_COUNT)
+            .remove(LOCK_DURATION)
             .apply()
     }
 
@@ -38,7 +42,7 @@ class AppSecurity(context: Context) {
         val expected = preferences.getString(PIN_HASH, null)?.let { Base64.decode(it, Base64.NO_WRAP) }
             ?: return PinVerification.Incorrect(0, 0L)
         if (MessageDigest.isEqual(expected, derive(pin, salt))) {
-            preferences.edit().remove(FAILED_ATTEMPTS).remove(LOCKED_UNTIL).remove(LOCKED_UNTIL_ELAPSED).remove(LOCK_STARTED_ELAPSED).apply()
+            preferences.edit().remove(FAILED_ATTEMPTS).remove(LOCKED_UNTIL).remove(LOCKED_UNTIL_ELAPSED).remove(LOCK_STARTED_ELAPSED).remove(LOCK_BOOT_COUNT).remove(LOCK_DURATION).apply()
             return PinVerification.Verified
         }
 
@@ -49,6 +53,8 @@ class AppSecurity(context: Context) {
             .putLong(LOCKED_UNTIL, if (delay > 0) now + delay else 0L)
             .putLong(LOCK_STARTED_ELAPSED, SystemClock.elapsedRealtime())
             .putLong(LOCKED_UNTIL_ELAPSED, if (delay > 0) SystemClock.elapsedRealtime() + delay else 0L)
+            .putInt(LOCK_BOOT_COUNT, bootCount())
+            .putLong(LOCK_DURATION, delay)
             .apply()
         return PinVerification.Incorrect(failedAttempts, delay)
     }
@@ -57,6 +63,20 @@ class AppSecurity(context: Context) {
         now: Long = System.currentTimeMillis(),
         elapsedNow: Long = SystemClock.elapsedRealtime()
     ): Long {
+        val savedBootCount = preferences.getInt(LOCK_BOOT_COUNT, -1)
+        val currentBootCount = bootCount()
+        val lockDuration = preferences.getLong(LOCK_DURATION, 0L)
+        if (lockDuration > 0L && savedBootCount >= 0 && currentBootCount >= 0 && savedBootCount != currentBootCount) {
+            // elapsedRealtime resets after a reboot. Rebase the lock once, so a reboot followed by
+            // a manual clock change cannot immediately bypass the attempt limit.
+            preferences.edit()
+                .putInt(LOCK_BOOT_COUNT, currentBootCount)
+                .putLong(LOCKED_UNTIL, now + lockDuration)
+                .putLong(LOCK_STARTED_ELAPSED, elapsedNow)
+                .putLong(LOCKED_UNTIL_ELAPSED, elapsedNow + lockDuration)
+                .apply()
+            return lockDuration
+        }
         val wallClockRemaining = (preferences.getLong(LOCKED_UNTIL, 0L) - now).coerceAtLeast(0L)
         val startedElapsed = preferences.getLong(LOCK_STARTED_ELAPSED, -1L)
         val elapsedLockUntil = preferences.getLong(LOCKED_UNTIL_ELAPSED, 0L)
@@ -85,8 +105,14 @@ class AppSecurity(context: Context) {
             .remove(LOCKED_UNTIL)
             .remove(LOCKED_UNTIL_ELAPSED)
             .remove(LOCK_STARTED_ELAPSED)
+            .remove(LOCK_BOOT_COUNT)
+            .remove(LOCK_DURATION)
             .apply()
     }
+
+    private fun bootCount(): Int = runCatching {
+        Settings.Global.getInt(appContext.contentResolver, Settings.Global.BOOT_COUNT, -1)
+    }.getOrDefault(-1)
 
     private fun derive(pin: String, salt: ByteArray): ByteArray {
         val specification = PBEKeySpec(pin.toCharArray(), salt, ITERATIONS, HASH_BITS)
@@ -106,6 +132,8 @@ class AppSecurity(context: Context) {
         const val LOCKED_UNTIL = "locked_until"
         const val LOCKED_UNTIL_ELAPSED = "locked_until_elapsed"
         const val LOCK_STARTED_ELAPSED = "lock_started_elapsed"
+        const val LOCK_BOOT_COUNT = "lock_boot_count"
+        const val LOCK_DURATION = "lock_duration"
         const val SALT_SIZE = 16
         const val ITERATIONS = 210_000
         const val HASH_BITS = 256

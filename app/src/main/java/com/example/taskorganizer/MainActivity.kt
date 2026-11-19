@@ -3,11 +3,9 @@ package com.example.taskorganizer
 import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.hardware.biometrics.BiometricPrompt
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.CancellationSignal
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -16,6 +14,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -86,6 +86,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -167,7 +171,7 @@ private fun auroraBackgroundBrush(): Brush? = when (OrganizerPalette.currentThem
 
 private fun Modifier.organizerBackground(): Modifier = auroraBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private var shouldLockOnResume by mutableStateOf(false)
     private var widgetQuickAdd by mutableStateOf(false)
     private var notificationPermissionAllowed by mutableStateOf(true)
@@ -334,20 +338,21 @@ class MainActivity : ComponentActivity() {
             onResult(false, "L'impronta non è disponibile su questo telefono.")
             return
         }
-        val prompt = BiometricPrompt.Builder(this)
-            .setTitle("Sblocca Task Organizer")
-            .setSubtitle("Conferma la tua identità")
-            .setNegativeButton("Usa il PIN", mainExecutor) { _, _ -> }
-            .build()
-        prompt.authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+        val prompt = BiometricPrompt(this, mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 onResult(true, null)
             }
 
-            override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
-                onResult(false, errString?.toString() ?: "Impossibile usare l'impronta.")
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                onResult(false, errString.toString())
             }
         })
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Sblocca Task Organizer")
+            .setSubtitle("Conferma la tua identità")
+            .setNegativeButtonText("Usa il PIN")
+            .build()
+        prompt.authenticate(promptInfo)
     }
 
     companion object {
@@ -566,9 +571,11 @@ private fun TaskOrganizerApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_START) {
                 appScope.launch {
-                    when (val latest = withContext(Dispatchers.IO) { store.loadSafely() }) {
-                        is TaskArchiveLoadResult.Loaded -> applyArchive(latest.archive)
-                        is TaskArchiveLoadResult.Unreadable -> archiveLoadResult = latest
+                    archiveUpdateMutex.withLock {
+                        when (val latest = withContext(Dispatchers.IO) { store.loadSafely() }) {
+                            is TaskArchiveLoadResult.Loaded -> applyArchive(latest.archive)
+                            is TaskArchiveLoadResult.Unreadable -> archiveLoadResult = latest
+                        }
                     }
                 }
             }
@@ -598,33 +605,12 @@ private fun TaskOrganizerApp(
     }
 
     fun changeTask(task: OrganizerTask) {
-        var recurringTaskId: String? = null
         updateArchive(change = { disk ->
-            val index = disk.tasks.indexOfFirst { it.id == task.id }
-            if (index < 0) {
-                disk
-            } else {
-                val previous = disk.tasks[index]
-                val nextDate = if (!previous.completed && task.completed) RecurrenceTiming.nextDate(task.date, task.recurrence) else null
-                val nextTask = nextDate?.let { date ->
-                    task.copy(
-                        id = java.util.UUID.randomUUID().toString(),
-                        date = date,
-                        completed = false,
-                        createdAt = System.currentTimeMillis(),
-                        deletedAt = 0L
-                    )
-                }
-                recurringTaskId = nextTask?.id
-                disk.copy(tasks = disk.tasks.toMutableList().also { it[index] = task } + listOfNotNull(nextTask))
-            }
+            RecurrenceTiming.updateTask(disk, task)
         }) { updated ->
             if (updated.tasks.any { it.id == task.id }) {
                 refreshWidgets(updated)
-                TaskReminderScheduler.schedule(context, task)
-                recurringTaskId?.let { id ->
-                    updated.tasks.firstOrNull { it.id == id }?.let { TaskReminderScheduler.schedule(context, it) }
-                }
+                RecurrenceTiming.reminderTasks(updated, task.id).forEach { TaskReminderScheduler.schedule(context, it) }
             }
         }
     }
@@ -666,7 +652,7 @@ private fun TaskOrganizerApp(
         appScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    store.clear()
+                    store.clearAll()
                     profile.edit().clear().commit()
                     context.getSharedPreferences("task_organizer_settings", android.content.Context.MODE_PRIVATE)
                         .edit().clear().commit()
@@ -1024,7 +1010,10 @@ private fun AccountAvatar(photoUrl: String?, initial: String, onClick: () -> Uni
     Card(
         colors = CardDefaults.cardColors(containerColor = Success.copy(alpha = 0.14f)),
         shape = RoundedCornerShape(50.dp),
-        modifier = Modifier.size(36.dp).clickable(onClick = onClick)
+        modifier = Modifier.size(36.dp).clickable(onClick = onClick).semantics {
+            contentDescription = "Apri menu account"
+            role = Role.Button
+        }
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             profileImage?.let { image ->
@@ -1388,7 +1377,15 @@ private fun Stat(value: String, label: String) {
 private fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(18.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (task.completed) "✓" else "○", color = if (task.completed) Success else Gold, fontSize = 24.sp, modifier = Modifier.clickable(onClick = onToggle))
+            Text(
+                if (task.completed) "✓" else "○",
+                color = if (task.completed) Success else Gold,
+                fontSize = 24.sp,
+                modifier = Modifier.clickable(onClick = onToggle).semantics {
+                    contentDescription = if (task.completed) "Segna ${task.title} come da fare" else "Segna ${task.title} come completata"
+                    role = Role.Button
+                }
+            )
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f).clickable(onClick = onEdit)) {
                 Text(task.title, color = if (task.completed) SoftText else MainText, fontWeight = FontWeight.Bold)
@@ -1405,7 +1402,15 @@ private fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Un
     Card(colors = CardDefaults.cardColors(containerColor = taskCardBackground(task.cardColor)), shape = RoundedCornerShape(20.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (task.completed) "✓" else "○", color = if (task.completed) Success else Gold, fontSize = 25.sp, modifier = Modifier.clickable(onClick = onToggle))
+                Text(
+                    if (task.completed) "✓" else "○",
+                    color = if (task.completed) Success else Gold,
+                    fontSize = 25.sp,
+                    modifier = Modifier.clickable(onClick = onToggle).semantics {
+                        contentDescription = if (task.completed) "Segna ${task.title} come da fare" else "Segna ${task.title} come completata"
+                        role = Role.Button
+                    }
+                )
                 Spacer(Modifier.size(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(task.title, color = if (task.completed) mutedColor else titleColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -1670,7 +1675,7 @@ private fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("Nascondi titoli nei widget", color = MainText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("Sulla schermata Home vedrai “Attività pianificata” invece del titolo. Utile se altre persone possono vedere il telefono.", color = SoftText, fontSize = 13.sp)
+                    Text("Sulla schermata Home vedrai “Attività pianificata” invece del titolo. Categoria e orario restano visibili.", color = SoftText, fontSize = 13.sp)
                 }
                 Switch(
                     checked = hideWidgetTitles,
@@ -1871,6 +1876,7 @@ private fun BackupScreen(
                 colors = editorFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )
+            Text("Per una protezione migliore scegli una frase lunga e unica, non una password breve.", color = SoftText, fontSize = 12.sp)
             Button(
                 onClick = {
                     when {
@@ -2313,7 +2319,8 @@ private fun TaskEditorScreen(
                             id = task?.id ?: java.util.UUID.randomUUID().toString(), title = title.trim(), date = parsedDate.toString(),
                             time = normalizedTime, endTime = normalizedEndTime, category = category, categoryIcon = categoryIcon, priority = priority, note = note.trim(),
                             completed = task?.completed ?: false, reminderEnabled = reminderEnabled && normalizedTime != null, reminderMinutesBefore = reminderMinutesBefore, reminderRepeatMinutes = reminderRepeatMinutes, alarmEnabled = alarmEnabled && reminderEnabled && normalizedTime != null, cardColor = cardColor, examStatus = if (category == "Esami") examStatus else null,
-                            createdAt = task?.createdAt ?: System.currentTimeMillis(), deletedAt = task?.deletedAt ?: 0L, recurrence = recurrence
+                            createdAt = task?.createdAt ?: System.currentTimeMillis(), deletedAt = task?.deletedAt ?: 0L, recurrence = recurrence,
+                            seriesId = task?.seriesId, recurrenceAnchorDate = task?.recurrenceAnchorDate
                         )
                     )
                 }

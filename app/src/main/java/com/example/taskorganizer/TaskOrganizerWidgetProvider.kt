@@ -66,13 +66,10 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
             try {
                 val appContext = context.applicationContext
                 val store = EncryptedTaskStore(appContext)
-                var changedTask: OrganizerTask? = null
                 val savedArchive = store.update { archive ->
-                    val task = archive.tasks.firstOrNull { it.id == taskId } ?: return@update archive
-                    changedTask = task.copy(completed = !task.completed)
-                    archive.copy(tasks = archive.tasks.map { if (it.id == taskId) changedTask!! else it })
+                    RecurrenceTiming.toggleTask(archive, taskId)
                 }
-                changedTask?.let { changed ->
+                RecurrenceTiming.reminderTasks(savedArchive, taskId).forEach { changed ->
                     if (changed.completed) TaskReminderScheduler.cancel(appContext, changed)
                     else TaskReminderScheduler.schedule(appContext, changed)
                 }
@@ -223,6 +220,7 @@ object TaskWidgetUpdater {
         views.setTextViewText(R.id.widget_progress, "$progress%")
         views.setTextViewText(R.id.widget_summary, if (todayTasks.isEmpty()) "Nessuna attività per oggi" else "$completed di ${todayTasks.size} completate oggi")
         views.setOnClickPendingIntent(R.id.widget_add, openAppIntent(context, addNew = true))
+        views.setContentDescription(R.id.widget_add, "Aggiungi una nuova attività")
         views.setOnClickPendingIntent(R.id.widget_title, openAppIntent(context, addNew = false))
 
         when (form) {
@@ -250,6 +248,7 @@ object TaskWidgetUpdater {
                     row.setTextViewText(R.id.widget_row_title, taskTitleForWidget(task, hideTaskTitles))
                     row.setTextViewText(R.id.widget_row_meta, "${task.category} · ${task.time ?: "senza orario"}")
                     row.setTextViewText(R.id.widget_row_toggle, if (task.completed) "✓" else "○")
+                    row.setContentDescription(R.id.widget_row_toggle, if (task.completed) "Segna attività come da fare" else "Segna attività come completata")
                     row.setTextColor(R.id.widget_row_toggle, if (task.completed) palette.success else palette.accent)
                     row.setOnClickPendingIntent(R.id.widget_row_toggle, toggleIntent(context, task))
                     row.setOnClickPendingIntent(R.id.widget_row_root, openAppIntent(context, addNew = false))
@@ -283,12 +282,14 @@ object TaskWidgetUpdater {
             views.setTextViewText(R.id.widget_next_title, "Nessuna attività in programma")
             views.setTextViewText(R.id.widget_next_meta, "Tocca + per aggiungerne una")
             views.setTextViewText(R.id.widget_next_toggle, "+")
+            views.setContentDescription(R.id.widget_next_toggle, "Aggiungi una nuova attività")
             views.setTextColor(R.id.widget_next_toggle, palette.accent)
             views.setOnClickPendingIntent(R.id.widget_next_toggle, openAppIntent(context, addNew = true))
         } else {
             views.setTextViewText(R.id.widget_next_title, taskTitleForWidget(task, hideTaskTitles))
             views.setTextViewText(R.id.widget_next_meta, "Prossima · ${task.time ?: "senza orario"} · ${task.category}")
             views.setTextViewText(R.id.widget_next_toggle, "○")
+            views.setContentDescription(R.id.widget_next_toggle, "Segna attività come completata")
             views.setTextColor(R.id.widget_next_toggle, palette.accent)
             views.setOnClickPendingIntent(R.id.widget_next_toggle, toggleIntent(context, task))
         }
