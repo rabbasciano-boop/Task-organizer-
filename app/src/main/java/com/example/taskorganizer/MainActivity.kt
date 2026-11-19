@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -537,6 +538,7 @@ private fun TaskOrganizerApp(
     val deletedTasks = remember(archiveLoadResult) { mutableStateListOf<OrganizerTask>().also { it.addAll(archive.deletedTasks) } }
     val listItems = remember(archiveLoadResult) { mutableStateListOf<OrganizerListItem>().also { it.addAll(archive.listItems) } }
     var selectedTab by remember { mutableIntStateOf(0) }
+    var tabHistory by remember { mutableStateOf(emptyList<Int>()) }
     var editorTask by remember { mutableStateOf<OrganizerTask?>(null) }
     var editorOpen by remember { mutableStateOf(false) }
     var listsOpen by remember { mutableStateOf(false) }
@@ -544,6 +546,13 @@ private fun TaskOrganizerApp(
     var privacyInfoOpen by remember { mutableStateOf(false) }
     var storageError by remember { mutableStateOf<String?>(null) }
     val tabs = listOf("Oggi", "Attività", "Calendario", "Account", "Opzioni")
+
+    fun navigateToTab(tab: Int) {
+        if (tab != selectedTab) {
+            tabHistory = tabHistory + selectedTab
+            selectedTab = tab
+        }
+    }
 
     fun applyArchive(updated: TaskArchive) {
         tasks.clear()
@@ -610,7 +619,7 @@ private fun TaskOrganizerApp(
             refreshWidgets(savedArchive)
             TaskReminderScheduler.schedule(context, task)
             editorOpen = false
-            selectedTab = 1
+            navigateToTab(1)
         }
     }
 
@@ -696,6 +705,24 @@ private fun TaskOrganizerApp(
         )
     }
 
+    BackHandler(
+        enabled = storageError == null && (editorOpen || listsOpen || backupOpen || privacyInfoOpen || tabHistory.isNotEmpty())
+    ) {
+        when {
+            editorOpen -> {
+                editorOpen = false
+                editorTask = null
+            }
+            listsOpen -> listsOpen = false
+            backupOpen -> backupOpen = false
+            privacyInfoOpen -> privacyInfoOpen = false
+            tabHistory.isNotEmpty() -> {
+                selectedTab = tabHistory.last()
+                tabHistory = tabHistory.dropLast(1)
+            }
+        }
+    }
+
     if (privacyInfoOpen) {
         PrivacyInfoScreen(onBack = { privacyInfoOpen = false })
         return
@@ -777,7 +804,7 @@ private fun TaskOrganizerApp(
                 tabs.forEachIndexed { index, label ->
                     NavigationBarItem(
                         selected = selectedTab == index,
-                        onClick = { selectedTab = index },
+                        onClick = { navigateToTab(index) },
                         icon = { NavMark(index, selectedTab == index) },
                         label = { Text(label) },
                         colors = NavigationBarItemDefaults.colors(
@@ -810,7 +837,7 @@ private fun TaskOrganizerApp(
                     onChange = ::changeTask,
                     onEdit = openEditTask,
                     onOpenLists = { listsOpen = true },
-                    onManageAccount = { selectedTab = 3 },
+                    onManageAccount = { navigateToTab(3) },
                     onOpenPrivacy = { privacyInfoOpen = true }
                 )
                 1 -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::changeTask, openEditTask, ::deleteTask, ::restoreTask, ::permanentlyDeleteTask)
