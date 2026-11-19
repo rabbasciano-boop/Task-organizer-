@@ -2003,7 +2003,6 @@ private fun BackupScreen(
 
     LaunchedEffect(pendingImportUri) {
         val uri = pendingImportUri ?: return@LaunchedEffect
-        onImportUriHandled()
         working = true
         val result = withContext(Dispatchers.IO) {
             runCatching {
@@ -2020,12 +2019,17 @@ private fun BackupScreen(
             importedBytes = null
             message = "Il file non può essere letto: scegli un backup di Task Organizer integro."
         }
+        // Clear the hand-off only after the read finishes. Clearing it before this point
+        // changes the LaunchedEffect key and cancels the read, leaving the loader visible.
+        onImportUriHandled()
     }
     LaunchedEffect(pendingExportUri) {
         val uri = pendingExportUri ?: return@LaunchedEffect
         val password = takeExportPassword()
-        onExportUriHandled()
-        if (password == null) return@LaunchedEffect
+        if (password == null) {
+            onExportUriHandled()
+            return@LaunchedEffect
+        }
         working = true
         val result = withContext(Dispatchers.IO) {
             runCatching {
@@ -2048,6 +2052,7 @@ private fun BackupScreen(
         }.onFailure {
             message = "Non è stato possibile creare il backup. Controlla lo spazio disponibile e riprova."
         }
+        onExportUriHandled()
     }
 
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
