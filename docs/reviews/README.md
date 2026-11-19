@@ -114,6 +114,7 @@ Restano volutamente aperti lo spostamento delle stringhe in `strings.xml`, la di
 | Calcoli delle liste | Risolto | Attività e Calendario usano stato derivato, evitando copie della lista a ogni ridisegno. |
 | Flash all'avvio | Migliorato | La finestra iniziale usa una risorsa chiara/scura e viene immediatamente allineata al tema salvato dall'activity. |
 | Test sessione e ID duplicati | Risolto | Aggiunti test automatici per blocco/sblocco della sessione e normalizzazione degli archivi con ID duplicati. |
+| Selezione backup con PIN attivo | Risolto | Il selettore file può bloccare l'app senza perdere l'operazione: dopo lo sblocco torna al backup scelto e chiede la relativa password. |
 
 ### Prove manuali consigliate
 

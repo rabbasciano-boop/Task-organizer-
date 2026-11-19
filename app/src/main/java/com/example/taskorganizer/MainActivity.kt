@@ -7,6 +7,7 @@ import android.graphics.Color as AndroidColor
 import android.graphics.drawable.ColorDrawable
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -17,6 +18,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.ActivityResultLauncher
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
@@ -195,12 +197,27 @@ private fun Modifier.organizerBackground(): Modifier = auroraBackgroundBrush()?.
 class MainActivity : FragmentActivity() {
     private var widgetQuickAdd by mutableStateOf(false)
     private var notificationPermissionAllowed by mutableStateOf(true)
+    private var pendingBackupImportUri by mutableStateOf<Uri?>(null)
+    private var pendingBackupExportUri by mutableStateOf<Uri?>(null)
+    private var pendingBackupExportPassword: CharArray? = null
+    private lateinit var backupImportLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var backupExportLauncher: ActivityResultLauncher<String>
     private val uiSession by lazy(LazyThreadSafetyMode.NONE) {
         ViewModelProvider(this, UiSessionViewModelFactory(AppSecurity(this).hasPin()))[UiSessionViewModel::class.java]
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        backupImportLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            pendingBackupImportUri = uri
+        }
+        backupExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+            if (uri == null) {
+                pendingBackupExportPassword?.fill('\u0000')
+                pendingBackupExportPassword = null
+            }
+            pendingBackupExportUri = uri
+        }
         widgetQuickAdd = intent.getBooleanExtra(EXTRA_OPEN_NEW_TASK, false)
         val initialSettings = getSharedPreferences("task_organizer_settings", MODE_PRIVATE)
         val initialTheme = OrganizerTheme.fromStorage(
@@ -303,6 +320,21 @@ class MainActivity : FragmentActivity() {
                         },
                         notificationPermissionAllowed = notificationPermissionAllowed,
                         onRequestNotificationPermission = ::requestNotificationPermission,
+                        pendingBackupImportUri = pendingBackupImportUri,
+                        onOpenBackupImport = {
+                            backupImportLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                        },
+                        onBackupImportHandled = { pendingBackupImportUri = null },
+                        pendingBackupExportUri = pendingBackupExportUri,
+                        onCreateBackupExport = { fileName, password ->
+                            pendingBackupExportPassword?.fill('\u0000')
+                            pendingBackupExportPassword = password
+                            backupExportLauncher.launch(fileName)
+                        },
+                        takeBackupExportPassword = {
+                            pendingBackupExportPassword.also { pendingBackupExportPassword = null }
+                        },
+                        onBackupExportHandled = { pendingBackupExportUri = null },
                         onSecurityChanged = {
                             updateSecureWindow()
                             if (!security.hasPin()) session.unlock()
@@ -556,6 +588,13 @@ private fun TaskOrganizerApp(
     onDeleteAccount: (onFinished: (Boolean) -> Unit) -> Unit,
     notificationPermissionAllowed: Boolean,
     onRequestNotificationPermission: () -> Unit,
+    pendingBackupImportUri: Uri?,
+    onOpenBackupImport: () -> Unit,
+    onBackupImportHandled: () -> Unit,
+    pendingBackupExportUri: Uri?,
+    onCreateBackupExport: (String, CharArray) -> Unit,
+    takeBackupExportPassword: () -> CharArray?,
+    onBackupExportHandled: () -> Unit,
     onSecurityChanged: () -> Unit
 ) {
     val context = LocalContext.current
@@ -607,6 +646,12 @@ private fun TaskOrganizerApp(
     var privacyInfoOpen by rememberSaveable { mutableStateOf(false) }
     var storageError by remember { mutableStateOf<String?>(null) }
     val selectedScreen = OrganizerScreen.all[selectedScreenIndex.coerceIn(0, OrganizerScreen.all.lastIndex)]
+
+    LaunchedEffect(pendingBackupImportUri, pendingBackupExportUri) {
+        // The document picker briefly places the app in background. Once the PIN is entered,
+        // return the person to Backup and resume the exact pending operation.
+        if (pendingBackupImportUri != null || pendingBackupExportUri != null) backupOpen = true
+    }
 
     fun navigateToTab(tab: Int) {
         if (tab != selectedScreenIndex) {
@@ -794,6 +839,13 @@ private fun TaskOrganizerApp(
         BackupScreen(
             store = store,
             onBack = { backupOpen = false },
+            pendingImportUri = pendingBackupImportUri,
+            onChooseImport = onOpenBackupImport,
+            onImportUriHandled = onBackupImportHandled,
+            pendingExportUri = pendingBackupExportUri,
+            onCreateExport = onCreateBackupExport,
+            takeExportPassword = takeBackupExportPassword,
+            onExportUriHandled = onBackupExportHandled,
             onImported = { importedArchive ->
                 val previousTasks = (tasks + deletedTasks).toList()
                 applyArchive(importedArchive)
@@ -1930,72 +1982,71 @@ private fun SettingsScreen(
 private fun BackupScreen(
     store: EncryptedTaskStore,
     onBack: () -> Unit,
+    pendingImportUri: Uri?,
+    onChooseImport: () -> Unit,
+    onImportUriHandled: () -> Unit,
+    pendingExportUri: Uri?,
+    onCreateExport: (String, CharArray) -> Unit,
+    takeExportPassword: () -> CharArray?,
+    onExportUriHandled: () -> Unit,
     onImported: (TaskArchive) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var exportPassword by remember { mutableStateOf("") }
     var exportConfirmation by remember { mutableStateOf("") }
-    var pendingExportPassword by remember { mutableStateOf<String?>(null) }
     var importedBytes by remember { mutableStateOf<ByteArray?>(null) }
     var importPassword by remember { mutableStateOf("") }
     var importConfirmOpen by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
 
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri ->
-        val password = pendingExportPassword
-        pendingExportPassword = null
-        if (uri == null || password == null) return@rememberLauncherForActivityResult
+    LaunchedEffect(pendingImportUri) {
+        val uri = pendingImportUri ?: return@LaunchedEffect
+        onImportUriHandled()
         working = true
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val passwordChars = password.toCharArray()
-                    val encrypted = try {
-                        store.exportPasswordProtectedBackup(passwordChars)
-                    } finally {
-                        passwordChars.fill('\u0000')
-                    }
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use(::readBackupBytes)
+                    ?: error("Non è stato possibile leggere il file scelto.")
+            }
+        }
+        working = false
+        result.onSuccess {
+            importedBytes = it
+            importPassword = ""
+            message = "File selezionato. Inserisci la password del backup per controllarlo e ripristinarlo."
+        }.onFailure {
+            importedBytes = null
+            message = "Il file non può essere letto: scegli un backup di Task Organizer integro."
+        }
+    }
+    LaunchedEffect(pendingExportUri) {
+        val uri = pendingExportUri ?: return@LaunchedEffect
+        val password = takeExportPassword()
+        onExportUriHandled()
+        if (password == null) return@LaunchedEffect
+        working = true
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                try {
+                    val encrypted = store.exportPasswordProtectedBackup(password)
                     context.contentResolver.openOutputStream(uri)?.use { output ->
                         output.write(encrypted)
                         output.flush()
                     } ?: error("Non è stato possibile creare il file scelto.")
+                } finally {
+                    password.fill('\u0000')
                 }
-            }
-            working = false
-            result.onSuccess {
-                exportPassword = ""
-                exportConfirmation = ""
-                message = "Backup creato. Conservalo in un luogo sicuro: senza la password non potrà essere recuperato."
-            }.onFailure {
-                message = "Non è stato possibile creare il backup. Controlla lo spazio disponibile e riprova."
             }
         }
-    }
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        working = true
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openInputStream(uri)?.use(::readBackupBytes)
-                        ?: error("Non è stato possibile leggere il file scelto.")
-                }
-            }
-            working = false
-            result.onSuccess {
-                importedBytes = it
-                importPassword = ""
-                message = "File selezionato. Inserisci la password del backup per controllarlo e ripristinarlo."
-            }.onFailure {
-                importedBytes = null
-                message = "Il file non può essere letto: scegli un backup di Task Organizer integro."
-            }
+        working = false
+        result.onSuccess {
+            exportPassword = ""
+            exportConfirmation = ""
+            message = "Backup creato. Conservalo in un luogo sicuro: senza la password non potrà essere recuperato."
+        }.onFailure {
+            message = "Non è stato possibile creare il backup. Controlla lo spazio disponibile e riprova."
         }
     }
 
@@ -2035,8 +2086,7 @@ private fun BackupScreen(
                         exportPassword.length < 8 -> message = "Scegli una password di almeno 8 caratteri."
                         exportPassword != exportConfirmation -> message = "Le due password non coincidono."
                         else -> {
-                            pendingExportPassword = exportPassword
-                            exportLauncher.launch("task-organizer-backup-${LocalDate.now()}.tob")
+                            onCreateExport("task-organizer-backup-${LocalDate.now()}.tob", exportPassword.toCharArray())
                         }
                     }
                 },
@@ -2050,7 +2100,7 @@ private fun BackupScreen(
             Text("RIPRISTINA UNA COPIA", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text("Il ripristino sostituisce tutte le attività e le liste presenti su questo telefono.", color = SoftText, fontSize = 13.sp)
             OutlinedButton(
-                onClick = { importLauncher.launch(arrayOf("application/octet-stream", "application/*")) },
+                onClick = onChooseImport,
                 enabled = !working,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(16.dp)
@@ -2797,6 +2847,13 @@ private fun TaskOrganizerPreview() {
             onDeleteAccount = { it(false) },
             notificationPermissionAllowed = true,
             onRequestNotificationPermission = {},
+            pendingBackupImportUri = null,
+            onOpenBackupImport = {},
+            onBackupImportHandled = {},
+            pendingBackupExportUri = null,
+            onCreateBackupExport = { _, password -> password.fill('\u0000') },
+            takeBackupExportPassword = { null },
+            onBackupExportHandled = {},
             onSecurityChanged = {}
         )
     }
