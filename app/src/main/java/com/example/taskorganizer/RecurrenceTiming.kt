@@ -23,7 +23,7 @@ internal object RecurrenceTiming {
         }
         val anchorDate = when {
             !recurrenceEnabled -> null
-            completesRecurrence -> previous.recurrenceAnchorDate ?: previous.date
+            completesRecurrence -> requestedTask.recurrenceAnchorDate ?: requestedTask.date
             else -> requestedTask.recurrenceAnchorDate
         }
         val updatedTask = requestedTask.copy(seriesId = seriesId, recurrenceAnchorDate = anchorDate)

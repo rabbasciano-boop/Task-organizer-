@@ -549,7 +549,7 @@ private fun TaskOrganizerApp(
 
     fun navigateToTab(tab: Int) {
         if (tab != selectedTab) {
-            tabHistory = tabHistory + selectedTab
+            tabHistory = if (tabHistory.lastOrNull() == tab) tabHistory.dropLast(1) else tabHistory + selectedTab
             selectedTab = tab
         }
     }
@@ -2250,6 +2250,28 @@ private fun TaskEditorScreen(
     var cardColor by remember(task?.id) { mutableStateOf(task?.cardColor ?: DefaultCardColor) }
     var recurrence by remember(task?.id) { mutableStateOf(task?.recurrence ?: "none") }
     var error by remember(task?.id) { mutableStateOf("") }
+    var discardDialogOpen by remember(task?.id) { mutableStateOf(false) }
+    val initialDate = remember(task?.id) { task?.date?.let(::formatItalianDate) ?: LocalDate.now().format(ItalianDateFormatter) }
+    val hasUnsavedChanges = title != task?.title.orEmpty() ||
+        date != initialDate ||
+        time != task?.time.orEmpty() ||
+        endTime != task?.endTime.orEmpty() ||
+        category != (task?.category ?: "Personale") ||
+        categoryIcon != (task?.categoryIcon ?: customCategoryIcons[task?.category]) ||
+        priority != (task?.priority ?: "Media") ||
+        note != task?.note.orEmpty() ||
+        examStatus != (task?.examStatus ?: "Da prenotare") ||
+        reminderEnabled != (task?.reminderEnabled ?: true) ||
+        reminderMinutesBefore != (task?.reminderMinutesBefore ?: 15) ||
+        reminderRepeatMinutes != (task?.reminderRepeatMinutes ?: 0) ||
+        alarmEnabled != (task?.alarmEnabled ?: false) ||
+        cardColor != (task?.cardColor ?: DefaultCardColor) ||
+        recurrence != (task?.recurrence ?: "none")
+
+    fun requestClose() {
+        if (hasUnsavedChanges) discardDialogOpen = true else onCancel()
+    }
+    BackHandler(onBack = ::requestClose)
 
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
     PageColumn(safeBottom = true) {
@@ -2351,13 +2373,16 @@ private fun TaskEditorScreen(
                     else -> ""
                 }
                 if (error.isBlank()) {
+                    val recurrenceScheduleChanged = task != null &&
+                        (task.date != parsedDate.toString() || task.recurrence != recurrence)
                     onSave(
                         OrganizerTask(
                             id = task?.id ?: java.util.UUID.randomUUID().toString(), title = title.trim(), date = parsedDate.toString(),
                             time = normalizedTime, endTime = normalizedEndTime, category = category, categoryIcon = categoryIcon, priority = priority, note = note.trim(),
                             completed = task?.completed ?: false, reminderEnabled = reminderEnabled && normalizedTime != null, reminderMinutesBefore = reminderMinutesBefore, reminderRepeatMinutes = reminderRepeatMinutes, alarmEnabled = alarmEnabled && reminderEnabled && normalizedTime != null, cardColor = cardColor, examStatus = if (category == "Esami") examStatus else null,
                             createdAt = task?.createdAt ?: System.currentTimeMillis(), deletedAt = task?.deletedAt ?: 0L, recurrence = recurrence,
-                            seriesId = task?.seriesId, recurrenceAnchorDate = task?.recurrenceAnchorDate
+                            seriesId = if (recurrence == "none") null else task?.seriesId,
+                            recurrenceAnchorDate = if (recurrence == "none" || recurrenceScheduleChanged) null else task?.recurrenceAnchorDate
                         )
                     )
                 }
@@ -2365,8 +2390,23 @@ private fun TaskEditorScreen(
             modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
         ) { Text("Salva attività", fontWeight = FontWeight.Bold) }
-        TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Annulla", color = SoftText) }
+        TextButton(onClick = ::requestClose, modifier = Modifier.fillMaxWidth()) { Text("Annulla", color = SoftText) }
     }
+    }
+    if (discardDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { discardDialogOpen = false },
+            containerColor = CardBlue,
+            title = { Text("Scartare le modifiche?", color = MainText) },
+            text = { Text("Le modifiche non salvate a questa attività andranno perse.", color = SoftText) },
+            confirmButton = {
+                TextButton(onClick = {
+                    discardDialogOpen = false
+                    onCancel()
+                }) { Text("Scarta", color = Danger) }
+            },
+            dismissButton = { TextButton(onClick = { discardDialogOpen = false }) { Text("Continua a modificare", color = Gold) } }
+        )
     }
 }
 

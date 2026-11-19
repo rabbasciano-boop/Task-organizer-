@@ -57,9 +57,20 @@ Commit principali: `1fdc7e1`, `9eb3ac2`, `e9b4081`.
 
 Commit principali: `c9a9c85`, `92ccc79`.
 
+## Revisione 5 — rifiniture di ricorrenze e navigazione
+
+| Area verificata | Stato attuale | Interventi principali |
+|---|---|---|
+| Data modificata in una serie ricorrente | Risolto | Modificando data o tipo di ricorrenza, il nuovo giorno diventa il riferimento per le occorrenze successive. |
+| Cronologia del tasto Indietro | Risolto | Tornare alla scheda appena visitata rimuove il passaggio duplicato invece di aggiungerne uno nuovo. |
+| Modifiche non salvate | Risolto | Indietro e Annulla chiedono conferma prima di scartare una modifica nell'editor. |
+| Biometria e FragmentActivity | Verificato | La libreria biometrica porta già la dipendenza necessaria; la configurazione viene mantenuta senza nuove dipendenze ridondanti. |
+
+Il relativo commit è registrato nella cronologia GitHub insieme alle altre revisioni.
+
 ## Verifiche manuali ancora consigliate
 
-1. Ricorrenza giornaliera, settimanale e mensile, anche completata dal widget.
+1. Ricorrenza giornaliera, settimanale e mensile, anche completata dal widget e dopo una modifica della data.
 2. Creazione e ripristino di un backup su un emulatore o un secondo dispositivo senza dati importanti.
 3. Widget con titoli nascosti, cambio di data e riavvio del telefono.
 4. Notifiche consentite, negate e riattivate dalle impostazioni Android.

@@ -66,4 +66,24 @@ class RecurrenceTimingTest {
         val march = RecurrenceTiming.toggleTask(afterSecondCompletion, february.id, LocalDate.of(2027, 2, 28))
         assertTrue(march.tasks.any { it.date == "2027-03-31" })
     }
+
+    @Test
+    fun editedMonthlyDateBecomesTheNewAnchor() {
+        val previous = OrganizerTask(
+            id = "edited-monthly",
+            title = "Bolletta",
+            date = "2027-01-31",
+            recurrence = "monthly",
+            seriesId = "series",
+            recurrenceAnchorDate = "2027-01-31"
+        )
+        val editedAndCompleted = previous.copy(date = "2027-01-15", completed = true, recurrenceAnchorDate = null)
+        val updated = RecurrenceTiming.updateTask(
+            TaskArchive(tasks = listOf(previous)),
+            editedAndCompleted,
+            LocalDate.of(2027, 1, 15)
+        )
+
+        assertTrue(updated.tasks.any { it.date == "2027-02-15" })
+    }
 }
