@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">Task Organizer</string>
+    <string name="nav_today">Oggi</string>
+    <string name="nav_activities">Attività</string>
+    <string name="nav_calendar">Calendario</string>
+    <string name="nav_account">Account</string>
+    <string name="nav_options">Opzioni</string>
+    <string name="open_calendar">Apri calendario</string>
+    <string name="previous_month">Mese precedente</string>
+    <string name="next_month">Mese successivo</string>
+    <string name="complete_task">Segna %1$s come completata</string>
+    <string name="reopen_task">Segna %1$s come da fare</string>
 </resources>

@@ -122,6 +122,23 @@ Restano volutamente aperti lo spostamento delle stringhe in `strings.xml`, la di
 3. Attiva “Segui il tema del telefono”, cambia il tema Android e verifica che app, barra di stato e widget si aggiornino.
 4. Imposta filtri o una data nel Calendario, ruota il telefono e verifica che la selezione resti identica.
 
+## Manutenzione front-end — struttura, navigazione e accessibilità
+
+| Area | Intervento |
+|---|---|
+| Navigazione | Le cinque sezioni principali sono descritte da `OrganizerScreen`, una gerarchia chiusa che riunisce nome e icona di ogni destinazione. |
+| Componenti condivisi | Barra di navigazione, schede informative, stati vuoti, filtri e formattazione sono stati estratti in file dedicati. |
+| Risorse | Aggiunte le stringhe della navigazione e delle azioni accessibili più importanti, oltre alle icone vettoriali per le frecce del Calendario. |
+| Test Compose | Aggiunto un test strumentale della barra di navigazione: verifica che il tocco su Calendario selezioni la relativa destinazione. |
+
+### Prova TalkBack sul telefono
+
+1. Apri Impostazioni Android → Accessibilità → TalkBack e attivalo.
+2. Entra in Task Organizer e scorri le cinque sezioni della barra in basso: devono essere annunciate con il loro nome.
+3. Apri Calendario: le frecce devono essere annunciate come “Mese precedente” e “Mese successivo”.
+4. Apri Attività, una Lista e il Calendario: la spunta deve annunciare se completa o riapre l'attività prima di eseguire l'azione.
+5. Disattiva TalkBack al termine con la scorciatoia configurata sul telefono.
+
 ## Verifiche manuali ancora consigliate
 
 1. Ricorrenza giornaliera, settimanale e mensile, anche completata dal widget e dopo una modifica della data.

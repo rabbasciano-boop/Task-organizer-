@@ -65,9 +65,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -103,6 +100,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -599,7 +597,7 @@ private fun TaskOrganizerApp(
     val customCategoryIcons = remember(archiveLoadResult) { mutableStateMapOf<String, String>().also { it.putAll(archive.customCategoryIcons) } }
     val deletedTasks = remember(archiveLoadResult) { mutableStateListOf<OrganizerTask>().also { it.addAll(archive.deletedTasks) } }
     val listItems = remember(archiveLoadResult) { mutableStateListOf<OrganizerListItem>().also { it.addAll(archive.listItems) } }
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var selectedScreenIndex by rememberSaveable { mutableIntStateOf(0) }
     var tabHistory by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     var editorTaskId by rememberSaveable { mutableStateOf<String?>(null) }
     val editorTask = editorTaskId?.let { id -> tasks.firstOrNull { it.id == id } }
@@ -608,12 +606,12 @@ private fun TaskOrganizerApp(
     var backupOpen by rememberSaveable { mutableStateOf(false) }
     var privacyInfoOpen by rememberSaveable { mutableStateOf(false) }
     var storageError by remember { mutableStateOf<String?>(null) }
-    val tabs = listOf("Oggi", "Attività", "Calendario", "Account", "Opzioni")
+    val selectedScreen = OrganizerScreen.all[selectedScreenIndex.coerceIn(0, OrganizerScreen.all.lastIndex)]
 
     fun navigateToTab(tab: Int) {
-        if (tab != selectedTab) {
-            tabHistory = if (tabHistory.lastOrNull() == tab) tabHistory.dropLast(1) else tabHistory + selectedTab
-            selectedTab = tab
+        if (tab != selectedScreenIndex) {
+            tabHistory = if (tabHistory.lastOrNull() == tab) tabHistory.dropLast(1) else tabHistory + selectedScreenIndex
+            selectedScreenIndex = tab
         }
     }
 
@@ -781,7 +779,7 @@ private fun TaskOrganizerApp(
             backupOpen -> backupOpen = false
             privacyInfoOpen -> privacyInfoOpen = false
             tabHistory.isNotEmpty() -> {
-                selectedTab = tabHistory.last()
+                selectedScreenIndex = tabHistory.last()
                 tabHistory = tabHistory.dropLast(1)
             }
         }
@@ -867,23 +865,14 @@ private fun TaskOrganizerApp(
         modifier = Modifier.fillMaxSize(),
         containerColor = NightBlue,
         bottomBar = {
-            NavigationBar(containerColor = CardBlue, contentColor = SoftText) {
-                tabs.forEachIndexed { index, label ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { navigateToTab(index) },
-                        icon = { NavMark(index, selectedTab == index) },
-                        label = { Text(label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Gold,
-                            selectedTextColor = Gold,
-                            indicatorColor = CardBlueLight,
-                            unselectedIconColor = SoftText,
-                            unselectedTextColor = SoftText
-                        )
-                    )
-                }
-            }
+            OrganizerNavigationBar(
+                selected = selectedScreen,
+                onSelected = { navigateToTab(OrganizerScreen.all.indexOf(it)) },
+                barColor = CardBlue,
+                mutedColor = SoftText,
+                selectedColor = Gold,
+                indicatorColor = CardBlueLight
+            )
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().organizerBackground().padding(padding)) {
@@ -895,8 +884,8 @@ private fun TaskOrganizerApp(
                 editorTaskId = it.id
                 editorOpen = true
             }
-            when (selectedTab) {
-                0 -> TodayScreen(
+            when (selectedScreen) {
+                OrganizerScreen.Today -> TodayScreen(
                     tasks = tasks,
                     nickname = nickname,
                     signedInAccount = signedInAccount,
@@ -907,9 +896,9 @@ private fun TaskOrganizerApp(
                     onManageAccount = { navigateToTab(3) },
                     onOpenPrivacy = { privacyInfoOpen = true }
                 )
-                1 -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::changeTask, openEditTask, ::deleteTask, ::restoreTask, ::permanentlyDeleteTask)
-                2 -> CalendarScreen(tasks, openNewTask, ::changeTask, openEditTask)
-                3 -> AccountScreen(
+                OrganizerScreen.Activities -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::changeTask, openEditTask, ::deleteTask, ::restoreTask, ::permanentlyDeleteTask)
+                OrganizerScreen.Calendar -> CalendarScreen(tasks, openNewTask, ::changeTask, openEditTask)
+                OrganizerScreen.Account -> AccountScreen(
                     nickname = nickname,
                     onNicknameChanged = { newNickname ->
                         nickname = newNickname.ifBlank { "Utente" }
@@ -938,7 +927,7 @@ private fun TaskOrganizerApp(
                     },
                     onOpenBackup = { backupOpen = true }
                 )
-                else -> SettingsScreen(
+                OrganizerScreen.Options -> SettingsScreen(
                     selectedTheme = selectedTheme,
                     followSystemTheme = followSystemTheme,
                     onThemeChanged = onThemeChanged,
@@ -951,18 +940,6 @@ private fun TaskOrganizerApp(
             }
         }
     }
-}
-
-@Composable
-private fun NavMark(index: Int, selected: Boolean) {
-    val icons = listOf(R.drawable.ic_nav_today, R.drawable.ic_nav_activities, R.drawable.ic_nav_calendar, R.drawable.ic_nav_account, R.drawable.ic_nav_settings)
-    val descriptions = listOf("Oggi", "Attività", "Calendario", "Account", "Opzioni")
-    Icon(
-        painter = painterResource(icons[index]),
-        contentDescription = descriptions[index],
-        tint = if (selected) Gold else SoftText,
-        modifier = Modifier.size(22.dp)
-    )
 }
 
 @Composable
@@ -1286,9 +1263,10 @@ private fun ListsScreen(
                 visibleItems.forEach { item ->
                     Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(18.dp)) {
                         Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val toggleDescription = stringResource(if (item.completed) R.string.reopen_task else R.string.complete_task, item.title)
                             Box(
                                 modifier = Modifier.size(48.dp).clickable { onChange(item.copy(completed = !item.completed)) }.semantics {
-                                    contentDescription = if (item.completed) "Segna ${item.title} come da fare" else "Segna ${item.title} come completata"
+                                    contentDescription = toggleDescription
                                     role = Role.Button
                                 },
                                 contentAlignment = Alignment.Center
@@ -1502,31 +1480,6 @@ private fun TrashDialog(
 }
 
 @Composable
-private fun FilterChoice(label: String, value: String, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = CardBlueLight),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(label, color = SoftText, fontSize = 12.sp)
-                Text(value, color = MainText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Text("●", color = Gold, fontSize = 14.sp)
-        }
-    }
-}
-
-@Composable
-private fun Stat(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, color = Gold, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Text(label, color = SoftText, fontSize = 12.sp)
-    }
-}
-
-@Composable
 private fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(18.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1603,6 +1556,8 @@ private fun CalendarScreen(
             tasks.filter { it.date == selectedDate.toString() }.sortedBy { it.time ?: "99:99" }
         }
     }
+    val previousMonthDescription = stringResource(R.string.previous_month)
+    val nextMonthDescription = stringResource(R.string.next_month)
 
     LazyPageColumn {
         item { Text("Calendario", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
@@ -1610,16 +1565,16 @@ private fun CalendarScreen(
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(
                     onClick = { displayedMonthValue = displayedMonth.minusMonths(1).toString() },
-                    modifier = Modifier.size(48.dp).semantics { contentDescription = "Mese precedente" }
-                ) { Text("‹", color = Gold, fontSize = 28.sp) }
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = previousMonthDescription }
+                ) { Icon(painterResource(R.drawable.ic_arrow_left), contentDescription = null, tint = Gold) }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(displayedMonth.format(monthFormatter).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = Gold, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                     TextButton(onClick = { displayedMonthValue = YearMonth.now().toString(); selectedDateValue = LocalDate.now().toString() }) { Text("Oggi", color = SoftText, fontSize = 12.sp) }
                 }
                 TextButton(
                     onClick = { displayedMonthValue = displayedMonth.plusMonths(1).toString() },
-                    modifier = Modifier.size(48.dp).semantics { contentDescription = "Mese successivo" }
-                ) { Text("›", color = Gold, fontSize = 28.sp) }
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = nextMonthDescription }
+                ) { Icon(painterResource(R.drawable.ic_arrow_right), contentDescription = null, tint = Gold) }
             }
         }
         item {
@@ -2357,30 +2312,6 @@ private fun formatLockDelay(milliseconds: Long): String {
     return if (seconds < 60) "$seconds secondi" else "${(seconds + 59) / 60} minuti"
 }
 
-@Composable
-private fun InfoCard(title: String, body: String, status: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
-            Text(title, color = MainText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp)); Text(body, color = SoftText, fontSize = 14.sp)
-            Spacer(Modifier.height(12.dp)); Text(status, color = Gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
-private fun EmptyState(title: String, subtitle: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(20.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("✦", color = Gold, fontSize = 28.sp)
-            Spacer(Modifier.height(9.dp))
-            Text(title, color = MainText, fontSize = 17.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(7.dp))
-            Text(subtitle, color = SoftText, fontSize = 14.sp, textAlign = TextAlign.Center)
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TaskEditorScreen(
@@ -2843,56 +2774,6 @@ private fun editorFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedPlaceholderColor = SoftText,
     unfocusedPlaceholderColor = SoftText
 )
-
-private val ItalianDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-uuuu", Locale.ITALY)
-private val ItalianSlashDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/uuuu", Locale.ITALY)
-
-private fun parseItalianDate(value: String): LocalDate? = sequenceOf(ItalianDateFormatter, ItalianSlashDateFormatter)
-    .mapNotNull { formatter -> runCatching { LocalDate.parse(value.trim(), formatter) }.getOrNull() }
-    .firstOrNull()
-
-private fun formatItalianDate(isoDate: String): String = runCatching {
-    LocalDate.parse(isoDate).format(ItalianDateFormatter)
-}.getOrDefault(isoDate)
-
-private fun formatMonthKey(monthKey: String): String = runCatching {
-    YearMonth.parse(monthKey).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALY))
-}.getOrDefault(monthKey)
-
-private fun formatTimeRange(task: OrganizerTask): String? = task.time?.let { start ->
-    task.endTime?.let { end -> "$start – $end" } ?: start
-}
-
-private fun parseAmountCents(value: String): Long? {
-    val entered = value.trim().replace("€", "").trim().replace(',', '.')
-    if (entered.isBlank()) return null
-    if (!entered.matches(Regex("\\d+(\\.\\d{1,2})?"))) return null
-    val parts = entered.split('.')
-    val euros = parts[0].toLongOrNull() ?: return null
-    val cents = parts.getOrNull(1)?.padEnd(2, '0')?.toLongOrNull() ?: 0L
-    return euros * 100 + cents
-}
-
-private fun formatCurrency(cents: Long): String = NumberFormat.getCurrencyInstance(Locale.ITALY).format(cents / 100.0)
-
-private fun normalizeTime(value: String): String? {
-    val enteredTime = value.trim()
-    if (enteredTime.isBlank()) return null
-    val completeTime = if (enteredTime.matches(Regex("\\d{1,2}"))) "$enteredTime:00" else enteredTime
-    return runCatching {
-        LocalTime.parse(completeTime, DateTimeFormatter.ofPattern("H:mm")).format(DateTimeFormatter.ofPattern("HH:mm"))
-    }.getOrNull()
-}
-
-private fun greetingFor(nickname: String): String {
-    val hour = LocalTime.now().hour
-    val greeting = when {
-        hour in 5..13 -> "Buongiorno"
-        hour in 14..19 -> "Buon pomeriggio"
-        else -> "Buonasera"
-    }
-    return "$greeting, ${nickname.ifBlank { "Utente" }}"
-}
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2F)
 @Composable
