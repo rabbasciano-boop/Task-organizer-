@@ -90,9 +90,11 @@ class EncryptedTaskStore(context: Context) {
         return try {
             val recoveryFile = File(
                 dataFile.parentFile,
-                "task-organizer-unreadable-${System.currentTimeMillis()}.enc"
+                "$RECOVERY_PREFIX${System.currentTimeMillis()}.enc"
             )
             dataFile.copyTo(recoveryFile)
+            // Keep one recovery copy only: it is a last-resort safeguard, not a permanent archive.
+            recoveryFiles().filter { it != recoveryFile }.forEach(File::delete)
             atomicFile.delete()
             true
         } catch (_: Exception) {
@@ -142,8 +144,15 @@ class EncryptedTaskStore(context: Context) {
 
     /** Called only after an explicit confirmed deletion from the account screen. */
     fun clear() {
-        synchronized(archiveLock) { atomicFile.delete() }
+        synchronized(archiveLock) {
+            atomicFile.delete()
+            recoveryFiles().forEach(File::delete)
+        }
     }
+
+    private fun recoveryFiles(): List<File> = appContext.filesDir.listFiles()
+        ?.filter { it.isFile && it.name.startsWith(RECOVERY_PREFIX) && it.name.endsWith(".enc") }
+        .orEmpty()
 
     private fun encode(
         tasks: List<OrganizerTask>,
@@ -286,6 +295,7 @@ class EncryptedTaskStore(context: Context) {
 
     private companion object {
         const val KEY_ALIAS = "task_organizer_local_key"
+        const val RECOVERY_PREFIX = "task-organizer-unreadable-"
         val archiveLock = Any()
     }
 }
