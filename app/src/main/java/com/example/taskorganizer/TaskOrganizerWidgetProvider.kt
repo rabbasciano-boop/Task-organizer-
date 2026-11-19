@@ -3,6 +3,7 @@ package com.example.taskorganizer
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -95,6 +96,20 @@ class TaskOrganizerOverviewWidgetProvider : TaskOrganizerWidgetProvider() {
 
 class TaskOrganizerAgendaWidgetProvider : TaskOrganizerWidgetProvider() {
     override val form = WidgetForm.LARGE
+}
+
+/** Refreshes date-sensitive widget content even when the main app has not been opened. */
+class WidgetRefreshReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val pendingResult = goAsync()
+        Thread {
+            try {
+                TaskWidgetUpdater.updateAll(context.applicationContext)
+            } finally {
+                pendingResult.finish()
+            }
+        }.start()
+    }
 }
 
 object TaskWidgetUpdater {
