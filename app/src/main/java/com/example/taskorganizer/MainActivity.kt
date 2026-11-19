@@ -1997,7 +1997,6 @@ private fun BackupScreen(
     var exportConfirmation by remember { mutableStateOf("") }
     var importedBytes by remember { mutableStateOf<ByteArray?>(null) }
     var importPassword by remember { mutableStateOf("") }
-    var importConfirmOpen by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
 
@@ -2103,19 +2102,29 @@ private fun BackupScreen(
 
             HorizontalDivider(color = CardBlueLight)
             Text("RIPRISTINA UNA COPIA", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text("Il ripristino sostituisce tutte le attività e le liste presenti su questo telefono.", color = SoftText, fontSize = 13.sp)
+            Text("Scegli un file .tob. Se hai il PIN attivo, al rientro dall'archivio Android dovrai sbloccare l'app.", color = SoftText, fontSize = 13.sp)
             OutlinedButton(
                 onClick = onChooseImport,
                 enabled = !working,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(16.dp)
-            ) { Text("Scegli un file di backup", color = Gold, fontWeight = FontWeight.Bold) }
+            ) { Text("Scegli il backup da ripristinare", color = Gold, fontWeight = FontWeight.Bold) }
             if (importedBytes != null) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CardBlueLight),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Backup selezionato", color = MainText, fontWeight = FontWeight.Bold)
+                        Text("Inserisci la password scelta al momento della creazione. Le attività, liste e categorie attuali verranno sostituite.", color = SoftText, fontSize = 13.sp)
+                    }
+                }
                 OutlinedTextField(
                     value = importPassword,
                     onValueChange = { importPassword = it },
-                    label = { Text("Password del backup scelto") },
-                    placeholder = { Text("Almeno 8 caratteri") },
+                    label = { Text("Password del backup") },
+                    placeholder = { Text("La password scelta durante la creazione") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -2124,56 +2133,43 @@ private fun BackupScreen(
                 )
                 Button(
                     onClick = {
-                        if (importPassword.length < 8) message = "Inserisci la password usata per creare il backup."
-                        else importConfirmOpen = true
+                        val data = importedBytes
+                        if (importPassword.length < 8 || data == null) {
+                            message = "Inserisci la password usata per creare il backup."
+                        } else {
+                            working = true
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val passwordChars = importPassword.toCharArray()
+                                        try {
+                                            store.importPasswordProtectedBackup(data, passwordChars)
+                                        } finally {
+                                            passwordChars.fill('\u0000')
+                                        }
+                                    }
+                                }
+                                working = false
+                                result.onSuccess { archive ->
+                                    importPassword = ""
+                                    importedBytes = null
+                                    onImported(archive)
+                                    message = "Backup ripristinato. Promemoria e widget sono stati aggiornati."
+                                }.onFailure {
+                                    message = "Password errata oppure backup non valido. I dati attuali non sono stati modificati."
+                                }
+                            }
+                        }
                     },
                     enabled = !working,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = CardBlueLight, contentColor = MainText)
-                ) { Text("Ripristina backup", fontWeight = FontWeight.Bold) }
+                    colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)
+                ) { Text("Ripristina e sostituisci i dati", fontWeight = FontWeight.Bold) }
             }
             if (working) CircularProgressIndicator(color = Gold, modifier = Modifier.align(Alignment.CenterHorizontally))
             message?.let { Text(it, color = SoftText, fontSize = 13.sp) }
         }
-    }
-    if (importConfirmOpen) {
-        AlertDialog(
-            onDismissRequest = { importConfirmOpen = false },
-            containerColor = CardBlue,
-            title = { Text("Ripristinare il backup?", color = MainText) },
-            text = { Text("Le attività, le liste e le categorie attuali su questo telefono verranno sostituite. Prima crea un backup, se vuoi conservarle.", color = SoftText) },
-            confirmButton = {
-                TextButton(onClick = {
-                    val data = importedBytes ?: return@TextButton
-                    val password = importPassword
-                    importConfirmOpen = false
-                    working = true
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) {
-                            runCatching {
-                                val passwordChars = password.toCharArray()
-                                try {
-                                    store.importPasswordProtectedBackup(data, passwordChars)
-                                } finally {
-                                    passwordChars.fill('\u0000')
-                                }
-                            }
-                        }
-                        working = false
-                        result.onSuccess { archive ->
-                            importPassword = ""
-                            importedBytes = null
-                            onImported(archive)
-                            message = "Backup ripristinato. Promemoria e widget sono stati aggiornati."
-                        }.onFailure {
-                            message = "Password errata oppure backup non valido. I dati attuali non sono stati modificati."
-                        }
-                    }
-                }) { Text("Sostituisci dati", color = Danger) }
-            },
-            dismissButton = { TextButton(onClick = { importConfirmOpen = false }) { Text("Annulla", color = SoftText) } }
-        )
     }
 }
 
