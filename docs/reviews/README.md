@@ -103,6 +103,25 @@ Restano volutamente aperti lo spostamento delle stringhe in `strings.xml`, la di
 4. Con un PIN attivo, ruotare il telefono nell'editor: nessuna nuova richiesta PIN e bozza presente.
 5. Attivare “Segui il tema del telefono” e cambiare tema Android.
 
+## Revisione front-end 3 — sessione PIN e continuità dell'interfaccia
+
+| Area verificata | Stato attuale | Interventi principali |
+|---|---|---|
+| PIN dopo background e cambio configurazione | Risolto | Quando l'app passa in background con PIN attivo, la sessione viene bloccata direttamente nel ViewModel. Una semplice rotazione mentre l'app è visibile non richiede invece un nuovo PIN. |
+| Inizializzazione della sessione | Risolto | Il ViewModel riceve lo stato del PIN tramite una factory: non vengono più modificati stati dell'interfaccia durante il disegno della schermata. |
+| Widget e tema di sistema | Risolto | Con “Segui il tema del telefono”, widget e app scelgono insieme Originale Dark o Carta Dorata e vengono aggiornati al cambio configurazione. |
+| Filtri e calendario dopo rotazione | Risolto | Filtri, finestre delle attività, mese e giorno selezionati vengono conservati durante una ricreazione dell'interfaccia. |
+| Calcoli delle liste | Risolto | Attività e Calendario usano stato derivato, evitando copie della lista a ogni ridisegno. |
+| Flash all'avvio | Migliorato | La finestra iniziale usa una risorsa chiara/scura e viene immediatamente allineata al tema salvato dall'activity. |
+| Test sessione e ID duplicati | Risolto | Aggiunti test automatici per blocco/sblocco della sessione e normalizzazione degli archivi con ID duplicati. |
+
+### Prove manuali consigliate
+
+1. Con PIN: sblocca, premi Home, cambia tema o ruota il telefono e rientra. Deve chiedere di nuovo il PIN.
+2. Con PIN: ruota il telefono senza uscire dall'app. Non deve chiedere il PIN e la bozza aperta deve restare.
+3. Attiva “Segui il tema del telefono”, cambia il tema Android e verifica che app, barra di stato e widget si aggiornino.
+4. Imposta filtri o una data nel Calendario, ruota il telefono e verifica che la selezione resti identica.
+
 ## Verifiche manuali ancora consigliate
 
 1. Ricorrenza giornaliera, settimanale e mensile, anche completata dal widget e dopo una modifica della data.

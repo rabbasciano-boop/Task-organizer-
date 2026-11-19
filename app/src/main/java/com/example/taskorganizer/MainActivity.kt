@@ -4,6 +4,7 @@ import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
+import android.graphics.drawable.ColorDrawable
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
@@ -82,6 +83,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -193,9 +195,11 @@ private fun auroraBackgroundBrush(): Brush? = when (OrganizerPalette.currentThem
 private fun Modifier.organizerBackground(): Modifier = auroraBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
 
 class MainActivity : FragmentActivity() {
-    private var shouldLockOnResume by mutableStateOf(false)
     private var widgetQuickAdd by mutableStateOf(false)
     private var notificationPermissionAllowed by mutableStateOf(true)
+    private val uiSession by lazy(LazyThreadSafetyMode.NONE) {
+        ViewModelProvider(this, UiSessionViewModelFactory(AppSecurity(this).hasPin()))[UiSessionViewModel::class.java]
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -205,15 +209,16 @@ class MainActivity : FragmentActivity() {
             initialSettings.getString("theme_mode", null),
             initialSettings.getBoolean("dark_theme", true)
         )
-        updateSystemBars(if (initialSettings.getBoolean("follow_system_theme", false)) systemTheme() else initialTheme)
+        val initialEffectiveTheme = if (initialSettings.getBoolean("follow_system_theme", false)) systemTheme() else initialTheme
+        updateSystemBars(initialEffectiveTheme)
+        window.setBackgroundDrawable(ColorDrawable(initialBackgroundColor(initialEffectiveTheme)))
         updateSecureWindow()
         TaskReminderScheduler.ensureNotificationChannels(this)
         notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
         setContent {
             val preferences = remember { getSharedPreferences("task_organizer_settings", MODE_PRIVATE) }
             val security = remember { AppSecurity(this) }
-            val session = remember { ViewModelProvider(this@MainActivity)[UiSessionViewModel::class.java] }
-            session.initialize(security.hasPin())
+            val session = uiSession
             val accountManager = remember { FirebaseAccountManager(this@MainActivity) }
             var signedInAccount by remember { mutableStateOf(accountManager.currentAccount()) }
             var accountWorking by remember { mutableStateOf(false) }
@@ -236,12 +241,6 @@ class MainActivity : FragmentActivity() {
                 if (!session.showOpening) return@LaunchedEffect
                 delay(450)
                 session.showOpening = false
-            }
-            LaunchedEffect(shouldLockOnResume) {
-                if (shouldLockOnResume && security.hasPin()) {
-                    session.lock()
-                    shouldLockOnResume = false
-                }
             }
             TaskOrganizerTheme(effectiveTheme) {
                 if (session.showOpening) {
@@ -268,6 +267,7 @@ class MainActivity : FragmentActivity() {
                         onFollowSystemThemeChanged = { enabled ->
                             followSystemTheme = enabled
                             preferences.edit().putBoolean("follow_system_theme", enabled).apply()
+                            Thread { TaskWidgetUpdater.updateAll(this@MainActivity) }.start()
                         },
                         security = security,
                         biometricAvailable = canUseBiometrics(),
@@ -335,9 +335,16 @@ class MainActivity : FragmentActivity() {
         resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
     ) OrganizerTheme.ORIGINAL_DARK else OrganizerTheme.CARTA_DORATA
 
+    private fun initialBackgroundColor(theme: OrganizerTheme): Int = when (theme) {
+        OrganizerTheme.ORIGINAL_DARK -> AndroidColor.rgb(13, 27, 47)
+        OrganizerTheme.CARTA_DORATA -> AndroidColor.rgb(246, 240, 229)
+        OrganizerTheme.AURORA_MIDNIGHT -> AndroidColor.rgb(7, 10, 24)
+        OrganizerTheme.AURORA_NORDIC -> AndroidColor.rgb(238, 246, 248)
+    }
+
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations && AppSecurity(this).hasPin()) shouldLockOnResume = true
+        if (!isChangingConfigurations && AppSecurity(this).hasPin()) uiSession.lock()
     }
 
     override fun onResume() {
@@ -1313,21 +1320,22 @@ private fun ActivitiesScreen(
     onRestore: (OrganizerTask) -> Unit,
     onPermanentlyDelete: (OrganizerTask) -> Unit
 ) {
-    var selectedMonth by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("") }
-    var selectedStatus by remember { mutableStateOf("all") }
-    var filterOpen by remember { mutableStateOf<String?>(null) }
-    var taskToDelete by remember { mutableStateOf<OrganizerTask?>(null) }
-    var trashOpen by remember { mutableStateOf(false) }
+    var selectedMonth by rememberSaveable { mutableStateOf("") }
+    var selectedCategory by rememberSaveable { mutableStateOf("") }
+    var selectedStatus by rememberSaveable { mutableStateOf("all") }
+    var filterOpen by rememberSaveable { mutableStateOf<String?>(null) }
+    var taskToDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
+    val taskToDelete = taskToDeleteId?.let { id -> tasks.firstOrNull { it.id == id } }
+    var trashOpen by rememberSaveable { mutableStateOf(false) }
     val monthOptions = listOf("" to "Tutti i mesi") + tasks.map { it.date.take(7) }.distinct().sorted().map { it to formatMonthKey(it) }
     val categoryOptions = listOf("" to "Tutte le categorie") + tasks.map { it.category to it.categoryIcon }
         .distinctBy { it.first }
         .sortedBy { it.first }
         .map { (category, icon) -> category to categoryDisplay(category, icon) }
     val statusOptions = listOf("all" to "Tutte", "todo" to "Da fare", "done" to "Completate")
-    val taskSnapshot = tasks.toList()
-    val sortedTasks = remember(taskSnapshot, selectedMonth, selectedCategory, selectedStatus) {
-        taskSnapshot.filter { task ->
+    val sortedTasks by remember {
+        derivedStateOf {
+            tasks.filter { task ->
             (selectedMonth.isBlank() || task.date.startsWith(selectedMonth)) &&
                 (selectedCategory.isBlank() || task.category == selectedCategory) &&
                 when (selectedStatus) {
@@ -1335,7 +1343,8 @@ private fun ActivitiesScreen(
                     "done" -> task.completed
                     else -> true
                 }
-        }.sortedWith(compareBy<OrganizerTask> { it.completed }.thenBy { it.date }.thenBy { it.time ?: "99:99" })
+            }.sortedWith(compareBy<OrganizerTask> { it.completed }.thenBy { it.date }.thenBy { it.time ?: "99:99" })
+        }
     }
     val completed = tasks.count { it.completed }
 
@@ -1378,7 +1387,7 @@ private fun ActivitiesScreen(
             item { EmptyState("Nessuna attività trovata", "Prova a cambiare i filtri oppure aggiungi una nuova attività.") }
         } else {
             items(sortedTasks, key = { it.id }) { task ->
-                TaskCard(task, onToggle = { onChange(task.copy(completed = !task.completed)) }, onEdit = { onEdit(task) }, onDelete = { taskToDelete = task })
+                TaskCard(task, onToggle = { onChange(task.copy(completed = !task.completed)) }, onEdit = { onEdit(task) }, onDelete = { taskToDeleteId = task.id })
             }
         }
         item {
@@ -1421,17 +1430,17 @@ private fun ActivitiesScreen(
     }
     taskToDelete?.let { task ->
         AlertDialog(
-            onDismissRequest = { taskToDelete = null },
+            onDismissRequest = { taskToDeleteId = null },
             containerColor = CardBlue,
             title = { Text("Eliminare attività?", color = MainText) },
             text = { Text("Vuoi spostare “${task.title}” nel Cestino? Potrai ripristinarla in seguito.", color = SoftText) },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(task)
-                    taskToDelete = null
+                    taskToDeleteId = null
                 }) { Text("Elimina", color = Danger) }
             },
-            dismissButton = { TextButton(onClick = { taskToDelete = null }) { Text("Annulla", color = SoftText) } }
+            dismissButton = { TextButton(onClick = { taskToDeleteId = null }) { Text("Annulla", color = SoftText) } }
         )
     }
     if (trashOpen) {
@@ -1581,15 +1590,18 @@ private fun CalendarScreen(
     onChange: (OrganizerTask) -> Unit,
     onEdit: (OrganizerTask) -> Unit
 ) {
-    var displayedMonth by remember { mutableStateOf(YearMonth.now()) }
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var displayedMonthValue by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
+    var selectedDateValue by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    val displayedMonth = YearMonth.parse(displayedMonthValue)
+    val selectedDate = LocalDate.parse(selectedDateValue)
     val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALY) }
     val firstDayOffset = displayedMonth.atDay(1).dayOfWeek.value - 1
     val daysInMonth = displayedMonth.lengthOfMonth()
     val gridCells = (0 until 42).toList()
-    val taskSnapshot = tasks.toList()
-    val selectedTasks = remember(taskSnapshot, selectedDate) {
-        taskSnapshot.filter { it.date == selectedDate.toString() }.sortedBy { it.time ?: "99:99" }
+    val selectedTasks by remember {
+        derivedStateOf {
+            tasks.filter { it.date == selectedDate.toString() }.sortedBy { it.time ?: "99:99" }
+        }
     }
 
     LazyPageColumn {
@@ -1597,15 +1609,15 @@ private fun CalendarScreen(
         item {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(
-                    onClick = { displayedMonth = displayedMonth.minusMonths(1) },
+                    onClick = { displayedMonthValue = displayedMonth.minusMonths(1).toString() },
                     modifier = Modifier.size(48.dp).semantics { contentDescription = "Mese precedente" }
                 ) { Text("‹", color = Gold, fontSize = 28.sp) }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(displayedMonth.format(monthFormatter).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = Gold, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                    TextButton(onClick = { displayedMonth = YearMonth.now(); selectedDate = LocalDate.now() }) { Text("Oggi", color = SoftText, fontSize = 12.sp) }
+                    TextButton(onClick = { displayedMonthValue = YearMonth.now().toString(); selectedDateValue = LocalDate.now().toString() }) { Text("Oggi", color = SoftText, fontSize = 12.sp) }
                 }
                 TextButton(
-                    onClick = { displayedMonth = displayedMonth.plusMonths(1) },
+                    onClick = { displayedMonthValue = displayedMonth.plusMonths(1).toString() },
                     modifier = Modifier.size(48.dp).semantics { contentDescription = "Mese successivo" }
                 ) { Text("›", color = Gold, fontSize = 28.sp) }
             }
@@ -1625,7 +1637,7 @@ private fun CalendarScreen(
                                 val date = if (dayNumber in 1..daysInMonth) displayedMonth.atDay(dayNumber) else null
                                 val hasTasks = date != null && tasks.any { it.date == date.toString() }
                                 val isSelected = date == selectedDate
-                                CalendarDayCell(date, hasTasks, isSelected) { clickedDate -> selectedDate = clickedDate }
+                                CalendarDayCell(date, hasTasks, isSelected) { clickedDate -> selectedDateValue = clickedDate.toString() }
                             }
                         }
                     }

@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -341,7 +342,16 @@ object TaskWidgetUpdater {
     }
 
     private fun palette(context: Context): WidgetPalette {
-        val mode = context.getSharedPreferences(SETTINGS_PREFERENCES, Context.MODE_PRIVATE).getString("theme_mode", "original_dark")
+        val preferences = context.getSharedPreferences(SETTINGS_PREFERENCES, Context.MODE_PRIVATE)
+        val mode = if (preferences.getBoolean("follow_system_theme", false)) {
+            if (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES) {
+                "original_dark"
+            } else {
+                "carta_dorata"
+            }
+        } else {
+            preferences.getString("theme_mode", "original_dark")
+        }
         return when (mode) {
             "carta_dorata" -> WidgetPalette(Color.rgb(246, 240, 229), Color.rgb(255, 253, 248), Color.rgb(164, 117, 40), Color.rgb(20, 36, 59), Color.rgb(95, 104, 114), Color.rgb(45, 140, 105))
             "aurora_midnight" -> WidgetPalette(Color.rgb(23, 30, 58), Color.rgb(31, 41, 77), Color.rgb(56, 189, 248), Color.rgb(248, 250, 252), Color.rgb(203, 213, 225), Color.rgb(52, 211, 153))

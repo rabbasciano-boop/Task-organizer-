@@ -4,7 +4,7 @@
     <style name="Theme.TaskOrganizer" parent="android:Theme.Material.Light.NoActionBar" />
 
     <style name="Theme.TaskOrganizer.Starting" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">#0D1D32</item>
+        <item name="android:windowBackground">#F6F0E5</item>
         <item name="android:windowNoTitle">true</item>
     </style>
 </resources>

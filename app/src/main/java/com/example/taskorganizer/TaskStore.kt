@@ -60,6 +60,23 @@ data class TaskArchive(
     val listItems: List<OrganizerListItem> = emptyList()
 )
 
+/** Keeps the newest item for each id so a malformed imported archive cannot break lazy lists. */
+internal fun normalizeArchiveIds(archive: TaskArchive): TaskArchive {
+    fun newestTasks(items: List<OrganizerTask>): List<OrganizerTask> = items
+        .groupBy { it.id }
+        .values
+        .map { duplicates -> duplicates.maxWithOrNull(compareBy<OrganizerTask> { it.createdAt }.thenBy { it.deletedAt })!! }
+
+    val activeTasks = newestTasks(archive.tasks)
+    val deletedTasks = newestTasks(archive.deletedTasks)
+        .filterNot { deleted -> activeTasks.any { active -> active.id == deleted.id } }
+    val listItems = archive.listItems
+        .groupBy { it.id }
+        .values
+        .map { duplicates -> duplicates.maxByOrNull { it.createdAt }!! }
+    return archive.copy(tasks = activeTasks, deletedTasks = deletedTasks, listItems = listItems)
+}
+
 /** The UI must distinguish a new empty archive from an existing archive that cannot be read. */
 sealed interface TaskArchiveLoadResult {
     data class Loaded(val archive: TaskArchive) : TaskArchiveLoadResult
@@ -290,15 +307,8 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                 recurrenceAnchorDate = item.optString("recurrenceAnchorDate").ifBlank { null }
             )
         }
-        fun keepNewestTasks(items: List<OrganizerTask>): List<OrganizerTask> = items
-            .groupBy { it.id }
-            .values
-            .map { duplicates -> duplicates.maxWithOrNull(compareBy<OrganizerTask> { it.createdAt }.thenBy { it.deletedAt })!! }
-
-        val tasks = keepNewestTasks(tasksFrom(archive.getJSONArray("tasks")))
-        val deletedTasks = keepNewestTasks(
-            archive.optJSONArray("deletedTasks")?.let { tasksFrom(it, deleted = true) }.orEmpty()
-        ).filterNot { deleted -> tasks.any { active -> active.id == deleted.id } }
+        val tasks = tasksFrom(archive.getJSONArray("tasks"))
+        val deletedTasks = archive.optJSONArray("deletedTasks")?.let { tasksFrom(it, deleted = true) }.orEmpty()
         val listItems = archive.optJSONArray("listItems")?.let { entries ->
             List(entries.length()) { index ->
                 val item = entries.getJSONObject(index)
@@ -311,7 +321,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                     createdAt = item.optLong("createdAt", System.currentTimeMillis())
                 )
             }
-        }.orEmpty().groupBy { it.id }.values.map { duplicates -> duplicates.maxByOrNull { it.createdAt }!! }
+        }.orEmpty()
         val customCategories = archive.optJSONArray("customCategories")?.let { categories ->
             List(categories.length()) { index -> categories.optString(index) }.filter { it.isNotBlank() }
         }.orEmpty()
@@ -324,7 +334,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                 }
             }
         }.orEmpty()
-        return TaskArchive(tasks, customCategories, customCategoryIcons, deletedTasks, listItems)
+        return normalizeArchiveIds(TaskArchive(tasks, customCategories, customCategoryIcons, deletedTasks, listItems))
     }
 
     private fun taskJson(task: OrganizerTask): JSONObject = JSONObject()

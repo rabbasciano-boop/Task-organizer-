@@ -103,3 +103,33 @@ class DatePickerConversionsTest {
         assertEquals(0L, Math.floorMod(date.toPickerMillis(), 24L * 60L * 60L * 1000L))
     }
 }
+
+class UiSessionViewModelTest {
+    @Test
+    fun startsUnlockedOnlyWhenThereIsNoPinAndCanBeLockedAgain() {
+        val withPin = UiSessionViewModel(hasPin = true)
+        val withoutPin = UiSessionViewModel(hasPin = false)
+
+        assertTrue(!withPin.isUnlocked)
+        assertTrue(withoutPin.isUnlocked)
+
+        withPin.unlock()
+        assertTrue(withPin.isUnlocked)
+        withPin.lock()
+        assertTrue(!withPin.isUnlocked)
+    }
+}
+
+class ArchiveIdNormalizationTest {
+    @Test
+    fun keepsNewestActiveTaskAndRemovesTheSameIdFromTrash() {
+        val older = OrganizerTask(id = "same", title = "Vecchia", date = "2026-11-20", createdAt = 1)
+        val newer = OrganizerTask(id = "same", title = "Nuova", date = "2026-11-21", createdAt = 2)
+        val trashCopy = newer.copy(deletedAt = 3)
+
+        val normalized = normalizeArchiveIds(TaskArchive(tasks = listOf(older, newer), deletedTasks = listOf(trashCopy)))
+
+        assertEquals(listOf("Nuova"), normalized.tasks.map { it.title })
+        assertTrue(normalized.deletedTasks.isEmpty())
+    }
+}
