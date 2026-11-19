@@ -27,6 +27,8 @@ object OrganizerPalette {
     var muted = Color(0xFFAEB9C9)
     var text = Color(0xFFF4F6FA)
     var accentSecondary = Color(0xFFD7B46A)
+    var success = Color(0xFF42B883)
+    var danger = Color(0xFFE48C8C)
     var aurora = false
 
     fun apply(theme: OrganizerTheme) {
@@ -35,19 +37,19 @@ object OrganizerPalette {
         when (theme) {
             OrganizerTheme.ORIGINAL_DARK -> {
                 background = Color(0xFF0D1B2F); card = Color(0xFF14243B); cardLight = Color(0xFF1B2E48)
-                accent = Color(0xFFD7B46A); accentSecondary = Color(0xFFD7B46A); muted = Color(0xFFAEB9C9); text = Color(0xFFF4F6FA)
+                accent = Color(0xFFD7B46A); accentSecondary = Color(0xFFD7B46A); muted = Color(0xFFAEB9C9); text = Color(0xFFF4F6FA); success = Color(0xFF42B883); danger = Color(0xFFE48C8C)
             }
             OrganizerTheme.CARTA_DORATA -> {
                 background = Color(0xFFF6F0E5); card = Color(0xFFFFFDF8); cardLight = Color(0xFFF0E4D0)
-                accent = Color(0xFFA47528); accentSecondary = Color(0xFFA47528); muted = Color(0xFF5F6872); text = Color(0xFF14243B)
+                accent = Color(0xFF805C1D); accentSecondary = Color(0xFF805C1D); muted = Color(0xFF4C5864); text = Color(0xFF14243B); success = Color(0xFF1E7F57); danger = Color(0xFFB3261E)
             }
             OrganizerTheme.AURORA_MIDNIGHT -> {
                 background = Color(0xFF070A18); card = Color(0xE6171830); cardLight = Color(0xB3161E3A)
-                accent = Color(0xFF38BDF8); accentSecondary = Color(0xFFA855F7); muted = Color(0xFFCBD5E1); text = Color(0xFFF8FAFC)
+                accent = Color(0xFF38BDF8); accentSecondary = Color(0xFFA855F7); muted = Color(0xFFCBD5E1); text = Color(0xFFF8FAFC); success = Color(0xFF4ADE80); danger = Color(0xFFFCA5A5)
             }
             OrganizerTheme.AURORA_NORDIC -> {
                 background = Color(0xFFEEF6F8); card = Color(0xE6FFFFFF); cardLight = Color(0xCCFFFFFF)
-                accent = Color(0xFF0D9488); accentSecondary = Color(0xFF6366F1); muted = Color(0xFF334155); text = Color(0xFF0F172A)
+                accent = Color(0xFF08766D); accentSecondary = Color(0xFF4F46E5); muted = Color(0xFF334155); text = Color(0xFF0F172A); success = Color(0xFF176B4D); danger = Color(0xFFB42318)
             }
         }
     }

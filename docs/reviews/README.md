@@ -1,6 +1,6 @@
 # Cronologia delle revisioni tecniche
 
-Questo documento conserva lo storico delle quattro revisioni del progetto Task Organizer. Le revisioni originali erano analisi statiche: lo stato qui sotto viene aggiornato confrontandole con il codice effettivamente compilato e con i commit del repository.
+Questo documento conserva lo storico delle revisioni del progetto Task Organizer. Le revisioni originali erano analisi statiche: lo stato qui sotto viene aggiornato confrontandole con il codice effettivamente compilato e con i commit del repository.
 
 ## Revisione 1 — base di sicurezza, archivio e promemoria
 
@@ -67,6 +67,20 @@ Commit principali: `c9a9c85`, `92ccc79`.
 | Biometria e FragmentActivity | Verificato | La libreria biometrica porta già la dipendenza necessaria; la configurazione viene mantenuta senza nuove dipendenze ridondanti. |
 
 Il relativo commit è registrato nella cronologia GitHub insieme alle altre revisioni.
+
+## Revisione front-end — usabilità, contrasto e stabilità visiva
+
+| Area verificata | Stato attuale | Interventi principali |
+|---|---|---|
+| Bozza mentre si modifica un'attività | Risolto | I campi dell'editor e la schermata aperta resistono alla ricreazione dell'interfaccia, ad esempio dopo una rotazione. |
+| Pulsanti di completamento | Risolto | Area toccabile portata a 48 dp nelle card delle attività e nelle liste. |
+| Contrasto nei temi chiari | Risolto | Accenti, conferme e azioni distruttive usano colori più scuri e leggibili in Carta Dorata e Aurora Nordic. |
+| Barra di stato del telefono | Risolto | Icone chiare o scure in base al tema scelto, anche dopo il cambio tema. |
+| Selezione data | Risolto | Il campo conserva l'inserimento manuale italiano e offre un calendario nativo. |
+| Elenchi con molte attività | Risolto | Attività e Calendario usano liste a caricamento progressivo con chiavi stabili. |
+| Schermi larghi | Risolto | Le pagine restano centrate e non superano una larghezza comoda su tablet e finestre grandi. |
+
+Restano volutamente aperti lo spostamento delle stringhe in `strings.xml`, la divisione di `MainActivity.kt` e una verifica TalkBack completa: sono lavori di manutenzione più ampi e non modificano la sicurezza o il comportamento attuale.
 
 ## Verifiche manuali ancora consigliate
 

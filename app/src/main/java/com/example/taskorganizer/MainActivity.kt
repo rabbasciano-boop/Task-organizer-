@@ -3,6 +3,7 @@ package com.example.taskorganizer
 import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color as AndroidColor
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -12,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
@@ -36,6 +38,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -47,6 +53,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,6 +74,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +86,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -103,9 +113,11 @@ import com.example.taskorganizer.ui.theme.TaskOrganizerTheme
 import com.example.taskorganizer.ui.theme.OrganizerPalette
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import java.time.LocalDate
+import java.time.Instant
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.DayOfWeek
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.text.NumberFormat
 import java.net.URL
@@ -126,8 +138,8 @@ private val Gold get() = OrganizerPalette.accent
 private val SoftText get() = OrganizerPalette.muted
 private val MainText get() = OrganizerPalette.text
 private val AccentSecondary get() = OrganizerPalette.accentSecondary
-private val Success = Color(0xFF42B883)
-private val Danger = Color(0xFFE48C8C)
+private val Success get() = OrganizerPalette.success
+private val Danger get() = OrganizerPalette.danger
 private const val DefaultCardColor = "default"
 private val TaskCardColorOptions = listOf(
     DefaultCardColor to "Predefinito",
@@ -181,7 +193,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         widgetQuickAdd = intent.getBooleanExtra(EXTRA_OPEN_NEW_TASK, false)
-        enableEdgeToEdge()
+        updateSystemBars(OrganizerTheme.ORIGINAL_DARK)
         updateSecureWindow()
         TaskReminderScheduler.ensureNotificationChannels(this)
         notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
@@ -200,6 +212,7 @@ class MainActivity : FragmentActivity() {
                     )
                 )
             }
+            LaunchedEffect(selectedTheme) { updateSystemBars(selectedTheme) }
             var isUnlocked by remember { mutableStateOf(!security.hasPin()) }
             var privacyAcknowledged by remember { mutableStateOf(preferences.getBoolean("privacy_acknowledged", false)) }
             var showOpening by remember { mutableStateOf(true) }
@@ -280,6 +293,15 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    private fun updateSystemBars(theme: OrganizerTheme) {
+        val style = if (theme.isDark) {
+            SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+        }
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     }
 
     override fun onStop() {
@@ -537,13 +559,14 @@ private fun TaskOrganizerApp(
     val customCategoryIcons = remember(archiveLoadResult) { mutableStateMapOf<String, String>().also { it.putAll(archive.customCategoryIcons) } }
     val deletedTasks = remember(archiveLoadResult) { mutableStateListOf<OrganizerTask>().also { it.addAll(archive.deletedTasks) } }
     val listItems = remember(archiveLoadResult) { mutableStateListOf<OrganizerListItem>().also { it.addAll(archive.listItems) } }
-    var selectedTab by remember { mutableIntStateOf(0) }
-    var tabHistory by remember { mutableStateOf(emptyList<Int>()) }
-    var editorTask by remember { mutableStateOf<OrganizerTask?>(null) }
-    var editorOpen by remember { mutableStateOf(false) }
-    var listsOpen by remember { mutableStateOf(false) }
-    var backupOpen by remember { mutableStateOf(false) }
-    var privacyInfoOpen by remember { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var tabHistory by rememberSaveable { mutableStateOf(emptyList<Int>()) }
+    var editorTaskId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editorTask = editorTaskId?.let { id -> tasks.firstOrNull { it.id == id } }
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    var listsOpen by rememberSaveable { mutableStateOf(false) }
+    var backupOpen by rememberSaveable { mutableStateOf(false) }
+    var privacyInfoOpen by rememberSaveable { mutableStateOf(false) }
     var storageError by remember { mutableStateOf<String?>(null) }
     val tabs = listOf("Oggi", "Attività", "Calendario", "Account", "Opzioni")
 
@@ -605,7 +628,7 @@ private fun TaskOrganizerApp(
 
     LaunchedEffect(openNewFromWidget) {
         if (openNewFromWidget) {
-            editorTask = null
+            editorTaskId = null
             editorOpen = true
             onWidgetQuickAddHandled()
         }
@@ -619,6 +642,7 @@ private fun TaskOrganizerApp(
             refreshWidgets(savedArchive)
             TaskReminderScheduler.schedule(context, task)
             editorOpen = false
+            editorTaskId = null
             navigateToTab(1)
         }
     }
@@ -711,7 +735,7 @@ private fun TaskOrganizerApp(
         when {
             editorOpen -> {
                 editorOpen = false
-                editorTask = null
+                editorTaskId = null
             }
             listsOpen -> listsOpen = false
             backupOpen -> backupOpen = false
@@ -766,7 +790,10 @@ private fun TaskOrganizerApp(
                     )
                 })
             },
-            onCancel = { editorOpen = false },
+            onCancel = {
+                editorOpen = false
+                editorTaskId = null
+            },
             onSave = ::saveTask,
             notificationPermissionAllowed = notificationPermissionAllowed,
             onRequestNotificationPermission = onRequestNotificationPermission
@@ -821,11 +848,11 @@ private fun TaskOrganizerApp(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().organizerBackground().padding(padding)) {
             val openNewTask = {
-                editorTask = null
+                editorTaskId = null
                 editorOpen = true
             }
             val openEditTask: (OrganizerTask) -> Unit = {
-                editorTask = it
+                editorTaskId = it.id
                 editorOpen = true
             }
             when (selectedTab) {
@@ -891,14 +918,30 @@ private fun NavMark(index: Int, selected: Boolean) {
 
 @Composable
 private fun PageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize()
-            .then(if (safeTop) Modifier.statusBarsPadding() else Modifier)
-            .then(if (safeBottom) Modifier.navigationBarsPadding() else Modifier)
-            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        content = content
-    )
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 600.dp)
+                .then(if (safeTop) Modifier.statusBarsPadding() else Modifier)
+                .then(if (safeBottom) Modifier.navigationBarsPadding() else Modifier)
+                .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun LazyPageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, content: LazyListScope.() -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 600.dp)
+                .then(if (safeTop) Modifier.statusBarsPadding() else Modifier)
+                .then(if (safeBottom) Modifier.navigationBarsPadding() else Modifier),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            content = content
+        )
+    }
 }
 
 @Composable
@@ -1194,8 +1237,13 @@ private fun ListsScreen(
                 visibleItems.forEach { item ->
                     Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(18.dp)) {
                         Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (item.completed) "✓" else "○", color = if (item.completed) Success else Gold, fontSize = 24.sp, modifier = Modifier.clickable { onChange(item.copy(completed = !item.completed)) })
-                            Spacer(Modifier.size(12.dp))
+                            Box(
+                                modifier = Modifier.size(48.dp).clickable { onChange(item.copy(completed = !item.completed)) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(if (item.completed) "✓" else "○", color = if (item.completed) Success else Gold, fontSize = 24.sp)
+                            }
+                            Spacer(Modifier.size(4.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(item.title, color = if (item.completed) SoftText else MainText, fontWeight = FontWeight.Bold)
                                 item.amountCents?.let { Text(formatCurrency(it), color = Gold, fontSize = 13.sp) }
@@ -1244,40 +1292,52 @@ private fun ActivitiesScreen(
     val sortedTasks = filteredTasks.sortedWith(compareBy<OrganizerTask> { it.completed }.thenBy { it.date }.thenBy { it.time ?: "99:99" })
     val completed = tasks.count { it.completed }
 
-    PageColumn {
-        Text("Attività", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Tutto quello che devi fare, in un unico posto.", color = SoftText)
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(24.dp)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.SpaceAround) {
-                Stat("${tasks.size}", "totali")
-                Stat("$completed", "completate")
-                Stat("${tasks.size - completed}", "da fare")
+    LazyPageColumn {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Attività", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("Tutto quello che devi fare, in un unico posto.", color = SoftText)
             }
         }
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Filtra attività", color = MainText, fontWeight = FontWeight.Bold)
-                Text("Tocca una voce per scegliere", color = SoftText, fontSize = 12.sp)
-                FilterChoice("Mese", monthOptions.firstOrNull { it.first == selectedMonth }?.second ?: "Tutti i mesi") { filterOpen = "month" }
-                FilterChoice("Categoria", categoryOptions.firstOrNull { it.first == selectedCategory }?.second ?: "Tutte le categorie") { filterOpen = "category" }
-                FilterChoice("Stato", statusOptions.firstOrNull { it.first == selectedStatus }?.second ?: "Tutte") { filterOpen = "status" }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(24.dp)) {
+                Row(modifier = Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.SpaceAround) {
+                    Stat("${tasks.size}", "totali")
+                    Stat("$completed", "completate")
+                    Stat("${tasks.size - completed}", "da fare")
+                }
             }
         }
-        Text("${sortedTasks.size} attività mostrate", color = SoftText, fontSize = 13.sp)
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Filtra attività", color = MainText, fontWeight = FontWeight.Bold)
+                    Text("Tocca una voce per scegliere", color = SoftText, fontSize = 12.sp)
+                    FilterChoice("Mese", monthOptions.firstOrNull { it.first == selectedMonth }?.second ?: "Tutti i mesi") { filterOpen = "month" }
+                    FilterChoice("Categoria", categoryOptions.firstOrNull { it.first == selectedCategory }?.second ?: "Tutte le categorie") { filterOpen = "category" }
+                    FilterChoice("Stato", statusOptions.firstOrNull { it.first == selectedStatus }?.second ?: "Tutte") { filterOpen = "status" }
+                }
+            }
+        }
+        item { Text("${sortedTasks.size} attività mostrate", color = SoftText, fontSize = 13.sp) }
         if (deletedTasks.isNotEmpty()) {
-            OutlinedButton(onClick = { trashOpen = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-                Text("Cestino (${deletedTasks.size})", color = Gold, fontWeight = FontWeight.SemiBold)
+            item {
+                OutlinedButton(onClick = { trashOpen = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                    Text("Cestino (${deletedTasks.size})", color = Gold, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
         if (sortedTasks.isEmpty()) {
-            EmptyState("Nessuna attività trovata", "Prova a cambiare i filtri oppure aggiungi una nuova attività.")
+            item { EmptyState("Nessuna attività trovata", "Prova a cambiare i filtri oppure aggiungi una nuova attività.") }
         } else {
-            sortedTasks.forEach { task ->
+            items(sortedTasks, key = { it.id }) { task ->
                 TaskCard(task, onToggle = { onChange(task.copy(completed = !task.completed)) }, onEdit = { onEdit(task) }, onDelete = { taskToDelete = task })
             }
         }
-        OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
-            Text("+ Nuova attività", color = Gold, fontWeight = FontWeight.Bold)
+        item {
+            OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
+                Text("+ Nuova attività", color = Gold, fontWeight = FontWeight.Bold)
+            }
         }
     }
     filterOpen?.let { filter ->
@@ -1414,16 +1474,16 @@ private fun Stat(value: String, label: String) {
 private fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(18.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (task.completed) "✓" else "○",
-                color = if (task.completed) Success else Gold,
-                fontSize = 24.sp,
-                modifier = Modifier.clickable(onClick = onToggle).semantics {
+            Box(
+                modifier = Modifier.size(48.dp).clickable(onClick = onToggle).semantics {
                     contentDescription = if (task.completed) "Segna ${task.title} come da fare" else "Segna ${task.title} come completata"
                     role = Role.Button
-                }
-            )
-            Spacer(Modifier.size(12.dp))
+                },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(if (task.completed) "✓" else "○", color = if (task.completed) Success else Gold, fontSize = 24.sp)
+            }
+            Spacer(Modifier.size(4.dp))
             Column(modifier = Modifier.weight(1f).clickable(onClick = onEdit)) {
                 Text(task.title, color = if (task.completed) SoftText else MainText, fontWeight = FontWeight.Bold)
                 Text(listOfNotNull(formatTimeRange(task), categoryDisplay(task.category, task.categoryIcon)).joinToString(" · "), color = SoftText, fontSize = 13.sp)
@@ -1439,16 +1499,16 @@ private fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Un
     Card(colors = CardDefaults.cardColors(containerColor = taskCardBackground(task.cardColor)), shape = RoundedCornerShape(20.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (task.completed) "✓" else "○",
-                    color = if (task.completed) Success else Gold,
-                    fontSize = 25.sp,
-                    modifier = Modifier.clickable(onClick = onToggle).semantics {
+                Box(
+                    modifier = Modifier.size(48.dp).clickable(onClick = onToggle).semantics {
                         contentDescription = if (task.completed) "Segna ${task.title} come da fare" else "Segna ${task.title} come completata"
                         role = Role.Button
-                    }
-                )
-                Spacer(Modifier.size(10.dp))
+                    },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(if (task.completed) "✓" else "○", color = if (task.completed) Success else Gold, fontSize = 25.sp)
+                }
+                Spacer(Modifier.size(2.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(task.title, color = if (task.completed) mutedColor else titleColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Text("${formatItalianDate(task.date)}${formatTimeRange(task)?.let { " · $it" } ?: ""}", color = mutedColor, fontSize = 13.sp)
@@ -1477,44 +1537,50 @@ private fun CalendarScreen(tasks: List<OrganizerTask>, onAdd: () -> Unit, onEdit
     val gridCells = (0 until 42).toList()
     val selectedTasks = tasks.filter { it.date == selectedDate.toString() }.sortedBy { it.time ?: "99:99" }
 
-    PageColumn {
-        Text("Calendario", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = { displayedMonth = displayedMonth.minusMonths(1) }) { Text("‹", color = Gold, fontSize = 28.sp) }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(displayedMonth.format(monthFormatter).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = Gold, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                TextButton(onClick = { displayedMonth = YearMonth.now(); selectedDate = LocalDate.now() }) { Text("Oggi", color = SoftText, fontSize = 12.sp) }
-            }
-            TextButton(onClick = { displayedMonth = displayedMonth.plusMonths(1) }) { Text("›", color = Gold, fontSize = 28.sp) }
-        }
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    listOf("L", "M", "M", "G", "V", "S", "D").forEach { day ->
-                        Text(day, modifier = Modifier.weight(1f), color = Gold, fontSize = 12.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
-                    }
+    LazyPageColumn {
+        item { Text("Calendario", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(onClick = { displayedMonth = displayedMonth.minusMonths(1) }, modifier = Modifier.size(48.dp)) { Text("‹", color = Gold, fontSize = 28.sp) }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(displayedMonth.format(monthFormatter).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = Gold, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { displayedMonth = YearMonth.now(); selectedDate = LocalDate.now() }) { Text("Oggi", color = SoftText, fontSize = 12.sp) }
                 }
-                gridCells.chunked(7).forEach { week ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        week.forEach { cell ->
-                            val dayNumber = cell - firstDayOffset + 1
-                            val date = if (dayNumber in 1..daysInMonth) displayedMonth.atDay(dayNumber) else null
-                            val hasTasks = date != null && tasks.any { it.date == date.toString() }
-                            val isSelected = date == selectedDate
-                            CalendarDayCell(date, hasTasks, isSelected) { clickedDate -> selectedDate = clickedDate }
+                TextButton(onClick = { displayedMonth = displayedMonth.plusMonths(1) }, modifier = Modifier.size(48.dp)) { Text("›", color = Gold, fontSize = 28.sp) }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        listOf("L", "M", "M", "G", "V", "S", "D").forEach { day ->
+                            Text(day, modifier = Modifier.weight(1f), color = Gold, fontSize = 12.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    gridCells.chunked(7).forEach { week ->
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            week.forEach { cell ->
+                                val dayNumber = cell - firstDayOffset + 1
+                                val date = if (dayNumber in 1..daysInMonth) displayedMonth.atDay(dayNumber) else null
+                                val hasTasks = date != null && tasks.any { it.date == date.toString() }
+                                val isSelected = date == selectedDate
+                                CalendarDayCell(date, hasTasks, isSelected) { clickedDate -> selectedDate = clickedDate }
+                            }
                         }
                     }
                 }
             }
         }
-        Text("${formatItalianDate(selectedDate.toString())}", color = MainText, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        item { Text("${formatItalianDate(selectedDate.toString())}", color = MainText, fontSize = 19.sp, fontWeight = FontWeight.Bold) }
         if (selectedTasks.isEmpty()) {
-            EmptyState("Nessun impegno", "Non hai attività previste per questo giorno.")
+            item { EmptyState("Nessun impegno", "Non hai attività previste per questo giorno.") }
         } else {
-            selectedTasks.forEach { task -> CompactTaskCard(task, onToggle = {}, onEdit = { onEdit(task) }) }
+            items(selectedTasks, key = { it.id }) { task -> CompactTaskCard(task, onToggle = {}, onEdit = { onEdit(task) }) }
         }
-        OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
-            Text("+ Nuova attività", color = Gold, fontWeight = FontWeight.Bold)
+        item {
+            OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
+                Text("+ Nuova attività", color = Gold, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -2221,6 +2287,7 @@ private fun EmptyState(title: String, subtitle: String) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TaskEditorScreen(
     task: OrganizerTask?,
@@ -2234,23 +2301,24 @@ private fun TaskEditorScreen(
     onRequestNotificationPermission: () -> Unit
 ) {
     val context = LocalContext.current
-    var title by remember(task?.id) { mutableStateOf(task?.title.orEmpty()) }
-    var date by remember(task?.id) { mutableStateOf(task?.date?.let(::formatItalianDate) ?: LocalDate.now().format(ItalianDateFormatter)) }
-    var time by remember(task?.id) { mutableStateOf(task?.time.orEmpty()) }
-    var endTime by remember(task?.id) { mutableStateOf(task?.endTime.orEmpty()) }
-    var category by remember(task?.id) { mutableStateOf(task?.category ?: "Personale") }
-    var categoryIcon by remember(task?.id) { mutableStateOf(task?.categoryIcon ?: customCategoryIcons[task?.category]) }
-    var priority by remember(task?.id) { mutableStateOf(task?.priority ?: "Media") }
-    var note by remember(task?.id) { mutableStateOf(task?.note.orEmpty()) }
-    var examStatus by remember(task?.id) { mutableStateOf(task?.examStatus ?: "Da prenotare") }
-    var reminderEnabled by remember(task?.id) { mutableStateOf(task?.reminderEnabled ?: true) }
-    var reminderMinutesBefore by remember(task?.id) { mutableStateOf(task?.reminderMinutesBefore ?: 15) }
-    var reminderRepeatMinutes by remember(task?.id) { mutableStateOf(task?.reminderRepeatMinutes ?: 0) }
-    var alarmEnabled by remember(task?.id) { mutableStateOf(task?.alarmEnabled ?: false) }
-    var cardColor by remember(task?.id) { mutableStateOf(task?.cardColor ?: DefaultCardColor) }
-    var recurrence by remember(task?.id) { mutableStateOf(task?.recurrence ?: "none") }
-    var error by remember(task?.id) { mutableStateOf("") }
-    var discardDialogOpen by remember(task?.id) { mutableStateOf(false) }
+    var title by rememberSaveable(task?.id) { mutableStateOf(task?.title.orEmpty()) }
+    var date by rememberSaveable(task?.id) { mutableStateOf(task?.date?.let(::formatItalianDate) ?: LocalDate.now().format(ItalianDateFormatter)) }
+    var time by rememberSaveable(task?.id) { mutableStateOf(task?.time.orEmpty()) }
+    var endTime by rememberSaveable(task?.id) { mutableStateOf(task?.endTime.orEmpty()) }
+    var category by rememberSaveable(task?.id) { mutableStateOf(task?.category ?: "Personale") }
+    var categoryIcon by rememberSaveable(task?.id) { mutableStateOf(task?.categoryIcon ?: customCategoryIcons[task?.category]) }
+    var priority by rememberSaveable(task?.id) { mutableStateOf(task?.priority ?: "Media") }
+    var note by rememberSaveable(task?.id) { mutableStateOf(task?.note.orEmpty()) }
+    var examStatus by rememberSaveable(task?.id) { mutableStateOf(task?.examStatus ?: "Da prenotare") }
+    var reminderEnabled by rememberSaveable(task?.id) { mutableStateOf(task?.reminderEnabled ?: true) }
+    var reminderMinutesBefore by rememberSaveable(task?.id) { mutableStateOf(task?.reminderMinutesBefore ?: 15) }
+    var reminderRepeatMinutes by rememberSaveable(task?.id) { mutableStateOf(task?.reminderRepeatMinutes ?: 0) }
+    var alarmEnabled by rememberSaveable(task?.id) { mutableStateOf(task?.alarmEnabled ?: false) }
+    var cardColor by rememberSaveable(task?.id) { mutableStateOf(task?.cardColor ?: DefaultCardColor) }
+    var recurrence by rememberSaveable(task?.id) { mutableStateOf(task?.recurrence ?: "none") }
+    var error by rememberSaveable(task?.id) { mutableStateOf("") }
+    var discardDialogOpen by rememberSaveable(task?.id) { mutableStateOf(false) }
+    var datePickerOpen by rememberSaveable(task?.id) { mutableStateOf(false) }
     val initialDate = remember(task?.id) { task?.date?.let(::formatItalianDate) ?: LocalDate.now().format(ItalianDateFormatter) }
     val hasUnsavedChanges = title != task?.title.orEmpty() ||
         date != initialDate ||
@@ -2278,7 +2346,43 @@ private fun TaskEditorScreen(
         Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Inserisci qui la tua attività", color = SoftText)
         OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Titolo") }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = editorFieldColors())
-        OutlinedTextField(value = date, onValueChange = { date = it }, label = { Text("Data") }, placeholder = { Text("GG-MM-AAAA oppure GG/MM/AAAA") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = editorFieldColors())
+        OutlinedTextField(
+            value = date,
+            onValueChange = { date = it },
+            label = { Text("Data") },
+            placeholder = { Text("GG-MM-AAAA oppure GG/MM/AAAA") },
+            trailingIcon = { TextButton(onClick = { datePickerOpen = true }) { Text("Calendario", color = Gold) } },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = editorFieldColors()
+        )
+        if (datePickerOpen) {
+            val initialDateMillis = remember(date) {
+                parseItalianDate(date)
+                    ?.atStartOfDay(ZoneId.systemDefault())
+                    ?.toInstant()
+                    ?.toEpochMilli()
+            }
+            val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMillis)
+            DatePickerDialog(
+                onDismissRequest = { datePickerOpen = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let { selectedMillis ->
+                            date = Instant.ofEpochMilli(selectedMillis)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                                .format(ItalianDateFormatter)
+                        }
+                        datePickerOpen = false
+                    }) { Text("Conferma", color = Gold) }
+                },
+                dismissButton = { TextButton(onClick = { datePickerOpen = false }) { Text("Annulla", color = SoftText) } },
+                colors = androidx.compose.material3.DatePickerDefaults.colors(containerColor = CardBlue)
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
         TimeField(label = "Orario di inizio", value = time, onValueChange = { time = it })
         TimeField(label = "Orario di fine", value = endTime, optional = true, onValueChange = { endTime = it })
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
