@@ -70,6 +70,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -103,6 +104,7 @@ import java.net.URL
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val NightBlue get() = OrganizerPalette.background
@@ -402,7 +404,7 @@ private fun PrivacyConsentScreen(onContinueAsGuest: () -> Unit) {
 }
 
 @Composable
-private fun ArchiveRecoveryScreen(onRetry: () -> Unit, onStartFresh: () -> Boolean) {
+private fun ArchiveRecoveryScreen(onRetry: () -> Unit, onStartFresh: (onFinished: (Boolean) -> Unit) -> Unit) {
     var showConfirmation by remember { mutableStateOf(false) }
     var recoveryError by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
@@ -438,11 +440,21 @@ private fun ArchiveRecoveryScreen(onRetry: () -> Unit, onStartFresh: () -> Boole
             confirmButton = {
                 TextButton(onClick = {
                     showConfirmation = false
-                    recoveryError = !onStartFresh()
+                    onStartFresh { succeeded -> recoveryError = !succeeded }
                 }) { Text("Conserva copia e continua", color = Gold) }
             },
             dismissButton = { TextButton(onClick = { showConfirmation = false }) { Text("Annulla", color = SoftText) } }
         )
+    }
+}
+
+@Composable
+private fun ArchiveLoadingScreen() {
+    Box(modifier = Modifier.fillMaxSize().organizerBackground(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            CircularProgressIndicator(color = Gold)
+            Text("Apro il tuo archivio protetto…", color = MainText)
+        }
     }
 }
 
@@ -466,18 +478,32 @@ private fun TaskOrganizerApp(
 ) {
     val context = LocalContext.current
     val store = remember { EncryptedTaskStore(context) }
+    val appScope = rememberCoroutineScope()
     val profile = remember { context.getSharedPreferences("task_organizer_profile", android.content.Context.MODE_PRIVATE) }
     var nickname by remember { mutableStateOf(profile.getString("nickname", "Utente").orEmpty().ifBlank { "Utente" }) }
-    var archiveLoadResult by remember { mutableStateOf(store.loadSafely()) }
+    var archiveLoadResult by remember { mutableStateOf<TaskArchiveLoadResult?>(null) }
+    LaunchedEffect(store) {
+        archiveLoadResult = withContext(Dispatchers.IO) { store.loadSafely() }
+    }
+    if (archiveLoadResult == null) {
+        ArchiveLoadingScreen()
+        return
+    }
     if (archiveLoadResult is TaskArchiveLoadResult.Unreadable) {
         ArchiveRecoveryScreen(
-            onRetry = { archiveLoadResult = store.loadSafely() },
-            onStartFresh = {
-                val cleared = store.preserveUnreadableArchiveAndClear()
-                if (cleared) {
-                    archiveLoadResult = store.loadSafely()
+            onRetry = {
+                appScope.launch {
+                    archiveLoadResult = withContext(Dispatchers.IO) { store.loadSafely() }
                 }
-                cleared
+            },
+            onStartFresh = { onFinished ->
+                appScope.launch {
+                    val cleared = withContext(Dispatchers.IO) { store.preserveUnreadableArchiveAndClear() }
+                    if (cleared) {
+                        archiveLoadResult = withContext(Dispatchers.IO) { store.loadSafely() }
+                    }
+                    onFinished(cleared)
+                }
             }
         )
         return
@@ -509,19 +535,27 @@ private fun TaskOrganizerApp(
         listItems.addAll(updated.listItems)
     }
 
-    fun updateArchive(change: (TaskArchive) -> TaskArchive): TaskArchive? = runCatching {
-        store.update(change)
-    }.onFailure {
-        storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
-    }.getOrNull()
+    fun updateArchive(change: (TaskArchive) -> TaskArchive, afterSaved: (TaskArchive) -> Unit = {}) {
+        appScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { store.update(change) } }
+            result.onSuccess { savedArchive ->
+                applyArchive(savedArchive)
+                afterSaved(savedArchive)
+            }.onFailure {
+                storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
+            }
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_START) {
-                when (val latest = store.loadSafely()) {
-                    is TaskArchiveLoadResult.Loaded -> applyArchive(latest.archive)
-                    is TaskArchiveLoadResult.Unreadable -> archiveLoadResult = latest
+                appScope.launch {
+                    when (val latest = withContext(Dispatchers.IO) { store.loadSafely() }) {
+                        is TaskArchiveLoadResult.Loaded -> applyArchive(latest.archive)
+                        is TaskArchiveLoadResult.Unreadable -> archiveLoadResult = latest
+                    }
                 }
             }
         }
@@ -538,74 +572,80 @@ private fun TaskOrganizerApp(
     }
 
     fun saveTask(task: OrganizerTask) {
-        val updated = updateArchive { disk ->
+        updateArchive(change = { disk ->
             val index = disk.tasks.indexOfFirst { it.id == task.id }
             disk.copy(tasks = if (index >= 0) disk.tasks.toMutableList().also { it[index] = task } else disk.tasks + task)
-        } ?: return
-        applyArchive(updated)
-        TaskWidgetUpdater.updateAll(context)
-        TaskReminderScheduler.schedule(context, task)
-        editorOpen = false
-        selectedTab = 1
+        }) {
+            TaskWidgetUpdater.updateAll(context)
+            TaskReminderScheduler.schedule(context, task)
+            editorOpen = false
+            selectedTab = 1
+        }
     }
 
     fun changeTask(task: OrganizerTask) {
-        val updated = updateArchive { disk ->
+        updateArchive(change = { disk ->
             val index = disk.tasks.indexOfFirst { it.id == task.id }
             if (index < 0) disk else disk.copy(tasks = disk.tasks.toMutableList().also { it[index] = task })
-        } ?: return
-        applyArchive(updated)
-        val index = updated.tasks.indexOfFirst { it.id == task.id }
-        if (index >= 0) {
+        }) { updated ->
+            if (updated.tasks.any { it.id == task.id }) {
+                TaskWidgetUpdater.updateAll(context)
+                TaskReminderScheduler.schedule(context, task)
+            }
+        }
+    }
+
+    fun deleteTask(task: OrganizerTask) {
+        updateArchive(change = { disk ->
+            disk.copy(
+                tasks = disk.tasks.filterNot { it.id == task.id },
+                deletedTasks = disk.deletedTasks.filterNot { it.id == task.id } + task
+            )
+        }) {
+            TaskWidgetUpdater.updateAll(context)
+            TaskReminderScheduler.cancel(context, task)
+        }
+    }
+
+    fun restoreTask(task: OrganizerTask) {
+        updateArchive(change = { disk ->
+            disk.copy(
+                tasks = disk.tasks.filterNot { it.id == task.id } + task,
+                deletedTasks = disk.deletedTasks.filterNot { it.id == task.id }
+            )
+        }) {
             TaskWidgetUpdater.updateAll(context)
             TaskReminderScheduler.schedule(context, task)
         }
     }
 
-    fun deleteTask(task: OrganizerTask) {
-        val updated = updateArchive { disk ->
-            disk.copy(
-                tasks = disk.tasks.filterNot { it.id == task.id },
-                deletedTasks = disk.deletedTasks.filterNot { it.id == task.id } + task
-            )
-        } ?: return
-        applyArchive(updated)
-        TaskWidgetUpdater.updateAll(context)
-        TaskReminderScheduler.cancel(context, task)
-    }
-
-    fun restoreTask(task: OrganizerTask) {
-        val updated = updateArchive { disk ->
-            disk.copy(
-                tasks = disk.tasks.filterNot { it.id == task.id } + task,
-                deletedTasks = disk.deletedTasks.filterNot { it.id == task.id }
-            )
-        } ?: return
-        applyArchive(updated)
-        TaskWidgetUpdater.updateAll(context)
-        TaskReminderScheduler.schedule(context, task)
-    }
-
     fun permanentlyDeleteTask(task: OrganizerTask) {
-        val updated = updateArchive { disk ->
+        updateArchive(change = { disk ->
             disk.copy(deletedTasks = disk.deletedTasks.filterNot { it.id == task.id })
-        } ?: return
-        applyArchive(updated)
-        TaskWidgetUpdater.updateAll(context)
+        }) {
+            TaskWidgetUpdater.updateAll(context)
+        }
     }
 
     fun clearLocalData() {
-        (tasks + deletedTasks).forEach { TaskReminderScheduler.cancel(context, it) }
-        tasks.clear()
-        deletedTasks.clear()
-        customCategories.clear()
-        customCategoryIcons.clear()
-        listItems.clear()
-        store.clear()
-        profile.edit().clear().apply()
-        security.clear()
-        onSecurityChanged()
-        TaskWidgetUpdater.updateAll(context)
+        val remindersToCancel = (tasks + deletedTasks).toList()
+        appScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { store.clear() } }
+            result.onSuccess {
+                remindersToCancel.forEach { TaskReminderScheduler.cancel(context, it) }
+                tasks.clear()
+                deletedTasks.clear()
+                customCategories.clear()
+                customCategoryIcons.clear()
+                listItems.clear()
+                profile.edit().clear().apply()
+                security.clear()
+                onSecurityChanged()
+                TaskWidgetUpdater.updateAll(context)
+            }.onFailure {
+                storageError = "Non è stato possibile cancellare i dati locali. Non è stata rimossa nessuna attività."
+            }
+        }
     }
 
     storageError?.let { message ->
@@ -629,22 +669,20 @@ private fun TaskOrganizerApp(
             customCategories = customCategories,
             customCategoryIcons = customCategoryIcons,
             onAddCustomCategory = { newCategory, icon ->
-                val updated = updateArchive { disk ->
+                updateArchive(change = { disk ->
                     disk.copy(
                         customCategories = (disk.customCategories + newCategory).distinct(),
                         customCategoryIcons = disk.customCategoryIcons + (newCategory to icon)
                     )
-                }
-                updated?.let(::applyArchive)
+                })
             },
             onDeleteCustomCategory = { category ->
-                val updated = updateArchive { disk ->
+                updateArchive(change = { disk ->
                     disk.copy(
                         customCategories = disk.customCategories.filterNot { it == category },
                         customCategoryIcons = disk.customCategoryIcons.filterKeys { it != category }
                     )
-                }
-                updated?.let(::applyArchive)
+                })
             },
             onCancel = { editorOpen = false },
             onSave = ::saveTask,
@@ -659,24 +697,22 @@ private fun TaskOrganizerApp(
             items = listItems,
             onBack = { listsOpen = false },
             onAdd = { item ->
-                updateArchive { disk -> disk.copy(listItems = disk.listItems + item) }?.let(::applyArchive)
+                updateArchive(change = { disk -> disk.copy(listItems = disk.listItems + item) })
             },
             onChange = { item ->
-                val updated = updateArchive { disk ->
+                updateArchive(change = { disk ->
                     val index = disk.listItems.indexOfFirst { it.id == item.id }
                     if (index < 0) disk else disk.copy(listItems = disk.listItems.toMutableList().also { it[index] = item })
-                }
-                updated?.let { savedArchive ->
-                    applyArchive(savedArchive)
+                }) { savedArchive ->
                     if (savedArchive.listItems.any { it.id == item.id }) {
                         TaskWidgetUpdater.updateAll(context)
                     }
                 }
             },
             onDelete = { item ->
-                updateArchive { disk ->
+                updateArchive(change = { disk ->
                     disk.copy(listItems = disk.listItems.filterNot { it.id == item.id })
-                }?.let(::applyArchive)
+                })
             }
         )
         return
