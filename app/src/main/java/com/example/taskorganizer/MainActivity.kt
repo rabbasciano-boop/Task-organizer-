@@ -2131,6 +2131,15 @@ private fun BackupScreen(
                     colors = editorFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
+                Text(
+                    text = if (importPassword.length < 8) {
+                        "Inserisci almeno 8 caratteri (${importPassword.length}/8). Non è il PIN dell'app."
+                    } else {
+                        "Password pronta. Il ripristino sostituirà i dati attuali."
+                    },
+                    color = if (importPassword.length < 8) SoftText else Success,
+                    fontSize = 12.sp
+                )
                 Button(
                     onClick = {
                         val data = importedBytes
@@ -2161,7 +2170,7 @@ private fun BackupScreen(
                             }
                         }
                     },
-                    enabled = !working,
+                    enabled = !working && importPassword.length >= 8,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)
