@@ -113,6 +113,9 @@ class WidgetRefreshReceiver : BroadcastReceiver() {
 }
 
 object TaskWidgetUpdater {
+    private const val SETTINGS_PREFERENCES = "task_organizer_settings"
+    private const val HIDE_TITLES_KEY = "hide_widget_titles"
+
     private data class WidgetPalette(
         val background: Int,
         val card: Int,
@@ -132,6 +135,16 @@ object TaskWidgetUpdater {
             val component = ComponentName(context, provider)
             manager.getAppWidgetIds(component).forEach { update(context, manager, it, form) }
         }
+    }
+
+    fun areTaskTitlesHidden(context: Context): Boolean =
+        context.getSharedPreferences(SETTINGS_PREFERENCES, Context.MODE_PRIVATE).getBoolean(HIDE_TITLES_KEY, false)
+
+    fun setTaskTitlesHidden(context: Context, hidden: Boolean) {
+        context.getSharedPreferences(SETTINGS_PREFERENCES, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(HIDE_TITLES_KEY, hidden)
+            .apply()
     }
 
     fun update(context: Context, manager: AppWidgetManager, appWidgetId: Int, form: WidgetForm) {
@@ -155,6 +168,7 @@ object TaskWidgetUpdater {
             }.getOrDefault(false)
         }
         val nextTask = todayTasks.firstOrNull { !it.completed }
+        val hideTaskTitles = areTaskTitlesHidden(context)
         val activeFilter = context.getSharedPreferences(TaskOrganizerWidgetProvider.WIDGET_PREFERENCES, Context.MODE_PRIVATE)
             .getString("filter_$appWidgetId", "all") ?: "all"
         val visibleTasks = when (activeFilter) {
@@ -180,7 +194,7 @@ object TaskWidgetUpdater {
                 views.setTextViewText(R.id.widget_week_total, weekTasks.size.toString())
                 views.setTextViewText(R.id.widget_week_done, weekTasks.count { it.completed }.toString())
                 views.setTextViewText(R.id.widget_week_todo, weekTasks.count { !it.completed }.toString())
-                bindNextTask(context, views, nextTask, palette)
+                bindNextTask(context, views, nextTask, palette, hideTaskTitles)
             }
             WidgetForm.LARGE -> {
                 views.setTextViewText(R.id.widget_day, "${formatDate(today)} · $completed di ${todayTasks.size} oggi completate")
@@ -193,7 +207,7 @@ object TaskWidgetUpdater {
                     row.setInt(R.id.widget_row_root, "setBackgroundColor", palette.card)
                     row.setTextColor(R.id.widget_row_title, palette.text)
                     row.setTextColor(R.id.widget_row_meta, palette.muted)
-                    row.setTextViewText(R.id.widget_row_title, task.title)
+                    row.setTextViewText(R.id.widget_row_title, taskTitleForWidget(task, hideTaskTitles))
                     row.setTextViewText(R.id.widget_row_meta, "${task.category} · ${task.time ?: "senza orario"}")
                     row.setTextViewText(R.id.widget_row_toggle, if (task.completed) "✓" else "○")
                     row.setTextColor(R.id.widget_row_toggle, if (task.completed) palette.success else palette.accent)
@@ -218,7 +232,13 @@ object TaskWidgetUpdater {
         manager.updateAppWidget(appWidgetId, views)
     }
 
-    private fun bindNextTask(context: Context, views: RemoteViews, task: OrganizerTask?, palette: WidgetPalette) {
+    private fun bindNextTask(
+        context: Context,
+        views: RemoteViews,
+        task: OrganizerTask?,
+        palette: WidgetPalette,
+        hideTaskTitles: Boolean
+    ) {
         if (task == null) {
             views.setTextViewText(R.id.widget_next_title, "Nessuna attività in programma")
             views.setTextViewText(R.id.widget_next_meta, "Tocca + per aggiungerne una")
@@ -226,13 +246,16 @@ object TaskWidgetUpdater {
             views.setTextColor(R.id.widget_next_toggle, palette.accent)
             views.setOnClickPendingIntent(R.id.widget_next_toggle, openAppIntent(context, addNew = true))
         } else {
-            views.setTextViewText(R.id.widget_next_title, task.title)
+            views.setTextViewText(R.id.widget_next_title, taskTitleForWidget(task, hideTaskTitles))
             views.setTextViewText(R.id.widget_next_meta, "Prossima · ${task.time ?: "senza orario"} · ${task.category}")
             views.setTextViewText(R.id.widget_next_toggle, "○")
             views.setTextColor(R.id.widget_next_toggle, palette.accent)
             views.setOnClickPendingIntent(R.id.widget_next_toggle, toggleIntent(context, task))
         }
     }
+
+    private fun taskTitleForWidget(task: OrganizerTask, hidden: Boolean): String =
+        if (hidden) "Attività pianificata" else task.title
 
     private fun bindFilters(context: Context, views: RemoteViews, appWidgetId: Int, activeFilter: String, palette: WidgetPalette) {
         listOf(
@@ -277,7 +300,7 @@ object TaskWidgetUpdater {
     }
 
     private fun palette(context: Context): WidgetPalette {
-        val mode = context.getSharedPreferences("task_organizer_settings", Context.MODE_PRIVATE).getString("theme_mode", "original_dark")
+        val mode = context.getSharedPreferences(SETTINGS_PREFERENCES, Context.MODE_PRIVATE).getString("theme_mode", "original_dark")
         return when (mode) {
             "carta_dorata" -> WidgetPalette(Color.rgb(246, 240, 229), Color.rgb(255, 253, 248), Color.rgb(164, 117, 40), Color.rgb(20, 36, 59), Color.rgb(95, 104, 114), Color.rgb(45, 140, 105))
             "aurora_midnight" -> WidgetPalette(Color.rgb(23, 30, 58), Color.rgb(31, 41, 77), Color.rgb(56, 189, 248), Color.rgb(248, 250, 252), Color.rgb(203, 213, 225), Color.rgb(52, 211, 153))

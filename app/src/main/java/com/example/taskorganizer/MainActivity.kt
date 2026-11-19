@@ -99,9 +99,10 @@ import java.time.YearMonth
 import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import java.text.NumberFormat
-import java.net.HttpURLConnection
 import java.net.URL
+import java.io.ByteArrayOutputStream
 import java.util.Locale
+import javax.net.ssl.HttpsURLConnection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -963,13 +964,7 @@ private fun AccountAvatar(photoUrl: String?, initial: String, onClick: () -> Uni
     LaunchedEffect(photoUrl) {
         profileImage = photoUrl?.let { address ->
             withContext(Dispatchers.IO) {
-                runCatching {
-                    (URL(address).openConnection() as HttpURLConnection).run {
-                        connectTimeout = 4_000
-                        readTimeout = 4_000
-                        inputStream.use(BitmapFactory::decodeStream)
-                    }
-                }.getOrNull()
+                loadProfileImage(address)
             }
         }
     }
@@ -990,6 +985,55 @@ private fun AccountAvatar(photoUrl: String?, initial: String, onClick: () -> Uni
         }
     }
 }
+
+/** Downloads the optional Google avatar without storing it locally. */
+private fun loadProfileImage(address: String): Bitmap? {
+    val url = runCatching { URL(address) }.getOrNull() ?: return null
+    if (url.protocol.lowercase(Locale.ROOT) != "https") return null
+    val connection = runCatching { url.openConnection() as? HttpsURLConnection }.getOrNull() ?: return null
+    return try {
+        connection.connectTimeout = 4_000
+        connection.readTimeout = 4_000
+        connection.instanceFollowRedirects = false
+        connection.requestMethod = "GET"
+        connection.connect()
+        if (connection.responseCode != HttpsURLConnection.HTTP_OK || connection.contentLength > MAX_PROFILE_IMAGE_BYTES) {
+            null
+        } else {
+            val bytes = connection.inputStream.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8 * 1024)
+                var total = 0
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    total += read
+                    if (total > MAX_PROFILE_IMAGE_BYTES) return@use null
+                    output.write(buffer, 0, read)
+                }
+                output.toByteArray()
+            } ?: return null
+            decodeProfileImage(bytes)
+        }
+    } catch (_: Exception) {
+        null
+    } finally {
+        connection.disconnect()
+    }
+}
+
+private fun decodeProfileImage(bytes: ByteArray): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sampleSize = 1
+    while (bounds.outWidth / sampleSize > 512 || bounds.outHeight / sampleSize > 512) sampleSize *= 2
+    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+    })
+}
+
+private const val MAX_PROFILE_IMAGE_BYTES = 2 * 1024 * 1024
 
 @Composable
 private fun ListsScreen(
@@ -1536,10 +1580,13 @@ private fun SettingsScreen(
     biometricAvailable: Boolean,
     onSecurityChanged: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var pinDialogOpen by remember { mutableStateOf(false) }
     var disableDialogOpen by remember { mutableStateOf(false) }
     var pinEnabled by remember { mutableStateOf(security.hasPin()) }
     var biometricEnabled by remember { mutableStateOf(security.isBiometricEnabled()) }
+    var hideWidgetTitles by remember { mutableStateOf(TaskWidgetUpdater.areTaskTitlesHidden(context)) }
     PageColumn {
         Text("Opzioni", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Aspetto, promemoria e schermata Home.", color = SoftText)
@@ -1556,6 +1603,26 @@ private fun SettingsScreen(
             "Tieni premuto uno spazio libero nella schermata Home, tocca Widget e cerca Task Organizer. Puoi scegliere Progresso, Riepilogo o Agenda: mostrano le attività di oggi e il tasto + apre subito una nuova attività.",
             "Gratuito"
         )
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Nascondi titoli nei widget", color = MainText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Sulla schermata Home vedrai “Attività pianificata” invece del titolo. Utile se altre persone possono vedere il telefono.", color = SoftText, fontSize = 13.sp)
+                }
+                Switch(
+                    checked = hideWidgetTitles,
+                    onCheckedChange = { hidden ->
+                        hideWidgetTitles = hidden
+                        TaskWidgetUpdater.setTaskTitlesHidden(context, hidden)
+                        scope.launch(Dispatchers.IO) { TaskWidgetUpdater.updateAll(context) }
+                    }
+                )
+            }
+        }
         Text("ATTIVITÀ", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         InfoCard("Promemoria e sveglie", "Li imposti in ogni attività: puoi scegliere anticipo, ripetizione, notifica o sveglia.", "Disponibile")
         Text("SICUREZZA APP", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
