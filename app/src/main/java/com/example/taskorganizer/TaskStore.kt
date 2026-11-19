@@ -290,8 +290,15 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                 recurrenceAnchorDate = item.optString("recurrenceAnchorDate").ifBlank { null }
             )
         }
-        val tasks = tasksFrom(archive.getJSONArray("tasks"))
-        val deletedTasks = archive.optJSONArray("deletedTasks")?.let { tasksFrom(it, deleted = true) }.orEmpty()
+        fun keepNewestTasks(items: List<OrganizerTask>): List<OrganizerTask> = items
+            .groupBy { it.id }
+            .values
+            .map { duplicates -> duplicates.maxWithOrNull(compareBy<OrganizerTask> { it.createdAt }.thenBy { it.deletedAt })!! }
+
+        val tasks = keepNewestTasks(tasksFrom(archive.getJSONArray("tasks")))
+        val deletedTasks = keepNewestTasks(
+            archive.optJSONArray("deletedTasks")?.let { tasksFrom(it, deleted = true) }.orEmpty()
+        ).filterNot { deleted -> tasks.any { active -> active.id == deleted.id } }
         val listItems = archive.optJSONArray("listItems")?.let { entries ->
             List(entries.length()) { index ->
                 val item = entries.getJSONObject(index)
@@ -304,7 +311,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                     createdAt = item.optLong("createdAt", System.currentTimeMillis())
                 )
             }
-        }.orEmpty()
+        }.orEmpty().groupBy { it.id }.values.map { duplicates -> duplicates.maxByOrNull { it.createdAt }!! }
         val customCategories = archive.optJSONArray("customCategories")?.let { categories ->
             List(categories.length()) { index -> categories.optString(index) }.filter { it.isNotBlank() }
         }.orEmpty()

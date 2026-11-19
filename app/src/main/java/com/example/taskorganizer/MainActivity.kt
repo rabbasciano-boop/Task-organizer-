@@ -5,11 +5,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,6 +24,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -89,6 +91,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,11 +116,9 @@ import com.example.taskorganizer.ui.theme.TaskOrganizerTheme
 import com.example.taskorganizer.ui.theme.OrganizerPalette
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import java.time.LocalDate
-import java.time.Instant
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.DayOfWeek
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.text.NumberFormat
 import java.net.URL
@@ -161,6 +162,12 @@ private fun taskCardBackground(color: String): Color = when (color) {
 
 private fun taskCardTextColor(task: OrganizerTask): Color = if (task.cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
 private fun taskCardMutedColor(task: OrganizerTask): Color = if (task.cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
+private fun taskCompletionColor(task: OrganizerTask): Color = when {
+    task.cardColor == DefaultCardColor && task.completed -> Success
+    task.cardColor == DefaultCardColor -> Gold
+    task.completed -> Color(0xFF7EE2B1)
+    else -> Color(0xFFE8C877)
+}
 private val CustomCategoryIconOptions = listOf("🏷️", "📌", "❤️", "🏃", "💊", "✈️", "🎨", "💰", "🛒", "🐾", "🏡", "🎯")
 
 private fun categoryIcon(category: String, iconOverride: String? = null): String = iconOverride ?: when (category) {
@@ -193,13 +200,20 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         widgetQuickAdd = intent.getBooleanExtra(EXTRA_OPEN_NEW_TASK, false)
-        updateSystemBars(OrganizerTheme.ORIGINAL_DARK)
+        val initialSettings = getSharedPreferences("task_organizer_settings", MODE_PRIVATE)
+        val initialTheme = OrganizerTheme.fromStorage(
+            initialSettings.getString("theme_mode", null),
+            initialSettings.getBoolean("dark_theme", true)
+        )
+        updateSystemBars(if (initialSettings.getBoolean("follow_system_theme", false)) systemTheme() else initialTheme)
         updateSecureWindow()
         TaskReminderScheduler.ensureNotificationChannels(this)
         notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
         setContent {
             val preferences = remember { getSharedPreferences("task_organizer_settings", MODE_PRIVATE) }
             val security = remember { AppSecurity(this) }
+            val session = remember { ViewModelProvider(this@MainActivity)[UiSessionViewModel::class.java] }
+            session.initialize(security.hasPin())
             val accountManager = remember { FirebaseAccountManager(this@MainActivity) }
             var signedInAccount by remember { mutableStateOf(accountManager.currentAccount()) }
             var accountWorking by remember { mutableStateOf(false) }
@@ -212,38 +226,48 @@ class MainActivity : FragmentActivity() {
                     )
                 )
             }
-            LaunchedEffect(selectedTheme) { updateSystemBars(selectedTheme) }
-            var isUnlocked by remember { mutableStateOf(!security.hasPin()) }
+            var followSystemTheme by remember { mutableStateOf(preferences.getBoolean("follow_system_theme", false)) }
+            val effectiveTheme = if (followSystemTheme) {
+                if (isSystemInDarkTheme()) OrganizerTheme.ORIGINAL_DARK else OrganizerTheme.CARTA_DORATA
+            } else selectedTheme
+            LaunchedEffect(effectiveTheme) { updateSystemBars(effectiveTheme) }
             var privacyAcknowledged by remember { mutableStateOf(preferences.getBoolean("privacy_acknowledged", false)) }
-            var showOpening by remember { mutableStateOf(true) }
-            LaunchedEffect(Unit) {
+            LaunchedEffect(session.showOpening) {
+                if (!session.showOpening) return@LaunchedEffect
                 delay(450)
-                showOpening = false
+                session.showOpening = false
             }
             LaunchedEffect(shouldLockOnResume) {
                 if (shouldLockOnResume && security.hasPin()) {
-                    isUnlocked = false
+                    session.lock()
                     shouldLockOnResume = false
                 }
             }
-            TaskOrganizerTheme(selectedTheme) {
-                if (showOpening) {
+            TaskOrganizerTheme(effectiveTheme) {
+                if (session.showOpening) {
                     OpeningScreen()
                 } else if (!privacyAcknowledged) {
                     PrivacyConsentScreen(onContinueAsGuest = {
                         preferences.edit().putBoolean("privacy_acknowledged", true).apply()
                         privacyAcknowledged = true
                     })
-                } else if (isUnlocked) {
+                } else if (session.isUnlocked) {
                     TaskOrganizerApp(
-                        selectedTheme = selectedTheme,
+                        selectedTheme = effectiveTheme,
+                        followSystemTheme = followSystemTheme,
                         onThemeChanged = { theme ->
                             selectedTheme = theme
                             preferences.edit()
                                 .putString("theme_mode", theme.storageKey)
                                 .putBoolean("dark_theme", theme.isDark)
+                                .putBoolean("follow_system_theme", false)
                                 .apply()
+                            followSystemTheme = false
                             Thread { TaskWidgetUpdater.updateAll(this@MainActivity) }.start()
+                        },
+                        onFollowSystemThemeChanged = { enabled ->
+                            followSystemTheme = enabled
+                            preferences.edit().putBoolean("follow_system_theme", enabled).apply()
                         },
                         security = security,
                         biometricAvailable = canUseBiometrics(),
@@ -281,13 +305,16 @@ class MainActivity : FragmentActivity() {
                         },
                         notificationPermissionAllowed = notificationPermissionAllowed,
                         onRequestNotificationPermission = ::requestNotificationPermission,
-                        onSecurityChanged = ::updateSecureWindow
+                        onSecurityChanged = {
+                            updateSecureWindow()
+                            if (!security.hasPin()) session.unlock()
+                        }
                     )
                 } else {
                     AppLockScreen(
                         security = security,
                         biometricAvailable = canUseBiometrics(),
-                        onUnlocked = { isUnlocked = true },
+                        onUnlocked = session::unlock,
                         onRequestBiometric = { onResult -> authenticateWithBiometrics(onResult) }
                     )
                 }
@@ -304,9 +331,13 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     }
 
+    private fun systemTheme(): OrganizerTheme = if (
+        resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    ) OrganizerTheme.ORIGINAL_DARK else OrganizerTheme.CARTA_DORATA
+
     override fun onStop() {
         super.onStop()
-        if (AppSecurity(this).hasPin()) shouldLockOnResume = true
+        if (!isChangingConfigurations && AppSecurity(this).hasPin()) shouldLockOnResume = true
     }
 
     override fun onResume() {
@@ -388,7 +419,7 @@ class MainActivity : FragmentActivity() {
 @Composable
 private fun OpeningScreen() {
     Box(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0D1D32)),
+        modifier = Modifier.fillMaxSize().organizerBackground(),
         contentAlignment = Alignment.Center
     ) {
         Image(
@@ -505,7 +536,9 @@ private fun ArchiveLoadingScreen() {
 @Composable
 private fun TaskOrganizerApp(
     selectedTheme: OrganizerTheme,
+    followSystemTheme: Boolean,
     onThemeChanged: (OrganizerTheme) -> Unit,
+    onFollowSystemThemeChanged: (Boolean) -> Unit,
     security: AppSecurity,
     biometricAvailable: Boolean,
     openNewFromWidget: Boolean,
@@ -868,7 +901,7 @@ private fun TaskOrganizerApp(
                     onOpenPrivacy = { privacyInfoOpen = true }
                 )
                 1 -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::changeTask, openEditTask, ::deleteTask, ::restoreTask, ::permanentlyDeleteTask)
-                2 -> CalendarScreen(tasks, openNewTask, openEditTask)
+                2 -> CalendarScreen(tasks, openNewTask, ::changeTask, openEditTask)
                 3 -> AccountScreen(
                     nickname = nickname,
                     onNicknameChanged = { newNickname ->
@@ -898,7 +931,16 @@ private fun TaskOrganizerApp(
                     },
                     onOpenBackup = { backupOpen = true }
                 )
-                else -> SettingsScreen(selectedTheme, onThemeChanged, security, biometricAvailable, onSecurityChanged, onOpenBackup = { backupOpen = true })
+                else -> SettingsScreen(
+                    selectedTheme = selectedTheme,
+                    followSystemTheme = followSystemTheme,
+                    onThemeChanged = onThemeChanged,
+                    onFollowSystemThemeChanged = onFollowSystemThemeChanged,
+                    security = security,
+                    biometricAvailable = biometricAvailable,
+                    onSecurityChanged = onSecurityChanged,
+                    onOpenBackup = { backupOpen = true }
+                )
             }
         }
     }
@@ -1238,7 +1280,10 @@ private fun ListsScreen(
                     Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(18.dp)) {
                         Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(
-                                modifier = Modifier.size(48.dp).clickable { onChange(item.copy(completed = !item.completed)) },
+                                modifier = Modifier.size(48.dp).clickable { onChange(item.copy(completed = !item.completed)) }.semantics {
+                                    contentDescription = if (item.completed) "Segna ${item.title} come da fare" else "Segna ${item.title} come completata"
+                                    role = Role.Button
+                                },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(if (item.completed) "✓" else "○", color = if (item.completed) Success else Gold, fontSize = 24.sp)
@@ -1280,16 +1325,18 @@ private fun ActivitiesScreen(
         .sortedBy { it.first }
         .map { (category, icon) -> category to categoryDisplay(category, icon) }
     val statusOptions = listOf("all" to "Tutte", "todo" to "Da fare", "done" to "Completate")
-    val filteredTasks = tasks.filter { task ->
-        (selectedMonth.isBlank() || task.date.startsWith(selectedMonth)) &&
-            (selectedCategory.isBlank() || task.category == selectedCategory) &&
-            when (selectedStatus) {
-                "todo" -> !task.completed
-                "done" -> task.completed
-                else -> true
-            }
+    val taskSnapshot = tasks.toList()
+    val sortedTasks = remember(taskSnapshot, selectedMonth, selectedCategory, selectedStatus) {
+        taskSnapshot.filter { task ->
+            (selectedMonth.isBlank() || task.date.startsWith(selectedMonth)) &&
+                (selectedCategory.isBlank() || task.category == selectedCategory) &&
+                when (selectedStatus) {
+                    "todo" -> !task.completed
+                    "done" -> task.completed
+                    else -> true
+                }
+        }.sortedWith(compareBy<OrganizerTask> { it.completed }.thenBy { it.date }.thenBy { it.time ?: "99:99" })
     }
-    val sortedTasks = filteredTasks.sortedWith(compareBy<OrganizerTask> { it.completed }.thenBy { it.date }.thenBy { it.time ?: "99:99" })
     val completed = tasks.count { it.completed }
 
     LazyPageColumn {
@@ -1481,7 +1528,7 @@ private fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: (
                 },
                 contentAlignment = Alignment.Center
             ) {
-                Text(if (task.completed) "✓" else "○", color = if (task.completed) Success else Gold, fontSize = 24.sp)
+                Text(if (task.completed) "✓" else "○", color = taskCompletionColor(task), fontSize = 24.sp)
             }
             Spacer(Modifier.size(4.dp))
             Column(modifier = Modifier.weight(1f).clickable(onClick = onEdit)) {
@@ -1506,7 +1553,7 @@ private fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Un
                     },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(if (task.completed) "✓" else "○", color = if (task.completed) Success else Gold, fontSize = 25.sp)
+                    Text(if (task.completed) "✓" else "○", color = taskCompletionColor(task), fontSize = 25.sp)
                 }
                 Spacer(Modifier.size(2.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -1528,25 +1575,39 @@ private fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Un
 }
 
 @Composable
-private fun CalendarScreen(tasks: List<OrganizerTask>, onAdd: () -> Unit, onEdit: (OrganizerTask) -> Unit) {
+private fun CalendarScreen(
+    tasks: List<OrganizerTask>,
+    onAdd: () -> Unit,
+    onChange: (OrganizerTask) -> Unit,
+    onEdit: (OrganizerTask) -> Unit
+) {
     var displayedMonth by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALY) }
     val firstDayOffset = displayedMonth.atDay(1).dayOfWeek.value - 1
     val daysInMonth = displayedMonth.lengthOfMonth()
     val gridCells = (0 until 42).toList()
-    val selectedTasks = tasks.filter { it.date == selectedDate.toString() }.sortedBy { it.time ?: "99:99" }
+    val taskSnapshot = tasks.toList()
+    val selectedTasks = remember(taskSnapshot, selectedDate) {
+        taskSnapshot.filter { it.date == selectedDate.toString() }.sortedBy { it.time ?: "99:99" }
+    }
 
     LazyPageColumn {
         item { Text("Calendario", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
         item {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = { displayedMonth = displayedMonth.minusMonths(1) }, modifier = Modifier.size(48.dp)) { Text("‹", color = Gold, fontSize = 28.sp) }
+                TextButton(
+                    onClick = { displayedMonth = displayedMonth.minusMonths(1) },
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = "Mese precedente" }
+                ) { Text("‹", color = Gold, fontSize = 28.sp) }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(displayedMonth.format(monthFormatter).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = Gold, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                     TextButton(onClick = { displayedMonth = YearMonth.now(); selectedDate = LocalDate.now() }) { Text("Oggi", color = SoftText, fontSize = 12.sp) }
                 }
-                TextButton(onClick = { displayedMonth = displayedMonth.plusMonths(1) }, modifier = Modifier.size(48.dp)) { Text("›", color = Gold, fontSize = 28.sp) }
+                TextButton(
+                    onClick = { displayedMonth = displayedMonth.plusMonths(1) },
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = "Mese successivo" }
+                ) { Text("›", color = Gold, fontSize = 28.sp) }
             }
         }
         item {
@@ -1575,7 +1636,13 @@ private fun CalendarScreen(tasks: List<OrganizerTask>, onAdd: () -> Unit, onEdit
         if (selectedTasks.isEmpty()) {
             item { EmptyState("Nessun impegno", "Non hai attività previste per questo giorno.") }
         } else {
-            items(selectedTasks, key = { it.id }) { task -> CompactTaskCard(task, onToggle = {}, onEdit = { onEdit(task) }) }
+            items(selectedTasks, key = { it.id }) { task ->
+                CompactTaskCard(
+                    task,
+                    onToggle = { onChange(task.copy(completed = !task.completed)) },
+                    onEdit = { onEdit(task) }
+                )
+            }
         }
         item {
             OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
@@ -1741,7 +1808,9 @@ private fun PrivacyInfoScreen(onBack: () -> Unit) {
 @Composable
 private fun SettingsScreen(
     selectedTheme: OrganizerTheme,
+    followSystemTheme: Boolean,
     onThemeChanged: (OrganizerTheme) -> Unit,
+    onFollowSystemThemeChanged: (Boolean) -> Unit,
     security: AppSecurity,
     biometricAvailable: Boolean,
     onSecurityChanged: () -> Unit,
@@ -1758,6 +1827,19 @@ private fun SettingsScreen(
         Text("Opzioni", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Aspetto, promemoria e schermata Home.", color = SoftText)
         Text("ASPETTO", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Segui il tema del telefono", color = MainText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Usa Originale Dark quando il telefono è scuro e Carta Dorata quando è chiaro.", color = SoftText, fontSize = 13.sp)
+                }
+                Switch(checked = followSystemTheme, onCheckedChange = onFollowSystemThemeChanged)
+            }
+        }
         Text("Temi gratuiti", color = SoftText, fontSize = 13.sp)
         ThemeChoiceCard(OrganizerTheme.ORIGINAL_DARK, "🌙 Originale Dark", "Blu notte classico con accenti oro", selectedTheme, false, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.CARTA_DORATA, "📜 Carta Dorata", "Chiaro caldo, morbido e leggibile", selectedTheme, false, onThemeChanged)
@@ -2351,28 +2433,28 @@ private fun TaskEditorScreen(
             onValueChange = { date = it },
             label = { Text("Data") },
             placeholder = { Text("GG-MM-AAAA oppure GG/MM/AAAA") },
-            trailingIcon = { TextButton(onClick = { datePickerOpen = true }) { Text("Calendario", color = Gold) } },
+            trailingIcon = {
+                IconButton(onClick = { datePickerOpen = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_nav_calendar),
+                        contentDescription = "Apri calendario",
+                        tint = Gold
+                    )
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             colors = editorFieldColors()
         )
         if (datePickerOpen) {
-            val initialDateMillis = remember(date) {
-                parseItalianDate(date)
-                    ?.atStartOfDay(ZoneId.systemDefault())
-                    ?.toInstant()
-                    ?.toEpochMilli()
-            }
+            val initialDateMillis = remember(date) { parseItalianDate(date)?.toPickerMillis() }
             val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMillis)
             DatePickerDialog(
                 onDismissRequest = { datePickerOpen = false },
                 confirmButton = {
                     TextButton(onClick = {
                         datePickerState.selectedDateMillis?.let { selectedMillis ->
-                            date = Instant.ofEpochMilli(selectedMillis)
-                                .atZone(ZoneId.systemDefault())
-                                .toLocalDate()
-                                .format(ItalianDateFormatter)
+                            date = selectedMillis.toPickerDate().format(ItalianDateFormatter)
                         }
                         datePickerOpen = false
                     }) { Text("Conferma", color = Gold) }
@@ -2807,7 +2889,9 @@ private fun TaskOrganizerPreview() {
     TaskOrganizerTheme(OrganizerTheme.ORIGINAL_DARK) {
         TaskOrganizerApp(
             selectedTheme = OrganizerTheme.ORIGINAL_DARK,
+            followSystemTheme = false,
             onThemeChanged = {},
+            onFollowSystemThemeChanged = {},
             security = AppSecurity(context),
             biometricAvailable = false,
             openNewFromWidget = false,

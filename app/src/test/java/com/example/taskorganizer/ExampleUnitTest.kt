@@ -87,3 +87,19 @@ class RecurrenceTimingTest {
         assertTrue(updated.tasks.any { it.date == "2027-02-15" })
     }
 }
+
+class DatePickerConversionsTest {
+    @Test
+    fun keepsTheSameCalendarDayAtUtcAndItalianDates() {
+        val date = LocalDate.of(2026, 11, 20)
+
+        assertEquals(date, date.toPickerMillis().toPickerDate())
+    }
+
+    @Test
+    fun pickerMillisecondUsesUtcMidnight() {
+        val date = LocalDate.of(2027, 3, 28)
+
+        assertEquals(0L, Math.floorMod(date.toPickerMillis(), 24L * 60L * 60L * 1000L))
+    }
+}

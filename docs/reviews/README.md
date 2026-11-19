@@ -82,6 +82,27 @@ Il relativo commit è registrato nella cronologia GitHub insieme alle altre revi
 
 Restano volutamente aperti lo spostamento delle stringhe in `strings.xml`, la divisione di `MainActivity.kt` e una verifica TalkBack completa: sono lavori di manutenzione più ampi e non modificano la sicurezza o il comportamento attuale.
 
+## Revisione front-end 2 — correzioni di affidabilità
+
+| Area verificata | Stato attuale | Interventi principali |
+|---|---|---|
+| Data scelta dal calendario | Risolto | La conversione usa sempre mezzanotte UTC, quindi il giorno non cambia in base al fuso orario. Sono presenti test automatici di conversione. |
+| Completamento dal Calendario | Risolto | La spunta aggiorna ora lo stato dell'attività, come nelle altre schermate. |
+| Spunte su card colorate | Risolto | I simboli usano tonalità chiare specifiche sulle card colorate, indipendenti dal tema scelto. |
+| PIN dopo rotazione | Risolto | Lo stato della sessione resta vivo durante una ricreazione dell'interfaccia, ma non viene salvato dopo una vera chiusura dell'app. |
+| Archivio con identificativi duplicati | Risolto | In lettura e importazione vengono mantenuti gli elementi più recenti, evitando un crash delle liste. |
+| Accessibilità calendario e liste | Risolto | Frecce e spunte hanno descrizioni vocali; il calendario del campo Data è ora un'icona con descrizione. |
+| Tema e avvio | Risolto | La barra adotta da subito il tema salvato, la schermata iniziale usa il tema scelto ed è disponibile l'opzione “Segui il tema del telefono”. |
+| Prestazioni delle attività | Risolto | I filtri e gli ordinamenti vengono memorizzati finché attività o filtri non cambiano. |
+
+### Verifiche manuali ancora consigliate
+
+1. Inserire `20/11/2026`, aprire il calendario e confermare senza toccare nulla: la data deve restare il 20.
+2. Nella scheda Calendario, completare e riaprire un'attività con la spunta.
+3. Provare una card colorata in Carta Dorata e Aurora Nordic.
+4. Con un PIN attivo, ruotare il telefono nell'editor: nessuna nuova richiesta PIN e bozza presente.
+5. Attivare “Segui il tema del telefono” e cambiare tema Android.
+
 ## Verifiche manuali ancora consigliate
 
 1. Ricorrenza giornaliera, settimanale e mensile, anche completata dal widget e dopo una modifica della data.
