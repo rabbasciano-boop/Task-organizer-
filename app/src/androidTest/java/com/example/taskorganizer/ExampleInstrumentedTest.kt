@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.ContextWrapper
 
 import org.junit.Test
+import org.junit.Ignore
 import org.junit.runner.RunWith
 
 import org.junit.Assert.assertEquals
@@ -13,6 +14,7 @@ import org.junit.Assert.assertTrue
 import java.io.File
 
 @RunWith(AndroidJUnit4::class)
+@Ignore("Eseguire solo su emulatore o dispositivo dedicato: non sul telefono personale.")
 class EncryptedTaskStoreInstrumentedTest {
     private fun isolatedStore(): Pair<Context, EncryptedTaskStore> {
         // The target context gives Android a real private directory. Only the dedicated subdirectory below is used.
