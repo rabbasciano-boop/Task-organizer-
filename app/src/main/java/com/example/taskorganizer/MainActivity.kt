@@ -630,7 +630,17 @@ private fun TaskOrganizerApp(
     fun clearLocalData() {
         val remindersToCancel = (tasks + deletedTasks).toList()
         appScope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { store.clear() } }
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    store.clear()
+                    profile.edit().clear().commit()
+                    context.getSharedPreferences("task_organizer_settings", android.content.Context.MODE_PRIVATE)
+                        .edit().clear().commit()
+                    context.getSharedPreferences(TaskOrganizerWidgetProvider.WIDGET_PREFERENCES, android.content.Context.MODE_PRIVATE)
+                        .edit().clear().commit()
+                    security.clear()
+                }
+            }
             result.onSuccess {
                 remindersToCancel.forEach { TaskReminderScheduler.cancel(context, it) }
                 tasks.clear()
@@ -638,12 +648,10 @@ private fun TaskOrganizerApp(
                 customCategories.clear()
                 customCategoryIcons.clear()
                 listItems.clear()
-                profile.edit().clear().apply()
-                security.clear()
                 onSecurityChanged()
                 TaskWidgetUpdater.updateAll(context)
             }.onFailure {
-                storageError = "Non è stato possibile cancellare i dati locali. Non è stata rimossa nessuna attività."
+                storageError = "Non è stato possibile completare la cancellazione dei dati locali. Controlla lo spazio disponibile e riprova."
             }
         }
     }
