@@ -2073,6 +2073,15 @@ private fun BackupScreen(
                 colors = editorFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )
+            Text(
+                text = if (exportPassword.length < 8) {
+                    "Scegli almeno 8 caratteri (${exportPassword.length}/8)."
+                } else {
+                    "Password valida."
+                },
+                color = if (exportPassword.length < 8) SoftText else Success,
+                fontSize = 12.sp
+            )
             OutlinedTextField(
                 value = exportConfirmation,
                 onValueChange = { exportConfirmation = it },
@@ -2082,6 +2091,19 @@ private fun BackupScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 colors = editorFieldColors(),
                 modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = when {
+                    exportConfirmation.isEmpty() -> "Ripeti la password per confermarla."
+                    exportConfirmation != exportPassword -> "Le password non coincidono."
+                    else -> "Le password coincidono."
+                },
+                color = when {
+                    exportConfirmation.isEmpty() -> SoftText
+                    exportConfirmation != exportPassword -> Danger
+                    else -> Success
+                },
+                fontSize = 12.sp
             )
             Text("Per una protezione migliore scegli una frase lunga e unica, non una password breve.", color = SoftText, fontSize = 12.sp)
             Button(
@@ -2094,7 +2116,7 @@ private fun BackupScreen(
                         }
                     }
                 },
-                enabled = !working,
+                enabled = !working && exportPassword.length >= 8 && exportPassword == exportConfirmation,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
