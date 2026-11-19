@@ -224,7 +224,7 @@ class MainActivity : ComponentActivity() {
                                 .putString("theme_mode", theme.storageKey)
                                 .putBoolean("dark_theme", theme.isDark)
                                 .apply()
-                            TaskWidgetUpdater.updateAll(this)
+                            Thread { TaskWidgetUpdater.updateAll(this@MainActivity) }.start()
                         },
                         security = security,
                         biometricAvailable = canUseBiometrics(),
@@ -1619,7 +1619,8 @@ private fun PrivacyInfoScreen(onBack: () -> Unit) {
             Text("Privacy e dati", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Informazioni sempre disponibili e comprensibili.", color = SoftText)
             InfoCard("Dati sul telefono", "Attività, note, liste, categorie, preferenze e PIN restano nel telefono in un archivio cifrato. Non vengono inviati agli sviluppatori.", "Locale e cifrato")
-            InfoCard("Account facoltativo", "Google o Microsoft saranno usati soltanto se vorrai attivare backup, calendario o servizi collegati. Il login non caricherà automaticamente le tue attività; nome, email e foto profilo restano visibili solo nell'app.", "A tua scelta")
+            InfoCard("Account facoltativo", "L'accesso Google serve solo a riconoscere il tuo profilo nell'app. Non carica automaticamente le attività, non attiva backup e non dà accesso ai tuoi file.", "A tua scelta")
+            InfoCard("Backup sotto il tuo controllo", "Puoi creare un file cifrato con password da Opzioni. L'app non lo invia da sola su Drive, OneDrive o su server propri: scegli tu dove conservarlo.", "Manuale e cifrato")
             InfoCard("Niente tracciamento", "Non vendiamo dati, non mostriamo pubblicità e non analizziamo le tue attività. Le notifiche saranno richieste solo quando deciderai di usarle.", "Nessuna pubblicità")
             InfoCard("Il tuo controllo", "Quando uscirai dall'account potrai scegliere se mantenere o cancellare i dati locali. L'eliminazione dell'account sarà una procedura separata e protetta.", "Decidi tu")
             OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
