@@ -1207,11 +1207,17 @@ private fun TodayScreen(
     var activeTimerTitle by rememberSaveable { mutableStateOf("Attività personale") }
     var activeTimerCategory by rememberSaveable { mutableStateOf("Personale") }
     var timerRunning by rememberSaveable { mutableStateOf(false) }
-    var timerSeconds by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(timerRunning) {
+    var timerStartedAtMillis by rememberSaveable { mutableStateOf(0L) }
+    var timerAccumulatedMillis by rememberSaveable { mutableStateOf(0L) }
+    var timerNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    val timerElapsedMillis = timerAccumulatedMillis + if (timerRunning && timerStartedAtMillis > 0L) {
+        (timerNowMillis - timerStartedAtMillis).coerceAtLeast(0L)
+    } else 0L
+    val timerSeconds = (timerElapsedMillis / 1_000L).toInt()
+    LaunchedEffect(timerRunning, timerStartedAtMillis) {
         while (timerRunning) {
+            timerNowMillis = System.currentTimeMillis()
             delay(1_000)
-            timerSeconds += 1
         }
     }
     val selectedTasks = tasks.filter { it.date == selectedDateValue }.sortedBy { it.time ?: "99:99" }
@@ -1323,14 +1329,26 @@ private fun TodayScreen(
                     }
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { timerRunning = !timerRunning }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
+                    OutlinedButton(onClick = {
+                        if (timerRunning) {
+                            timerAccumulatedMillis += (System.currentTimeMillis() - timerStartedAtMillis).coerceAtLeast(0L)
+                            timerStartedAtMillis = 0L
+                            timerRunning = false
+                        } else {
+                            timerStartedAtMillis = System.currentTimeMillis()
+                            timerNowMillis = timerStartedAtMillis
+                            timerRunning = true
+                        }
+                    }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
                         Text(if (timerRunning) "Pausa" else "Avvia", color = Gold, fontWeight = FontWeight.Bold)
                     }
                     Button(
                         onClick = {
                             onAddLog(activeTimerTitle, activeTimerCategory, (timerSeconds / 60).coerceAtLeast(1), selectedDate)
                             timerRunning = false
-                            timerSeconds = 0
+                            timerStartedAtMillis = 0L
+                            timerAccumulatedMillis = 0L
+                            timerNowMillis = System.currentTimeMillis()
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
