@@ -684,6 +684,7 @@ private fun TaskOrganizerApp(
                 val result = withContext(Dispatchers.IO) { runCatching { store.update(change) } }
                 result.onSuccess { savedArchive ->
                     applyArchive(savedArchive)
+                    refreshWidgets(savedArchive)
                     afterSaved(savedArchive)
                 }.onFailure {
                     storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
@@ -722,8 +723,7 @@ private fun TaskOrganizerApp(
         updateArchive(change = { disk ->
             val index = disk.tasks.indexOfFirst { it.id == task.id }
             disk.copy(tasks = if (index >= 0) disk.tasks.toMutableList().also { it[index] = task } else disk.tasks + task)
-        }) { savedArchive ->
-            refreshWidgets(savedArchive)
+        }) {
             TaskReminderScheduler.schedule(context, task)
             editorOpen = false
             editorTaskId = null
@@ -736,7 +736,6 @@ private fun TaskOrganizerApp(
             RecurrenceTiming.updateTask(disk, task)
         }) { updated ->
             if (updated.tasks.any { it.id == task.id }) {
-                refreshWidgets(updated)
                 RecurrenceTiming.reminderTasks(updated, task.id).forEach { TaskReminderScheduler.schedule(context, it) }
             }
         }
@@ -748,8 +747,7 @@ private fun TaskOrganizerApp(
                 tasks = disk.tasks.filterNot { it.id == task.id },
                 deletedTasks = disk.deletedTasks.filterNot { it.id == task.id } + task.copy(deletedAt = System.currentTimeMillis())
             )
-        }) { savedArchive ->
-            refreshWidgets(savedArchive)
+        }) {
             TaskReminderScheduler.cancel(context, task)
         }
     }
@@ -760,8 +758,7 @@ private fun TaskOrganizerApp(
                 tasks = disk.tasks.filterNot { it.id == task.id } + task.copy(deletedAt = 0L),
                 deletedTasks = disk.deletedTasks.filterNot { it.id == task.id }
             )
-        }) { savedArchive ->
-            refreshWidgets(savedArchive)
+        }) {
             TaskReminderScheduler.schedule(context, task)
         }
     }
@@ -769,9 +766,7 @@ private fun TaskOrganizerApp(
     fun permanentlyDeleteTask(task: OrganizerTask) {
         updateArchive(change = { disk ->
             disk.copy(deletedTasks = disk.deletedTasks.filterNot { it.id == task.id })
-        }) { savedArchive ->
-            refreshWidgets(savedArchive)
-        }
+        })
     }
 
     fun clearLocalData() {
