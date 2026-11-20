@@ -78,6 +78,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
@@ -1232,7 +1233,13 @@ private fun TodayScreen(
     var deletedTaskId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(deletedTaskId) {
         val taskId = deletedTaskId ?: return@LaunchedEffect
-        if (deleteSnackbar.showSnackbar("Attività spostata nel Cestino", "Annulla") == SnackbarResult.ActionPerformed) {
+        if (
+            deleteSnackbar.showSnackbar(
+                message = "Attività spostata nel Cestino",
+                actionLabel = "Annulla",
+                duration = SnackbarDuration.Short
+            ) == SnackbarResult.ActionPerformed
+        ) {
             onRestoreTask(taskId)
         }
         deletedTaskId = null
