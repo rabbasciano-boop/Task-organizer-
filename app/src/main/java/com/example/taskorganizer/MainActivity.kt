@@ -115,7 +115,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -1046,7 +1048,7 @@ private fun KanbanListsScreen(
     PageColumn {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
-                Text("Flusso operativo", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Flusso operativo", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Text("Lavagna Kanban", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             }
             Text("4 corsie", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(CardBlue, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 7.dp))
@@ -1062,8 +1064,8 @@ private fun KanbanListsScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(column.icon, fontSize = 14.sp)
-                        Text(column.label, color = if (selected) NightBlue else SoftText, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                        Text(count.toString(), color = if (selected) NightBlue else MainText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(column.label, color = if (selected) NightBlue else SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text(count.toString(), color = if (selected) NightBlue else MainText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1132,7 +1134,7 @@ private fun KanbanListsScreen(
                                 Text(
                                     if (item.listType == "shopping") "🛒 Spesa" else "📌 Lista",
                                     color = if (item.listType == "shopping") Gold else SoftText,
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(item.title, color = if (item.completed) SoftText else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -1141,7 +1143,7 @@ private fun KanbanListsScreen(
                             TextButton(onClick = { deleteCandidate = item }) { Text("×", color = Danger, fontSize = 20.sp) }
                         }
                         HorizontalDivider(color = CardBlueLight)
-                        Text("Sposta in:", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Sposta in:", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             KanbanColumns.filter { it.id != activeColumn }.forEach { target ->
                                 TextButton(
@@ -1155,7 +1157,7 @@ private fun KanbanListsScreen(
                                         )
                                     },
                                     modifier = Modifier.weight(1f).background(CardBlueLight, RoundedCornerShape(10.dp))
-                                ) { Text("${target.icon} ${target.label}", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
+                                ) { Text("${target.icon} ${target.label}", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
                             }
                         }
                     }
@@ -1317,8 +1319,9 @@ private fun TodayScreen(
         }
 
         var weekDragDistance by remember { mutableStateOf(0f) }
+        val weekSwipeThreshold = with(LocalDensity.current) { 80.dp.toPx() }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Scorri per cambiare settimana · tocca una data per vedere gli impegni", color = SoftText, fontSize = 11.sp)
+            Text("Scorri per cambiare settimana · tocca una data per vedere gli impegni", color = SoftText, fontSize = 12.sp)
             Row(
                 modifier = Modifier.fillMaxWidth().pointerInput(selectedDateValue) {
                     detectHorizontalDragGestures(
@@ -1327,8 +1330,8 @@ private fun TodayScreen(
                         },
                         onDragEnd = {
                             when {
-                                weekDragDistance <= -80f -> selectedDateValue = selectedDate.plusWeeks(1).toString()
-                                weekDragDistance >= 80f -> selectedDateValue = selectedDate.minusWeeks(1).toString()
+                                weekDragDistance <= -weekSwipeThreshold -> selectedDateValue = selectedDate.plusWeeks(1).toString()
+                                weekDragDistance >= weekSwipeThreshold -> selectedDateValue = selectedDate.minusWeeks(1).toString()
                             }
                             weekDragDistance = 0f
                         },
@@ -1349,7 +1352,7 @@ private fun TodayScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Text(date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (isSelected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (isSelected) NightBlue else SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Text(date.dayOfMonth.toString(), color = if (isSelected) NightBlue else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             if (hasScheduled) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Gold, RoundedCornerShape(50)))
@@ -1375,7 +1378,7 @@ private fun TodayScreen(
                         Triple("👤 Personale", "Personale", "Personale"),
                         Triple("📚 Studio", "Studio", "Studio")
                     ).forEach { (label, title, category) ->
-                        TextButton(onClick = { activeTimerTitle = title; activeTimerCategory = category }) { Text(label, color = SoftText, fontSize = 11.sp) }
+                        TextButton(onClick = { activeTimerTitle = title; activeTimerCategory = category }) { Text(label, color = SoftText, fontSize = 12.sp) }
                     }
                 }
                 if (selectedDate.isAfter(currentDate)) {
@@ -1420,7 +1423,7 @@ private fun TodayScreen(
                 TextButton(
                     onClick = { agendaFilter = key },
                     modifier = Modifier.weight(1f).background(if (active) CardBlueLight else CardBlue, RoundedCornerShape(16.dp))
-                ) { Text(label, color = if (active) Gold else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
+                ) { Text(label, color = if (active) Gold else SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
             }
         }
 
@@ -1485,6 +1488,18 @@ private fun HomeAgendaTaskCard(
             modifier = Modifier
                 .weight(1f)
                 .graphicsLayer { translationX = dragOffset }
+                .semantics {
+                    customActions = buildList {
+                        add(CustomAccessibilityAction(if (task.completed) "Segna come da fare" else "Completa") {
+                            onToggle()
+                            true
+                        })
+                        add(CustomAccessibilityAction("Elimina") {
+                            onDelete()
+                            true
+                        })
+                    }
+                }
                 .pointerInput(task.id, task.completed) {
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { _, amount ->
@@ -1525,12 +1540,12 @@ private fun HomeAgendaTaskCard(
             } else {
                 Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(
-                        modifier = Modifier.size(32.dp).background(if (task.completed) Success else CardBlueLight, RoundedCornerShape(50)).clickable(onClick = onToggle),
+                        modifier = Modifier.size(48.dp).background(if (task.completed) Success else CardBlueLight, RoundedCornerShape(50)).clickable(onClick = onToggle),
                         contentAlignment = Alignment.Center
                     ) { Text(if (task.completed) "✓" else "○", color = if (task.completed) NightBlue else Gold, fontWeight = FontWeight.Bold) }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(task.title, color = MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · registrata" else ""}", color = SoftText, fontSize = 11.sp)
+                        Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · registrata" else ""}", color = SoftText, fontSize = 12.sp)
                     }
                 }
             }
