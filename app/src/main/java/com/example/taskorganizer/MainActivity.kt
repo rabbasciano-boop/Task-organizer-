@@ -20,6 +20,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResultLauncher
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
@@ -208,6 +210,13 @@ private fun auroraBackgroundBrush(): Brush? = when (OrganizerPalette.currentThem
 
 private fun Modifier.organizerBackground(): Modifier = auroraBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
 
+private fun openingHaloBrush(): Brush = when (OrganizerPalette.currentTheme) {
+    OrganizerTheme.ORIGINAL_DARK -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.20f), Color.Transparent))
+    OrganizerTheme.CARTA_DORATA -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.24f), Color.Transparent))
+    OrganizerTheme.AURORA_MIDNIGHT -> Brush.radialGradient(listOf(AccentSecondary.copy(alpha = 0.28f), Gold.copy(alpha = 0.10f), Color.Transparent))
+    OrganizerTheme.AURORA_NORDIC -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.18f), AccentSecondary.copy(alpha = 0.10f), Color.Transparent))
+}
+
 class MainActivity : FragmentActivity() {
     private var widgetQuickAdd by mutableStateOf(false)
     private var notificationPermissionAllowed by mutableStateOf(true)
@@ -266,7 +275,7 @@ class MainActivity : FragmentActivity() {
             var privacyAcknowledged by remember { mutableStateOf(preferences.getBoolean("privacy_acknowledged", false)) }
             LaunchedEffect(session.showOpening) {
                 if (!session.showOpening) return@LaunchedEffect
-                delay(450)
+                delay(1_250)
                 session.showOpening = false
             }
             TaskOrganizerTheme(effectiveTheme) {
@@ -464,16 +473,35 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 private fun OpeningScreen() {
+    val progress by animateFloatAsState(
+        targetValue = 0.92f,
+        animationSpec = tween(durationMillis = 1_100),
+        label = "openingProgress"
+    )
     Box(
         modifier = Modifier.fillMaxSize().organizerBackground(),
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(R.drawable.splash_mark),
-            contentDescription = "Task Organizer",
-            modifier = Modifier.size(260.dp),
-            contentScale = ContentScale.Fit
-        )
+        Box(modifier = Modifier.fillMaxSize().background(openingHaloBrush()))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.splash_mark_transparent),
+                contentDescription = "Task Organizer",
+                modifier = Modifier.size(210.dp),
+                contentScale = ContentScale.Fit
+            )
+            Text("Task Organizer", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Sto preparando tutto", color = SoftText, fontSize = 13.sp)
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(0.46f).height(5.dp),
+                color = Gold,
+                trackColor = CardBlueLight
+            )
+        }
     }
 }
 
@@ -563,13 +591,15 @@ private fun ArchiveRecoveryScreen(onRetry: () -> Unit, onStartFresh: (onFinished
 @Composable
 private fun ArchiveLoadingScreen() {
     Box(modifier = Modifier.fillMaxSize().organizerBackground(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize().background(openingHaloBrush()))
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Image(
-                painter = painterResource(R.drawable.splash_mark),
+                painter = painterResource(R.drawable.splash_mark_transparent),
                 contentDescription = "Task Organizer",
-                modifier = Modifier.size(180.dp),
+                modifier = Modifier.size(170.dp),
                 contentScale = ContentScale.Fit
             )
+            Text("Sto preparando tutto", color = SoftText, fontSize = 13.sp)
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth(0.42f).height(5.dp),
                 color = Gold,
