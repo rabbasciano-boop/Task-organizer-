@@ -3259,9 +3259,9 @@ private fun TaskEditorScreen(
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("TITOLO ATTIVITÀ", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        OutlinedTextField(value = title, onValueChange = { title = it }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = compactEditorFieldColors())
+        OutlinedTextField(value = title, onValueChange = { title = it }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(18.dp), colors = compactEditorFieldColors())
                 Text("NOTE · FACOLTATIVE", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                OutlinedTextField(value = note, onValueChange = { note = it }, placeholder = { Text("Aggiungi dettagli o cose da ricordare") }, modifier = Modifier.fillMaxWidth(), minLines = 2, colors = compactEditorFieldColors())
+                OutlinedTextField(value = note, onValueChange = { note = it }, placeholder = { Text("Aggiungi dettagli o cose da ricordare") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = RoundedCornerShape(18.dp), colors = compactEditorFieldColors())
                 TaskColorPicker(selectedColor = cardColor, onSelected = { cardColor = it })
             }
         }
@@ -3289,6 +3289,7 @@ private fun TaskEditorScreen(
             },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            shape = RoundedCornerShape(18.dp),
             colors = compactEditorFieldColors()
         )
         if (datePickerOpen) {
@@ -3479,7 +3480,7 @@ private fun TaskEditorPreview(
     alarmEnabled: Boolean,
     cardColor: String
 ) {
-    val previewBackground = taskCardBackground(cardColor)
+    val previewBackground = taskCardBackground(cardColor).copy(alpha = 0.76f)
     val previewText = if (cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
     val previewMuted = if (cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
     val reminderText = when (reminderMinutesBefore) {
@@ -3560,6 +3561,7 @@ private fun TimeField(label: String, value: String, optional: Boolean = false, o
         trailingIcon = { TextButton(onClick = { pickerOpen = true }) { Text("Scegli", color = Gold) } },
         modifier = modifier.fillMaxWidth(),
         singleLine = true,
+        shape = RoundedCornerShape(16.dp),
         colors = compactEditorFieldColors()
     )
     if (pickerOpen) {
@@ -3798,10 +3800,10 @@ private fun editorFieldColors() = OutlinedTextFieldDefaults.colors(
 private fun compactEditorFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = MainText,
     unfocusedTextColor = MainText,
-    focusedContainerColor = CardBlueLight,
-    unfocusedContainerColor = CardBlueLight,
-    focusedBorderColor = Gold,
-    unfocusedBorderColor = SoftText.copy(alpha = 0.45f),
+    focusedContainerColor = CardBlueLight.copy(alpha = 0.62f),
+    unfocusedContainerColor = CardBlueLight.copy(alpha = 0.48f),
+    focusedBorderColor = Gold.copy(alpha = 0.75f),
+    unfocusedBorderColor = SoftText.copy(alpha = 0.22f),
     focusedLabelColor = Gold,
     unfocusedLabelColor = SoftText,
     cursorColor = Gold,
