@@ -84,6 +84,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -731,41 +732,54 @@ private fun TaskOrganizerApp(
         }
     }
 
-    fun changeTask(task: OrganizerTask) {
+    fun toggleTaskById(taskId: String) {
         updateArchive(change = { disk ->
-            RecurrenceTiming.updateTask(disk, task)
+            RecurrenceTiming.toggleTask(disk, taskId)
         }) { updated ->
-            if (updated.tasks.any { it.id == task.id }) {
-                RecurrenceTiming.reminderTasks(updated, task.id).forEach { TaskReminderScheduler.schedule(context, it) }
+            if (updated.tasks.any { it.id == taskId }) {
+                RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
             }
         }
     }
 
-    fun deleteTask(task: OrganizerTask) {
+    fun completeTaskById(taskId: String) {
         updateArchive(change = { disk ->
-            disk.copy(
-                tasks = disk.tasks.filterNot { it.id == task.id },
-                deletedTasks = disk.deletedTasks.filterNot { it.id == task.id } + task.copy(deletedAt = System.currentTimeMillis())
-            )
-        }) {
-            TaskReminderScheduler.cancel(context, task)
+            val current = disk.tasks.firstOrNull { it.id == taskId } ?: return@updateArchive disk
+            if (current.completed) disk else RecurrenceTiming.updateTask(disk, current.copy(completed = true))
+        }) { updated ->
+            if (updated.tasks.any { it.id == taskId }) {
+                RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
+            }
         }
     }
 
-    fun restoreTask(task: OrganizerTask) {
+    fun deleteTaskById(taskId: String) {
         updateArchive(change = { disk ->
+            val current = disk.tasks.firstOrNull { it.id == taskId } ?: return@updateArchive disk
             disk.copy(
-                tasks = disk.tasks.filterNot { it.id == task.id } + task.copy(deletedAt = 0L),
-                deletedTasks = disk.deletedTasks.filterNot { it.id == task.id }
+                tasks = disk.tasks.filterNot { it.id == taskId },
+                deletedTasks = disk.deletedTasks.filterNot { it.id == taskId } + current.copy(deletedAt = System.currentTimeMillis())
             )
         }) {
-            TaskReminderScheduler.schedule(context, task)
+            TaskReminderScheduler.cancel(context, taskId)
         }
     }
 
-    fun permanentlyDeleteTask(task: OrganizerTask) {
+    fun restoreTaskById(taskId: String) {
         updateArchive(change = { disk ->
-            disk.copy(deletedTasks = disk.deletedTasks.filterNot { it.id == task.id })
+            val current = disk.deletedTasks.firstOrNull { it.id == taskId } ?: return@updateArchive disk
+            disk.copy(
+                tasks = disk.tasks.filterNot { it.id == taskId } + current.copy(deletedAt = 0L),
+                deletedTasks = disk.deletedTasks.filterNot { it.id == taskId }
+            )
+        }) { updated ->
+            updated.tasks.firstOrNull { it.id == taskId }?.let { TaskReminderScheduler.schedule(context, it) }
+        }
+    }
+
+    fun permanentlyDeleteTaskById(taskId: String) {
+        updateArchive(change = { disk ->
+            disk.copy(deletedTasks = disk.deletedTasks.filterNot { it.id == taskId })
         })
     }
 
@@ -930,13 +944,14 @@ private fun TaskOrganizerApp(
                             )
                         })
                     },
-                    onChange = ::changeTask,
-                    onDelete = ::deleteTask,
+                    onToggleTask = ::toggleTaskById,
+                    onCompleteTask = ::completeTaskById,
+                    onDeleteTask = ::deleteTaskById,
                     onEdit = openEditTask,
                     onManageAccount = { navigateToTab(4) },
                     onOpenPrivacy = { privacyInfoOpen = true }
                 )
-                OrganizerScreen.Activities -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::changeTask, openEditTask, ::deleteTask, ::restoreTask, ::permanentlyDeleteTask)
+                OrganizerScreen.Activities -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::toggleTaskById, openEditTask, ::deleteTaskById, ::restoreTaskById, ::permanentlyDeleteTaskById)
                 OrganizerScreen.Lists -> KanbanListsScreen(
                     items = listItems,
                     onAdd = { item -> updateArchive(change = { disk -> disk.copy(listItems = disk.listItems + item) }) },
@@ -948,7 +963,7 @@ private fun TaskOrganizerApp(
                     },
                     onDelete = { item -> updateArchive(change = { disk -> disk.copy(listItems = disk.listItems.filterNot { it.id == item.id }) }) }
                 )
-                OrganizerScreen.Calendar -> CalendarScreen(tasks, openNewTask, ::changeTask, openEditTask)
+                OrganizerScreen.Calendar -> CalendarScreen(tasks, openNewTask, ::toggleTaskById, openEditTask)
                 OrganizerScreen.Options -> SettingsScreen(
                     selectedTheme = selectedTheme,
                     followSystemTheme = followSystemTheme,
@@ -1177,8 +1192,9 @@ private fun TodayScreen(
     signedInAccount: SignedInAccount?,
     onAdd: () -> Unit,
     onAddLog: (String, String, Int, LocalDate) -> Unit,
-    onChange: (OrganizerTask) -> Unit,
-    onDelete: (OrganizerTask) -> Unit,
+    onToggleTask: (String) -> Unit,
+    onCompleteTask: (String) -> Unit,
+    onDeleteTask: (String) -> Unit,
     onEdit: (OrganizerTask) -> Unit,
     onManageAccount: () -> Unit,
     onOpenPrivacy: () -> Unit
@@ -1339,13 +1355,15 @@ private fun TodayScreen(
             EmptyState("Nessuna attività in questa data", if (agendaFilter == "logged") "Non hai ancora registrato attività." else "Puoi pianificare un nuovo impegno quando vuoi.")
         } else {
             visibleTasks.forEach { task ->
-                HomeAgendaTaskCard(
-                    task = task,
-                    onToggle = { onChange(task.copy(completed = !task.completed)) },
-                    onComplete = { if (!task.completed) onChange(task.copy(completed = true)) },
-                    onDelete = { onDelete(task) },
-                    onEdit = { onEdit(task) }
-                )
+                key(task.id) {
+                    HomeAgendaTaskCard(
+                        task = task,
+                        onToggle = { onToggleTask(task.id) },
+                        onComplete = { onCompleteTask(task.id) },
+                        onDelete = { onDeleteTask(task.id) },
+                        onEdit = { onEdit(task) }
+                    )
+                }
             }
         }
         Button(
@@ -1633,11 +1651,11 @@ private fun ActivitiesScreen(
     tasks: List<OrganizerTask>,
     deletedTasks: List<OrganizerTask>,
     onAdd: () -> Unit,
-    onChange: (OrganizerTask) -> Unit,
+    onToggle: (String) -> Unit,
     onEdit: (OrganizerTask) -> Unit,
-    onDelete: (OrganizerTask) -> Unit,
-    onRestore: (OrganizerTask) -> Unit,
-    onPermanentlyDelete: (OrganizerTask) -> Unit
+    onDelete: (String) -> Unit,
+    onRestore: (String) -> Unit,
+    onPermanentlyDelete: (String) -> Unit
 ) {
     var selectedMonth by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("") }
@@ -1706,7 +1724,7 @@ private fun ActivitiesScreen(
             item { EmptyState("Nessuna attività trovata", "Prova a cambiare i filtri oppure aggiungi una nuova attività.") }
         } else {
             items(sortedTasks, key = { it.id }) { task ->
-                TaskCard(task, onToggle = { onChange(task.copy(completed = !task.completed)) }, onEdit = { onEdit(task) }, onDelete = { taskToDeleteId = task.id })
+                TaskCard(task, onToggle = { onToggle(task.id) }, onEdit = { onEdit(task) }, onDelete = { taskToDeleteId = task.id })
             }
         }
         item {
@@ -1755,7 +1773,7 @@ private fun ActivitiesScreen(
             text = { Text("Vuoi spostare “${task.title}” nel Cestino? Potrai ripristinarla in seguito.", color = SoftText) },
             confirmButton = {
                 TextButton(onClick = {
-                    onDelete(task)
+                    onDelete(task.id)
                     taskToDeleteId = null
                 }) { Text("Elimina", color = Danger) }
             },
@@ -1776,8 +1794,8 @@ private fun ActivitiesScreen(
 private fun TrashDialog(
     tasks: List<OrganizerTask>,
     onDismiss: () -> Unit,
-    onRestore: (OrganizerTask) -> Unit,
-    onPermanentlyDelete: (OrganizerTask) -> Unit
+    onRestore: (String) -> Unit,
+    onPermanentlyDelete: (String) -> Unit
 ) {
     var permanentDeleteTask by remember { mutableStateOf<OrganizerTask?>(null) }
     AlertDialog(
@@ -1793,7 +1811,7 @@ private fun TrashDialog(
                             Text(task.title, color = MainText, fontWeight = FontWeight.Bold)
                             Text("${formatItalianDate(task.date)}${formatTimeRange(task)?.let { " · $it" } ?: ""}", color = SoftText, fontSize = 12.sp)
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(onClick = { onRestore(task) }) { Text("Ripristina", color = Success) }
+                                TextButton(onClick = { onRestore(task.id) }) { Text("Ripristina", color = Success) }
                                 TextButton(onClick = { permanentDeleteTask = task }) { Text("Elimina", color = Danger) }
                             }
                         }
@@ -1811,7 +1829,7 @@ private fun TrashDialog(
             text = { Text("“${task.title}” non potrà più essere recuperata dal Cestino.", color = SoftText) },
             confirmButton = {
                 TextButton(onClick = {
-                    onPermanentlyDelete(task)
+                    onPermanentlyDelete(task.id)
                     permanentDeleteTask = null
                 }) { Text("Elimina definitivamente", color = Danger) }
             },
@@ -1881,7 +1899,7 @@ private fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Un
 private fun CalendarScreen(
     tasks: List<OrganizerTask>,
     onAdd: () -> Unit,
-    onChange: (OrganizerTask) -> Unit,
+    onToggle: (String) -> Unit,
     onEdit: (OrganizerTask) -> Unit
 ) {
     var displayedMonthValue by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
@@ -1947,7 +1965,7 @@ private fun CalendarScreen(
             items(selectedTasks, key = { it.id }) { task ->
                 CompactTaskCard(
                     task,
-                    onToggle = { onChange(task.copy(completed = !task.completed)) },
+                    onToggle = { onToggle(task.id) },
                     onEdit = { onEdit(task) }
                 )
             }

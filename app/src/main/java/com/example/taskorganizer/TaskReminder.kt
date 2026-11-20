@@ -51,10 +51,13 @@ object TaskReminderScheduler {
     }
 
     /** Cancels only PendingIntents that already exist. */
-    fun cancel(context: Context, task: OrganizerTask) {
+    fun cancel(context: Context, task: OrganizerTask) = cancel(context, task.id)
+
+    /** Cancels all reminders identified by one task id. */
+    fun cancel(context: Context, taskId: String) {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         repeat(MAX_SCHEDULED_REMINDERS) { index ->
-            existingReminderIntent(context, task.id, index)?.let { pendingIntent ->
+            existingReminderIntent(context, taskId, index)?.let { pendingIntent ->
                 alarmManager.cancel(pendingIntent)
                 pendingIntent.cancel()
             }
