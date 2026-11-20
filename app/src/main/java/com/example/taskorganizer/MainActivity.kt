@@ -2233,11 +2233,11 @@ private fun LegacySettingsScreen(
             }
         }
         Text("Temi gratuiti", color = SoftText, fontSize = 13.sp)
-        ThemeChoiceCard(OrganizerTheme.ORIGINAL_DARK, "🌙 Originale Dark", "Blu notte classico con accenti oro", selectedTheme, false, onThemeChanged)
-        ThemeChoiceCard(OrganizerTheme.CARTA_DORATA, "📜 Carta Dorata", "Chiaro caldo, morbido e leggibile", selectedTheme, false, onThemeChanged)
-        Text("Temi Plus", color = SoftText, fontSize = 13.sp)
-        ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, "✨ Aurora Midnight", "Vetro scuro con bagliori ciano e viola", selectedTheme, true, onThemeChanged)
-        ThemeChoiceCard(OrganizerTheme.AURORA_NORDIC, "❄️ Aurora Nordic", "Vetro chiaro iridescente, menta e cielo", selectedTheme, true, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.ORIGINAL_DARK, "🌙 Originale Dark", "Blu notte classico con accenti oro", selectedTheme, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.CARTA_DORATA, "📜 Carta Dorata", "Chiaro caldo, morbido e leggibile", selectedTheme, onThemeChanged)
+        Text("Temi aggiuntivi", color = SoftText, fontSize = 13.sp)
+        ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, "✨ Aurora Midnight", "Vetro scuro con bagliori ciano e viola", selectedTheme, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.AURORA_NORDIC, "❄️ Aurora Nordic", "Vetro chiaro iridescente, menta e cielo", selectedTheme, onThemeChanged)
         Text("SCHERMATA HOME", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         InfoCard(
             "Widget per la schermata Home",
@@ -2522,11 +2522,11 @@ private fun AppearanceSettingsScreen(
             }
         }
         Text("Temi gratuiti", color = SoftText, fontSize = 13.sp)
-        ThemeChoiceCard(OrganizerTheme.ORIGINAL_DARK, "🌙 Originale Dark", "Blu notte classico con accenti oro", selectedTheme, false, onThemeChanged)
-        ThemeChoiceCard(OrganizerTheme.CARTA_DORATA, "📜 Carta Dorata", "Chiaro caldo, morbido e leggibile", selectedTheme, false, onThemeChanged)
-        Text("Temi Plus", color = SoftText, fontSize = 13.sp)
-        ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, "✨ Aurora Midnight", "Vetro scuro con bagliori ciano e viola", selectedTheme, true, onThemeChanged)
-        ThemeChoiceCard(OrganizerTheme.AURORA_NORDIC, "❄️ Aurora Nordic", "Vetro chiaro iridescente, menta e cielo", selectedTheme, true, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.ORIGINAL_DARK, "🌙 Originale Dark", "Blu notte classico con accenti oro", selectedTheme, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.CARTA_DORATA, "📜 Carta Dorata", "Chiaro caldo, morbido e leggibile", selectedTheme, onThemeChanged)
+        Text("Temi aggiuntivi", color = SoftText, fontSize = 13.sp)
+        ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, "✨ Aurora Midnight", "Vetro scuro con bagliori ciano e viola", selectedTheme, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.AURORA_NORDIC, "❄️ Aurora Nordic", "Vetro chiaro iridescente, menta e cielo", selectedTheme, onThemeChanged)
     }
 }
 
@@ -2901,7 +2901,6 @@ private fun ThemeChoiceCard(
     title: String,
     subtitle: String,
     selectedTheme: OrganizerTheme,
-    isPlus: Boolean,
     onThemeChanged: (OrganizerTheme) -> Unit
 ) {
     val previewBackground = when (theme) {
@@ -2928,17 +2927,10 @@ private fun ThemeChoiceCard(
                 Text(title, color = previewText, fontWeight = FontWeight.Bold)
                 Text(subtitle, color = previewText.copy(alpha = 0.72f), fontSize = 13.sp)
             }
-            Column(horizontalAlignment = Alignment.End) {
-                if (isPlus) {
-                    Text("PLUS", color = previewAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text(if (selectedTheme == theme) "✓ Selezionato" else "Prova", color = previewAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                } else {
-                    Switch(
-                        checked = selectedTheme == theme,
-                        onCheckedChange = { onThemeChanged(theme) }
-                    )
-                }
-            }
+            Switch(
+                checked = selectedTheme == theme,
+                onCheckedChange = { onThemeChanged(theme) }
+            )
         }
     }
 }
