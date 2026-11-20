@@ -2,6 +2,6 @@
 <resources>
     <style name="Theme.TaskOrganizer.Starting" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowSplashScreenBackground">@android:color/transparent</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_empty</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark_transparent</item>
     </style>
 </resources>
