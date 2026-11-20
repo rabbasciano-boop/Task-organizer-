@@ -589,27 +589,6 @@ private fun ArchiveRecoveryScreen(onRetry: () -> Unit, onStartFresh: (onFinished
 }
 
 @Composable
-private fun ArchiveLoadingScreen() {
-    Box(modifier = Modifier.fillMaxSize().organizerBackground(), contentAlignment = Alignment.Center) {
-        Box(modifier = Modifier.fillMaxSize().background(openingHaloBrush()))
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            Image(
-                painter = painterResource(R.drawable.splash_mark_transparent),
-                contentDescription = "Task Organizer",
-                modifier = Modifier.size(170.dp),
-                contentScale = ContentScale.Fit
-            )
-            Text("Sto preparando tutto", color = SoftText, fontSize = 13.sp)
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(0.42f).height(5.dp),
-                color = Gold,
-                trackColor = CardBlueLight
-            )
-        }
-    }
-}
-
-@Composable
 private fun TaskOrganizerApp(
     selectedTheme: OrganizerTheme,
     followSystemTheme: Boolean,
@@ -647,7 +626,7 @@ private fun TaskOrganizerApp(
         archiveLoadResult = withContext(Dispatchers.IO) { store.loadSafely() }
     }
     if (archiveLoadResult == null) {
-        ArchiveLoadingScreen()
+        OpeningScreen()
         return
     }
     if (archiveLoadResult is TaskArchiveLoadResult.Unreadable) {
