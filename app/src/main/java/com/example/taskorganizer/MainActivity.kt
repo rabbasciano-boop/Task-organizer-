@@ -957,7 +957,15 @@ private fun TaskOrganizerApp(
                     onDelete = { item -> updateArchive(change = { disk -> disk.copy(listItems = disk.listItems.filterNot { it.id == item.id }) }) }
                 )
                 OrganizerScreen.Calendar -> CalendarScreen(tasks, openNewTask, ::changeTask, openEditTask)
-                OrganizerScreen.Account -> AccountScreen(
+                OrganizerScreen.Options -> SettingsScreen(
+                    selectedTheme = selectedTheme,
+                    followSystemTheme = followSystemTheme,
+                    onThemeChanged = onThemeChanged,
+                    onFollowSystemThemeChanged = onFollowSystemThemeChanged,
+                    security = security,
+                    biometricAvailable = biometricAvailable,
+                    onSecurityChanged = onSecurityChanged,
+                    onOpenBackup = { backupOpen = true },
                     nickname = nickname,
                     onNicknameChanged = { newNickname ->
                         nickname = newNickname.ifBlank { "Utente" }
@@ -983,18 +991,7 @@ private fun TaskOrganizerApp(
                                 nickname = "Utente"
                             }
                         }
-                    },
-                    onOpenBackup = { backupOpen = true }
-                )
-                OrganizerScreen.Options -> SettingsScreen(
-                    selectedTheme = selectedTheme,
-                    followSystemTheme = followSystemTheme,
-                    onThemeChanged = onThemeChanged,
-                    onFollowSystemThemeChanged = onFollowSystemThemeChanged,
-                    security = security,
-                    biometricAvailable = biometricAvailable,
-                    onSecurityChanged = onSecurityChanged,
-                    onOpenBackup = { backupOpen = true }
+                    }
                 )
             }
         }
@@ -1994,25 +1991,26 @@ private fun RowScope.CalendarDayCell(date: LocalDate?, hasTasks: Boolean, isSele
 }
 
 @Composable
-private fun AccountScreen(
+private fun AccountProfileScreen(
     nickname: String,
     onNicknameChanged: (String) -> Unit,
-    onOpenPrivacy: () -> Unit,
     signedInAccount: SignedInAccount?,
     accountWorking: Boolean,
     accountMessage: String?,
     onGoogleSignIn: () -> Unit,
     onSignOut: (deleteLocalData: Boolean) -> Unit,
     onDeleteAccount: (deleteLocalData: Boolean) -> Unit,
-    onOpenBackup: () -> Unit
+    onBack: () -> Unit
 ) {
     var nicknameDialogOpen by remember { mutableStateOf(false) }
     var nicknameDraft by remember(nickname) { mutableStateOf(nickname) }
     var signOutDialogOpen by remember { mutableStateOf(false) }
     var deleteAccountDialogOpen by remember { mutableStateOf(false) }
+    BackHandler(onBack = onBack)
     PageColumn {
-        Text("Account", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Profilo, dati e collegamenti personali.", color = SoftText)
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna ad Account", color = Gold) }
+        Text("Profilo e accesso", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Gestisci nickname e accesso facoltativo.", color = SoftText)
         Text("STATO ACCESSO", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         if (signedInAccount == null) {
             InfoCard("Stai usando l'app come ospite", "Puoi organizzare tutte le attività senza creare un account. L'accesso non invia né carica automaticamente le tue attività.", "Accesso facoltativo")
@@ -2047,17 +2045,6 @@ private fun AccountScreen(
                 Text(if (nickname.isBlank()) "Tocca qui per sceglierlo" else nickname, color = Gold, fontSize = 15.sp)
             }
         }
-        Text("DATI", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        InfoCard("Archivio locale cifrato", "Le attività restano su questo telefono e sono protette da una chiave del dispositivo.", "Sempre protetto")
-        OutlinedButton(onClick = onOpenPrivacy, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) {
-            Text("Privacy e dati", color = Gold, fontWeight = FontWeight.Bold)
-        }
-        InfoCard("Backup cifrato", "Crea un file protetto da password e conservalo dove preferisci: Drive, OneDrive, disco esterno o altro spazio personale.", "Disponibile")
-        OutlinedButton(onClick = onOpenBackup, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) {
-            Text("Apri backup", color = Gold, fontWeight = FontWeight.Bold)
-        }
-        Text("COLLEGAMENTI", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        InfoCard("Calendario personale", "Potrai collegare Google Calendar o Outlook per vedere gli impegni personali senza mescolare i dati con quelli del PC.", "Prossimamente")
     }
     if (signOutDialogOpen) {
         AlertDialog(
@@ -2125,7 +2112,7 @@ private fun PrivacyInfoScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun SettingsScreen(
+private fun LegacySettingsScreen(
     selectedTheme: OrganizerTheme,
     followSystemTheme: Boolean,
     onThemeChanged: (OrganizerTheme) -> Unit,
@@ -2275,6 +2262,289 @@ private fun SettingsScreen(
             },
             dismissButton = { TextButton(onClick = { disableDialogOpen = false }) { Text("Annulla", color = SoftText) } }
         )
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    selectedTheme: OrganizerTheme,
+    followSystemTheme: Boolean,
+    onThemeChanged: (OrganizerTheme) -> Unit,
+    onFollowSystemThemeChanged: (Boolean) -> Unit,
+    security: AppSecurity,
+    biometricAvailable: Boolean,
+    onSecurityChanged: () -> Unit,
+    onOpenBackup: () -> Unit,
+    nickname: String,
+    onNicknameChanged: (String) -> Unit,
+    onOpenPrivacy: () -> Unit,
+    signedInAccount: SignedInAccount?,
+    accountWorking: Boolean,
+    accountMessage: String?,
+    onGoogleSignIn: () -> Unit,
+    onSignOut: (deleteLocalData: Boolean) -> Unit,
+    onDeleteAccount: (deleteLocalData: Boolean) -> Unit
+) {
+    var section by rememberSaveable { mutableStateOf("root") }
+    BackHandler(enabled = section != "root") { section = "root" }
+    when (section) {
+        "root" -> SettingsHubScreen(
+            signedInAccount = signedInAccount,
+            onOpen = { section = it }
+        )
+        "account" -> AccountHubScreen(
+            signedInAccount = signedInAccount,
+            onBack = { section = "root" },
+            onOpenProfile = { section = "accountProfile" },
+            onOpenBackup = onOpenBackup,
+            onOpenPrivacy = onOpenPrivacy,
+            onOpenCalendar = { section = "accountCalendar" }
+        )
+        "accountProfile" -> AccountProfileScreen(
+            nickname = nickname,
+            onNicknameChanged = onNicknameChanged,
+            signedInAccount = signedInAccount,
+            accountWorking = accountWorking,
+            accountMessage = accountMessage,
+            onGoogleSignIn = onGoogleSignIn,
+            onSignOut = onSignOut,
+            onDeleteAccount = onDeleteAccount,
+            onBack = { section = "account" }
+        )
+        "accountCalendar" -> AccountCalendarSettingsScreen(onBack = { section = "account" })
+        "appearance" -> AppearanceSettingsScreen(
+            selectedTheme = selectedTheme,
+            followSystemTheme = followSystemTheme,
+            onThemeChanged = onThemeChanged,
+            onFollowSystemThemeChanged = onFollowSystemThemeChanged,
+            onBack = { section = "root" }
+        )
+        "home" -> HomeSettingsScreen(onBack = { section = "root" })
+        "activities" -> ActivitySettingsScreen(onBack = { section = "root" })
+        "security" -> SecuritySettingsScreen(
+            security = security,
+            biometricAvailable = biometricAvailable,
+            onSecurityChanged = onSecurityChanged,
+            onBack = { section = "root" }
+        )
+        "information" -> InformationSettingsScreen(onBack = { section = "root" })
+    }
+}
+
+@Composable
+private fun SettingsHubScreen(signedInAccount: SignedInAccount?, onOpen: (String) -> Unit) {
+    PageColumn {
+        Text("Impostazioni", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Personalizza Task Organizer in un unico posto.", color = SoftText)
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(modifier = Modifier.size(38.dp).background(Success.copy(alpha = 0.18f), RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
+                    Text(signedInAccount?.email?.firstOrNull()?.uppercase() ?: "U", color = Success, fontWeight = FontWeight.Bold)
+                }
+                Column {
+                    Text(signedInAccount?.displayName ?: "Utente", color = MainText, fontWeight = FontWeight.Bold)
+                    Text(if (signedInAccount == null) "Stai usando l'app come ospite" else "Account Google collegato", color = SoftText, fontSize = 12.sp)
+                }
+            }
+        }
+        Text("PREFERENZE", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        SettingsNavigationCard("👤", "Account", "Accesso, backup, privacy e dati personali") { onOpen("account") }
+        SettingsNavigationCard("🎨", "Aspetto", "Temi, colori e modalità chiara o scura") { onOpen("appearance") }
+        SettingsNavigationCard("⌂", "Schermata Home", "Widget e contenuti mostrati in apertura") { onOpen("home") }
+        SettingsNavigationCard("✓", "Attività e promemoria", "Categorie, notifiche e sveglie") { onOpen("activities") }
+        SettingsNavigationCard("🔒", "Sicurezza app", "PIN e sblocco biometrico") { onOpen("security") }
+        SettingsNavigationCard("ⓘ", "Informazioni", "Compatibilità e dettagli dell'app") { onOpen("information") }
+    }
+}
+
+@Composable
+private fun SettingsNavigationCard(icon: String, title: String, subtitle: String, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = CardBlue),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(modifier = Modifier.size(38.dp).background(CardBlueLight, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                Text(icon, fontSize = 18.sp)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, color = MainText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = SoftText, fontSize = 12.sp)
+            }
+            Text("›", color = Gold, fontSize = 25.sp)
+        }
+    }
+}
+
+@Composable
+private fun AccountHubScreen(
+    signedInAccount: SignedInAccount?,
+    onBack: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onOpenCalendar: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    PageColumn {
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle impostazioni", color = Gold) }
+        Text("Account", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Tutto ciò che riguarda il tuo profilo e i tuoi dati.", color = SoftText)
+        signedInAccount?.let { account ->
+            InfoCard("Connessa come ${account.displayName}", account.email, "Google collegato")
+        } ?: InfoCard("Stai usando l'app come ospite", "Puoi creare e organizzare attività senza un account.", "Accesso facoltativo")
+        Text("GESTIONE ACCOUNT", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        SettingsNavigationCard("👤", "Profilo e accesso", "Nickname, accesso Google ed uscita dall'account", onOpenProfile)
+        SettingsNavigationCard("◈", "Backup e sincronizzazione", "Crea o ripristina una copia cifrata", onOpenBackup)
+        SettingsNavigationCard("▣", "Privacy e dati", "Consensi, dati locali e cancellazione account", onOpenPrivacy)
+        SettingsNavigationCard("▦", "Calendario personale", "Google Calendar e Outlook", onOpenCalendar)
+    }
+}
+
+@Composable
+private fun AccountCalendarSettingsScreen(onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    PageColumn {
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna ad Account", color = Gold) }
+        Text("Calendario personale", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Qui potrai scegliere se collegare il tuo calendario Google o Outlook.", color = SoftText)
+        InfoCard("Collegamento opzionale", "Gli impegni personali resteranno separati dalle attività di Task Organizer. Il collegamento verrà richiesto solo quando deciderai di attivarlo.", "Prossimamente")
+    }
+}
+
+@Composable
+private fun AppearanceSettingsScreen(
+    selectedTheme: OrganizerTheme,
+    followSystemTheme: Boolean,
+    onThemeChanged: (OrganizerTheme) -> Unit,
+    onFollowSystemThemeChanged: (Boolean) -> Unit,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    PageColumn {
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle impostazioni", color = Gold) }
+        Text("Aspetto", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Tema e colori dell'app.", color = SoftText)
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Segui il tema del telefono", color = MainText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Tema scuro quando il telefono è scuro e Carta Dorata quando è chiaro.", color = SoftText, fontSize = 13.sp)
+                }
+                Switch(checked = followSystemTheme, onCheckedChange = onFollowSystemThemeChanged)
+            }
+        }
+        Text("Temi gratuiti", color = SoftText, fontSize = 13.sp)
+        ThemeChoiceCard(OrganizerTheme.ORIGINAL_DARK, "🌙 Originale Dark", "Blu notte classico con accenti oro", selectedTheme, false, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.CARTA_DORATA, "📜 Carta Dorata", "Chiaro caldo, morbido e leggibile", selectedTheme, false, onThemeChanged)
+        Text("Temi Plus", color = SoftText, fontSize = 13.sp)
+        ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, "✨ Aurora Midnight", "Vetro scuro con bagliori ciano e viola", selectedTheme, true, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.AURORA_NORDIC, "❄️ Aurora Nordic", "Vetro chiaro iridescente, menta e cielo", selectedTheme, true, onThemeChanged)
+    }
+}
+
+@Composable
+private fun HomeSettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var hideWidgetTitles by remember { mutableStateOf(TaskWidgetUpdater.areTaskTitlesHidden(context)) }
+    BackHandler(onBack = onBack)
+    PageColumn {
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle impostazioni", color = Gold) }
+        Text("Schermata Home", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Widget e contenuti mostrati all'apertura.", color = SoftText)
+        InfoCard("Widget per la schermata Home", "Tieni premuto uno spazio libero nella schermata Home, tocca Widget e cerca Task Organizer. Puoi scegliere Progresso, Riepilogo o Agenda.", "Gratuito")
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Nascondi titoli nei widget", color = MainText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Mostra “Attività pianificata” invece del titolo. Categoria e orario restano visibili.", color = SoftText, fontSize = 13.sp)
+                }
+                Switch(checked = hideWidgetTitles, onCheckedChange = { hidden ->
+                    hideWidgetTitles = hidden
+                    TaskWidgetUpdater.setTaskTitlesHidden(context, hidden)
+                    scope.launch(Dispatchers.IO) { TaskWidgetUpdater.updateAll(context) }
+                })
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivitySettingsScreen(onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    PageColumn {
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle impostazioni", color = Gold) }
+        Text("Attività e promemoria", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Le preferenze pratiche per organizzare ogni impegno.", color = SoftText)
+        InfoCard("Categorie e icone", "Puoi aggiungere e personalizzare le categorie direttamente quando crei o modifichi un'attività.", "Disponibile")
+        InfoCard("Colori delle attività", "Quando crei un'attività puoi scegliere il colore della sua card per riconoscerla più facilmente.", "Disponibile")
+        InfoCard("Promemoria e sveglie", "Li imposti in ogni attività: scegli anticipo, ripetizione, notifica o sveglia.", "Disponibile")
+    }
+}
+
+@Composable
+private fun SecuritySettingsScreen(
+    security: AppSecurity,
+    biometricAvailable: Boolean,
+    onSecurityChanged: () -> Unit,
+    onBack: () -> Unit
+) {
+    var pinDialogOpen by remember { mutableStateOf(false) }
+    var disableDialogOpen by remember { mutableStateOf(false) }
+    var pinEnabled by remember { mutableStateOf(security.hasPin()) }
+    var biometricEnabled by remember { mutableStateOf(security.isBiometricEnabled()) }
+    BackHandler(onBack = onBack)
+    PageColumn {
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle impostazioni", color = Gold) }
+        Text("Sicurezza app", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Proteggi l'accesso alle tue attività.", color = SoftText)
+        Card(modifier = Modifier.fillMaxWidth().clickable { pinDialogOpen = true }, colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Blocco app", color = MainText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(if (pinEnabled) "Il PIN protegge l'accesso quando riapri l'app. Tocca la scheda per cambiarlo." else "Attiva un PIN personale per proteggere le tue attività.", color = SoftText, fontSize = 14.sp)
+                }
+                Switch(checked = pinEnabled, onCheckedChange = { enabled -> if (enabled) pinDialogOpen = true else disableDialogOpen = true })
+            }
+        }
+        if (pinEnabled && biometricAvailable) {
+            Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+                Row(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Sblocco biometrico", color = MainText, fontWeight = FontWeight.Bold)
+                        Text("Usa impronta o riconoscimento configurato sul telefono.", color = SoftText, fontSize = 13.sp)
+                    }
+                    Switch(checked = biometricEnabled, onCheckedChange = { biometricEnabled = it; security.setBiometricEnabled(it) })
+                }
+            }
+        }
+    }
+    if (pinDialogOpen) {
+        PinSetupDialog(security = security, changing = pinEnabled, onDismiss = { pinDialogOpen = false }, onSave = {
+            security.setPin(it); pinEnabled = true; pinDialogOpen = false; onSecurityChanged()
+        })
+    }
+    if (disableDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { disableDialogOpen = false }, containerColor = CardBlue,
+            title = { Text("Disattivare il blocco?", color = MainText) },
+            text = { Text("L'app tornerà ad aprirsi senza PIN.", color = SoftText) },
+            confirmButton = { TextButton(onClick = { security.clear(); pinEnabled = false; biometricEnabled = false; disableDialogOpen = false; onSecurityChanged() }) { Text("Disattiva", color = Danger) } },
+            dismissButton = { TextButton(onClick = { disableDialogOpen = false }) { Text("Annulla", color = SoftText) } }
+        )
+    }
+}
+
+@Composable
+private fun InformationSettingsScreen(onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    PageColumn {
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle impostazioni", color = Gold) }
+        Text("Informazioni", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Dettagli utili su Task Organizer.", color = SoftText)
+        InfoCard("Compatibilità", "L'app funziona da Android 7.0 in poi. L'impronta richiede Android 9 o successivo e un telefono compatibile.", "Android 7.0+")
     }
 }
 
