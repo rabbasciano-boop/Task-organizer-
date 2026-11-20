@@ -6,6 +6,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -38,6 +40,7 @@ fun OrganizerNavigationBar(
     indicatorColor: Color
 ) {
     NavigationBar(containerColor = barColor, contentColor = mutedColor) {
+        Spacer(Modifier.width(10.dp))
         OrganizerScreen.all.forEach { screen ->
             val label = stringResource(screen.labelResource)
             NavigationBarItem(
@@ -60,5 +63,6 @@ fun OrganizerNavigationBar(
                 )
             )
         }
+        Spacer(Modifier.width(10.dp))
     }
 }
