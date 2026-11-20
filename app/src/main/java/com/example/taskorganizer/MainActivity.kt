@@ -127,6 +127,7 @@ import java.time.LocalTime
 import java.time.YearMonth
 import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.text.NumberFormat
 import java.net.URL
 import java.io.ByteArrayOutputStream
@@ -1289,7 +1290,7 @@ private fun TodayScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Text(date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (isSelected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (isSelected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         Text(date.dayOfMonth.toString(), color = if (isSelected) NightBlue else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             if (hasScheduled) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Gold, RoundedCornerShape(50)))
