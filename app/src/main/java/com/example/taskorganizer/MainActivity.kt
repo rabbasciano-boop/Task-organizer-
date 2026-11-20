@@ -26,6 +26,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -72,6 +74,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -99,6 +104,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -934,6 +940,7 @@ private fun TaskOrganizerApp(
                         })
                     },
                     onChange = ::changeTask,
+                    onDelete = ::deleteTask,
                     onEdit = openEditTask,
                     onManageAccount = { navigateToTab(4) },
                     onOpenPrivacy = { privacyInfoOpen = true }
@@ -1183,6 +1190,7 @@ private fun TodayScreen(
     onAdd: () -> Unit,
     onAddLog: (String, String, Int, LocalDate) -> Unit,
     onChange: (OrganizerTask) -> Unit,
+    onDelete: (OrganizerTask) -> Unit,
     onEdit: (OrganizerTask) -> Unit,
     onManageAccount: () -> Unit,
     onOpenPrivacy: () -> Unit
@@ -1250,26 +1258,47 @@ private fun TodayScreen(
         }
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(monthFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text("Calendario & Log", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(greetingFor(nickname), color = SoftText, fontSize = 13.sp)
+            Text(greetingFor(nickname), color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Il tuo calendario e registro attività", color = SoftText, fontSize = 13.sp)
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            weekDays.forEach { date ->
-                val isSelected = date == selectedDate
-                val hasScheduled = tasks.any { it.date == date.toString() && !it.completed }
-                val hasLogged = tasks.any { it.date == date.toString() && it.completed }
-                Column(
-                    modifier = Modifier.weight(1f).background(if (isSelected) Gold else CardBlue, RoundedCornerShape(18.dp))
-                        .clickable { selectedDateValue = date.toString() }.padding(vertical = 9.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Text(date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (isSelected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text(date.dayOfMonth.toString(), color = if (isSelected) NightBlue else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        if (hasScheduled) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Gold, RoundedCornerShape(50)))
-                        if (hasLogged) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Success, RoundedCornerShape(50)))
+        var weekDragDistance by remember { mutableStateOf(0f) }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Scorri per cambiare settimana · tocca una data per vedere gli impegni", color = SoftText, fontSize = 11.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth().pointerInput(selectedDateValue) {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { _, dragAmount ->
+                            weekDragDistance += dragAmount
+                        },
+                        onDragEnd = {
+                            when {
+                                weekDragDistance <= -80f -> selectedDateValue = selectedDate.plusWeeks(1).toString()
+                                weekDragDistance >= 80f -> selectedDateValue = selectedDate.minusWeeks(1).toString()
+                            }
+                            weekDragDistance = 0f
+                        },
+                        onDragCancel = { weekDragDistance = 0f }
+                    )
+                },
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                weekDays.forEach { date ->
+                    val isSelected = date == selectedDate
+                    val hasScheduled = tasks.any { it.date == date.toString() && !it.completed }
+                    val hasLogged = tasks.any { it.date == date.toString() && it.completed }
+                    Column(
+                        modifier = Modifier.weight(1f).background(if (isSelected) Gold else CardBlue, RoundedCornerShape(18.dp))
+                            .clickable { selectedDateValue = date.toString() }.padding(vertical = 9.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (isSelected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(date.dayOfMonth.toString(), color = if (isSelected) NightBlue else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            if (hasScheduled) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Gold, RoundedCornerShape(50)))
+                            if (hasLogged) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Success, RoundedCornerShape(50)))
+                        }
                     }
                 }
             }
@@ -1322,25 +1351,7 @@ private fun TodayScreen(
             EmptyState("Nessuna attività in questa data", if (agendaFilter == "logged") "Non hai ancora registrato attività." else "Puoi pianificare un nuovo impegno quando vuoi.")
         } else {
             visibleTasks.forEach { task ->
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                    Text(task.time ?: "--:--", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 13.dp))
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = CardBlue),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.weight(1f).clickable { onEdit(task) }
-                    ) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Box(
-                                modifier = Modifier.size(32.dp).background(if (task.completed) Success else CardBlueLight, RoundedCornerShape(50)).clickable { onChange(task.copy(completed = !task.completed)) },
-                                contentAlignment = Alignment.Center
-                            ) { Text(if (task.completed) "✓" else "○", color = if (task.completed) NightBlue else Gold, fontWeight = FontWeight.Bold) }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(task.title, color = MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · registrata" else ""}", color = SoftText, fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
+                HomeAgendaTaskCard(task = task, onToggle = { onChange(task.copy(completed = !task.completed)) }, onDelete = { onDelete(task) }, onEdit = { onEdit(task) })
             }
         }
         Button(
@@ -1355,6 +1366,72 @@ private fun formatLiveTimer(seconds: Int): String {
     val minutes = (seconds % 3_600) / 60
     val remainingSeconds = seconds % 60
     return "%02d:%02d:%02d".format(Locale.ROOT, hours, minutes, remainingSeconds)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeAgendaTaskCard(
+    task: OrganizerTask,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+    onEdit: () -> Unit
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { target ->
+            when (target) {
+                SwipeToDismissBoxValue.StartToEnd -> onToggle()
+                SwipeToDismissBoxValue.EndToStart -> onDelete()
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+            // Keep the card visible: completion updates it and deletion sends it to the recoverable trash.
+            false
+        }
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        modifier = Modifier.fillMaxWidth(),
+        backgroundContent = {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.weight(1f).fillMaxHeight().background(Success).padding(start = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("✓", color = NightBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("Completata", color = NightBlue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+                Row(
+                    modifier = Modifier.weight(1f).fillMaxHeight().background(Danger).padding(end = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text("Elimina", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.size(8.dp))
+                    Text("🗑", fontSize = 18.sp)
+                }
+            }
+        }
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+            Text(task.time ?: "--:--", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 13.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CardBlue),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.weight(1f).clickable(onClick = onEdit)
+            ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier.size(32.dp).background(if (task.completed) Success else CardBlueLight, RoundedCornerShape(50)).clickable(onClick = onToggle),
+                        contentAlignment = Alignment.Center
+                    ) { Text(if (task.completed) "✓" else "○", color = if (task.completed) NightBlue else Gold, fontWeight = FontWeight.Bold) }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(task.title, color = MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · registrata" else ""}", color = SoftText, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
