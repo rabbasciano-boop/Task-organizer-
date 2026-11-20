@@ -1056,13 +1056,7 @@ private fun KanbanListsScreen(
     val visibleItems = items.filter { kanbanStageOf(it) == activeColumn }.sortedByDescending { it.createdAt }
 
     PageColumn {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text("Flusso operativo", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text("Liste e spesa", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            }
-            Text("4 corsie", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(CardBlue, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 7.dp))
-        }
+        Text("Liste e spesa", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             KanbanColumns.forEach { column ->
@@ -1089,7 +1083,8 @@ private fun KanbanListsScreen(
                     onValueChange = { title = it },
                     placeholder = { Text(if (activeColumn == "shopping") "Cosa devi comprare?" else "Scrivi una nuova voce...") },
                     singleLine = true,
-                    colors = editorFieldColors(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = compactEditorFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (activeColumn == "shopping") {
@@ -1099,7 +1094,8 @@ private fun KanbanListsScreen(
                         placeholder = { Text("Spesa prevista · facoltativa") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        colors = editorFieldColors(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = compactEditorFieldColors(),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
