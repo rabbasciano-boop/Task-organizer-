@@ -19,13 +19,14 @@ sealed interface OrganizerScreen {
     val labelResource: Int
     val icon: Int
 
-    data object Today : OrganizerScreen { override val labelResource = R.string.nav_today; override val icon = R.drawable.ic_nav_today }
+    data object Today : OrganizerScreen { override val labelResource = R.string.nav_home; override val icon = R.drawable.ic_nav_home }
     data object Activities : OrganizerScreen { override val labelResource = R.string.nav_activities; override val icon = R.drawable.ic_nav_activities }
+    data object Lists : OrganizerScreen { override val labelResource = R.string.nav_lists; override val icon = R.drawable.ic_nav_lists }
     data object Calendar : OrganizerScreen { override val labelResource = R.string.nav_calendar; override val icon = R.drawable.ic_nav_calendar }
     data object Account : OrganizerScreen { override val labelResource = R.string.nav_account; override val icon = R.drawable.ic_nav_account }
     data object Options : OrganizerScreen { override val labelResource = R.string.nav_options; override val icon = R.drawable.ic_nav_settings }
 
-    companion object { val all = listOf(Today, Activities, Calendar, Account, Options) }
+    companion object { val all = listOf(Today, Activities, Lists, Calendar, Account, Options) }
 }
 
 @Composable

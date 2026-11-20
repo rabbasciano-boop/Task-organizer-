@@ -1,7 +1,8 @@
 <resources>
     <string name="app_name">Task Organizer</string>
-    <string name="nav_today">Oggi</string>
+    <string name="nav_home">Home</string>
     <string name="nav_activities">Attività</string>
+    <string name="nav_lists">Liste</string>
     <string name="nav_calendar">Calendario</string>
     <string name="nav_account">Account</string>
     <string name="nav_options">Opzioni</string>

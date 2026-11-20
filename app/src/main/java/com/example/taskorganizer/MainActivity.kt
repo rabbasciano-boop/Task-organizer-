@@ -641,7 +641,6 @@ private fun TaskOrganizerApp(
     var editorTaskId by rememberSaveable { mutableStateOf<String?>(null) }
     val editorTask = editorTaskId?.let { id -> tasks.firstOrNull { it.id == id } }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
-    var listsOpen by rememberSaveable { mutableStateOf(false) }
     var backupOpen by rememberSaveable { mutableStateOf(false) }
     var privacyInfoOpen by rememberSaveable { mutableStateOf(false) }
     var storageError by remember { mutableStateOf<String?>(null) }
@@ -813,14 +812,13 @@ private fun TaskOrganizerApp(
     }
 
     BackHandler(
-        enabled = storageError == null && (editorOpen || listsOpen || backupOpen || privacyInfoOpen || tabHistory.isNotEmpty())
+        enabled = storageError == null && (editorOpen || backupOpen || privacyInfoOpen || tabHistory.isNotEmpty())
     ) {
         when {
             editorOpen -> {
                 editorOpen = false
                 editorTaskId = null
             }
-            listsOpen -> listsOpen = false
             backupOpen -> backupOpen = false
             privacyInfoOpen -> privacyInfoOpen = false
             tabHistory.isNotEmpty() -> {
@@ -891,28 +889,6 @@ private fun TaskOrganizerApp(
         return
     }
 
-    if (listsOpen) {
-        ListsScreen(
-            items = listItems,
-            onBack = { listsOpen = false },
-            onAdd = { item ->
-                updateArchive(change = { disk -> disk.copy(listItems = disk.listItems + item) })
-            },
-            onChange = { item ->
-                updateArchive(change = { disk ->
-                    val index = disk.listItems.indexOfFirst { it.id == item.id }
-                    if (index < 0) disk else disk.copy(listItems = disk.listItems.toMutableList().also { it[index] = item })
-                })
-            },
-            onDelete = { item ->
-                updateArchive(change = { disk ->
-                    disk.copy(listItems = disk.listItems.filterNot { it.id == item.id })
-                })
-            }
-        )
-        return
-    }
-
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = NightBlue,
@@ -942,13 +918,38 @@ private fun TaskOrganizerApp(
                     nickname = nickname,
                     signedInAccount = signedInAccount,
                     onAdd = openNewTask,
+                    onAddLog = { title, category, minutes, date ->
+                        updateArchive(change = { disk ->
+                            disk.copy(
+                                tasks = disk.tasks + OrganizerTask(
+                                    title = title,
+                                    date = date.toString(),
+                                    time = LocalTime.now().withSecond(0).withNano(0).toString(),
+                                    category = category,
+                                    note = "Log registrato · $minutes min",
+                                    completed = true,
+                                    reminderEnabled = false
+                                )
+                            )
+                        })
+                    },
                     onChange = ::changeTask,
                     onEdit = openEditTask,
-                    onOpenLists = { listsOpen = true },
-                    onManageAccount = { navigateToTab(3) },
+                    onManageAccount = { navigateToTab(4) },
                     onOpenPrivacy = { privacyInfoOpen = true }
                 )
                 OrganizerScreen.Activities -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::changeTask, openEditTask, ::deleteTask, ::restoreTask, ::permanentlyDeleteTask)
+                OrganizerScreen.Lists -> KanbanListsScreen(
+                    items = listItems,
+                    onAdd = { item -> updateArchive(change = { disk -> disk.copy(listItems = disk.listItems + item) }) },
+                    onChange = { item ->
+                        updateArchive(change = { disk ->
+                            val index = disk.listItems.indexOfFirst { it.id == item.id }
+                            if (index < 0) disk else disk.copy(listItems = disk.listItems.toMutableList().also { it[index] = item })
+                        })
+                    },
+                    onDelete = { item -> updateArchive(change = { disk -> disk.copy(listItems = disk.listItems.filterNot { it.id == item.id }) }) }
+                )
                 OrganizerScreen.Calendar -> CalendarScreen(tasks, openNewTask, ::changeTask, openEditTask)
                 OrganizerScreen.Account -> AccountScreen(
                     nickname = nickname,
@@ -994,6 +995,158 @@ private fun TaskOrganizerApp(
     }
 }
 
+private data class KanbanColumn(val id: String, val label: String, val icon: String)
+
+private val KanbanColumns = listOf(
+    KanbanColumn("todo", "Da fare", "📥"),
+    KanbanColumn("shopping", "Spesa", "🛒"),
+    KanbanColumn("doing", "In corso", "⚡"),
+    KanbanColumn("done", "Fatto", "✓")
+)
+
+private fun kanbanStageOf(item: OrganizerListItem): String = when {
+    item.completed -> "done"
+    item.kanbanStage in KanbanColumns.map { it.id } -> item.kanbanStage
+    item.listType == "shopping" -> "shopping"
+    else -> "todo"
+}
+
+@Composable
+private fun KanbanListsScreen(
+    items: List<OrganizerListItem>,
+    onAdd: (OrganizerListItem) -> Unit,
+    onChange: (OrganizerListItem) -> Unit,
+    onDelete: (OrganizerListItem) -> Unit
+) {
+    var activeColumn by rememberSaveable { mutableStateOf("todo") }
+    var title by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf("") }
+    val active = KanbanColumns.first { it.id == activeColumn }
+    val visibleItems = items.filter { kanbanStageOf(it) == activeColumn }.sortedByDescending { it.createdAt }
+
+    PageColumn {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("Flusso operativo", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Lavagna Kanban", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            }
+            Text("4 corsie", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(CardBlue, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 7.dp))
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            KanbanColumns.forEach { column ->
+                val selected = column.id == activeColumn
+                val count = items.count { kanbanStageOf(it) == column.id }
+                TextButton(
+                    onClick = { activeColumn = column.id; error = "" },
+                    modifier = Modifier.weight(1f).background(if (selected) Gold else CardBlue, RoundedCornerShape(14.dp)).padding(vertical = 4.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(column.icon, fontSize = 14.sp)
+                        Text(column.label, color = if (selected) NightBlue else SoftText, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text(count.toString(), color = if (selected) NightBlue else MainText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("Aggiungi in ${active.icon} ${active.label}", color = MainText, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    placeholder = { Text(if (activeColumn == "shopping") "Cosa devi comprare?" else "Scrivi una nuova voce...") },
+                    singleLine = true,
+                    colors = editorFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (activeColumn == "shopping") {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        placeholder = { Text("Spesa prevista · facoltativa") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        colors = editorFieldColors(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (error.isNotBlank()) Text(error, color = Danger, fontSize = 12.sp)
+                Button(
+                    onClick = {
+                        val cents = if (activeColumn == "shopping") parseAmountCents(amount) else null
+                        error = when {
+                            title.isBlank() -> "Scrivi prima una voce."
+                            activeColumn == "shopping" && amount.isNotBlank() && cents == null -> "Inserisci un importo valido, ad esempio 3,50."
+                            else -> ""
+                        }
+                        if (error.isBlank()) {
+                            onAdd(
+                                OrganizerListItem(
+                                    title = title.trim(),
+                                    listType = if (activeColumn == "shopping") "shopping" else "todo",
+                                    amountCents = cents,
+                                    completed = activeColumn == "done",
+                                    kanbanStage = activeColumn
+                                )
+                            )
+                            title = ""
+                            amount = ""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
+                ) { Text("+ Card", fontWeight = FontWeight.Bold) }
+            }
+        }
+
+        if (visibleItems.isEmpty()) {
+            EmptyState("Nessuna card in questa corsia", "Aggiungi una voce oppure sposta qui una card esistente.")
+        } else {
+            visibleItems.forEach { item ->
+                Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(
+                                    if (item.listType == "shopping") "🛒 Spesa" else "📌 Lista",
+                                    color = if (item.listType == "shopping") Gold else SoftText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(item.title, color = if (item.completed) SoftText else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                item.amountCents?.let { Text(formatCurrency(it), color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            }
+                            TextButton(onClick = { onDelete(item) }) { Text("×", color = Danger, fontSize = 20.sp) }
+                        }
+                        HorizontalDivider(color = CardBlueLight)
+                        Text("Sposta in:", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            KanbanColumns.filter { it.id != activeColumn }.forEach { target ->
+                                TextButton(
+                                    onClick = {
+                                        onChange(
+                                            item.copy(
+                                                kanbanStage = target.id,
+                                                listType = if (target.id == "shopping") "shopping" else "todo",
+                                                completed = target.id == "done"
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f).background(CardBlueLight, RoundedCornerShape(10.dp))
+                                ) { Text("${target.icon} ${target.label}", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -1028,23 +1181,38 @@ private fun TodayScreen(
     nickname: String,
     signedInAccount: SignedInAccount?,
     onAdd: () -> Unit,
+    onAddLog: (String, String, Int, LocalDate) -> Unit,
     onChange: (OrganizerTask) -> Unit,
     onEdit: (OrganizerTask) -> Unit,
-    onOpenLists: () -> Unit,
     onManageAccount: () -> Unit,
     onOpenPrivacy: () -> Unit
 ) {
-    val today = LocalDate.now().toString()
-    val todayTasks = tasks.filter { it.date == today }.sortedBy { it.time ?: "99:99" }
-    val completed = todayTasks.count { it.completed }
-    val progress = if (todayTasks.isEmpty()) 0f else completed.toFloat() / todayTasks.size
-    var displayedWeekStart by remember { mutableStateOf(LocalDate.now().with(DayOfWeek.MONDAY)) }
-    val displayedWeekEnd = displayedWeekStart.plusDays(6)
-    val weekTasks = tasks.filter { task ->
-        runCatching { LocalDate.parse(task.date) }.getOrNull()?.let { date -> date in displayedWeekStart..displayedWeekEnd } == true
-    }.sortedWith(compareBy<OrganizerTask> { it.date }.thenBy { it.time ?: "99:99" })
-    val weekCompleted = weekTasks.count { it.completed }
-    val weekRemaining = weekTasks.size - weekCompleted
+    var selectedDateValue by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    val selectedDate = LocalDate.parse(selectedDateValue)
+    val weekStart = selectedDate.with(DayOfWeek.MONDAY)
+    val weekDays = (0L..6L).map { weekStart.plusDays(it) }
+    var agendaFilter by rememberSaveable { mutableStateOf("all") }
+    var activeTimerTitle by rememberSaveable { mutableStateOf("Attività personale") }
+    var activeTimerCategory by rememberSaveable { mutableStateOf("Personale") }
+    var timerRunning by rememberSaveable { mutableStateOf(false) }
+    var timerSeconds by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(timerRunning) {
+        while (timerRunning) {
+            delay(1_000)
+            timerSeconds += 1
+        }
+    }
+    val selectedTasks = tasks.filter { it.date == selectedDateValue }.sortedBy { it.time ?: "99:99" }
+    val visibleTasks = selectedTasks.filter { task ->
+        when (agendaFilter) {
+            "scheduled" -> !task.completed
+            "logged" -> task.completed
+            else -> true
+        }
+    }
+    val loggedToday = selectedTasks.count { it.completed }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY) }
+    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALY) }
     var profileMenuOpen by remember { mutableStateOf(false) }
 
     PageColumn {
@@ -1080,79 +1248,113 @@ private fun TodayScreen(
                 }
             }
         }
-        Text(greetingFor(nickname), color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("${todayTasks.size} attività previste oggi", color = SoftText, fontSize = 15.sp)
-
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(24.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(22.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(100.dp)) {
-                    CircularProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxSize(), color = Success, trackColor = CardBlueLight, strokeWidth = 9.dp)
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("${(progress * 100).toInt()}%", color = MainText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Text("completato", color = SoftText, fontSize = 11.sp)
-                    }
-                }
-                Column {
-                    Text("Il tuo giorno", color = MainText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(5.dp))
-                    Text("$completed di ${todayTasks.size} completate", color = SoftText, fontSize = 14.sp)
-                    Spacer(Modifier.height(12.dp))
-                    Text(if (todayTasks.isEmpty()) "Aggiungi la prima attività per iniziare." else "Continua così!", color = Gold, fontSize = 13.sp)
-                }
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(monthFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text("Calendario & Log", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(greetingFor(nickname), color = SoftText, fontSize = 13.sp)
         }
 
-        OutlinedButton(onClick = onOpenLists, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
-            Text("☑  Liste e spesa", color = Gold, fontWeight = FontWeight.Bold)
-        }
-
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(24.dp)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Riepilogo settimanale", color = MainText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { displayedWeekStart = displayedWeekStart.minusWeeks(1) }) { Text("‹", color = Gold, fontSize = 22.sp) }
-                        TextButton(onClick = { displayedWeekStart = LocalDate.now().with(DayOfWeek.MONDAY) }) { Text("Oggi", color = Gold, fontSize = 12.sp) }
-                        TextButton(onClick = { displayedWeekStart = displayedWeekStart.plusWeeks(1) }) { Text("›", color = Gold, fontSize = 22.sp) }
-                    }
-                }
-                Text("${formatItalianDate(displayedWeekStart.toString())} – ${formatItalianDate(displayedWeekEnd.toString())}", color = SoftText, fontSize = 13.sp)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                    Stat("${weekTasks.size}", "previste")
-                    Stat("$weekCompleted", "completate")
-                    Stat("$weekRemaining", "da fare")
-                }
-                val upcoming = weekTasks.filter { !it.completed }.take(3)
-                if (upcoming.isNotEmpty()) {
-                    HorizontalDivider(color = CardBlueLight)
-                    upcoming.forEach { task ->
-                        Text(
-                            "${formatItalianDate(task.date).take(5)} · ${formatTimeRange(task) ?: "senza orario"} · ${task.title}",
-                            color = MainText,
-                            fontSize = 13.sp
-                        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            weekDays.forEach { date ->
+                val isSelected = date == selectedDate
+                val hasScheduled = tasks.any { it.date == date.toString() && !it.completed }
+                val hasLogged = tasks.any { it.date == date.toString() && it.completed }
+                Column(
+                    modifier = Modifier.weight(1f).background(if (isSelected) Gold else CardBlue, RoundedCornerShape(18.dp))
+                        .clickable { selectedDateValue = date.toString() }.padding(vertical = 9.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (isSelected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(date.dayOfMonth.toString(), color = if (isSelected) NightBlue else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (hasScheduled) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Gold, RoundedCornerShape(50)))
+                        if (hasLogged) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Success, RoundedCornerShape(50)))
                     }
                 }
             }
         }
 
-        Text("Oggi", color = MainText, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-        if (todayTasks.isEmpty()) {
-            EmptyState("Nessuna attività per oggi", "Il tuo programma è libero. Puoi aggiungere un impegno quando vuoi.")
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(22.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text("Registra attività live", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(activeTimerTitle, color = SoftText, fontSize = 12.sp)
+                    }
+                    Text(formatLiveTimer(timerSeconds), color = Gold, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("💼 Lavoro" to "Lavoro", "🏃 Sport" to "Sport", "📚 Studio" to "Studio").forEach { (label, category) ->
+                        TextButton(onClick = { activeTimerTitle = label.drop(3); activeTimerCategory = category }) { Text(label, color = SoftText, fontSize = 11.sp) }
+                    }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { timerRunning = !timerRunning }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
+                        Text(if (timerRunning) "Pausa" else "Avvia", color = Gold, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = {
+                            onAddLog(activeTimerTitle, activeTimerCategory, (timerSeconds / 60).coerceAtLeast(1), selectedDate)
+                            timerRunning = false
+                            timerSeconds = 0
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
+                    ) { Text("Salva", fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            listOf("all" to "Tutto (${selectedTasks.size})", "scheduled" to "📅 Programmate", "logged" to "✓ Registrate").forEach { (key, label) ->
+                val active = agendaFilter == key
+                TextButton(
+                    onClick = { agendaFilter = key },
+                    modifier = Modifier.weight(1f).background(if (active) CardBlueLight else CardBlue, RoundedCornerShape(16.dp))
+                ) { Text(label, color = if (active) Gold else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
+            }
+        }
+
+        Text(dateFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = MainText, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        if (visibleTasks.isEmpty()) {
+            EmptyState("Nessuna attività in questa data", if (agendaFilter == "logged") "Non hai ancora registrato attività." else "Puoi pianificare un nuovo impegno quando vuoi.")
         } else {
-            todayTasks.forEach { task ->
-                CompactTaskCard(task, onToggle = { onChange(task.copy(completed = !task.completed)) }, onEdit = { onEdit(task) })
+            visibleTasks.forEach { task ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                    Text(task.time ?: "--:--", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 13.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = CardBlue),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.weight(1f).clickable { onEdit(task) }
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(
+                                modifier = Modifier.size(32.dp).background(if (task.completed) Success else CardBlueLight, RoundedCornerShape(50)).clickable { onChange(task.copy(completed = !task.completed)) },
+                                contentAlignment = Alignment.Center
+                            ) { Text(if (task.completed) "✓" else "○", color = if (task.completed) NightBlue else Gold, fontWeight = FontWeight.Bold) }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(task.title, color = MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · registrata" else ""}", color = SoftText, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
             }
         }
         Button(
             onClick = onAdd, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
-        ) { Text("+  Nuova attività", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+        ) { Text("+  Registra / Pianifica", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
     }
+}
+
+private fun formatLiveTimer(seconds: Int): String {
+    val hours = seconds / 3_600
+    val minutes = (seconds % 3_600) / 60
+    val remainingSeconds = seconds % 60
+    return "%02d:%02d:%02d".format(Locale.ROOT, hours, minutes, remainingSeconds)
 }
 
 @Composable

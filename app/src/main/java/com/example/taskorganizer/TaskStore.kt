@@ -49,6 +49,8 @@ data class OrganizerListItem(
     val listType: String = "todo",
     val amountCents: Long? = null,
     val completed: Boolean = false,
+    /** todo, shopping, doing or done. Existing entries derive a safe default when read. */
+    val kanbanStage: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -269,6 +271,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                     .put("listType", item.listType)
                     .put("amountCents", item.amountCents ?: -1L)
                     .put("completed", item.completed)
+                    .put("kanbanStage", item.kanbanStage)
                     .put("createdAt", item.createdAt)
             )
         }
@@ -318,6 +321,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                     listType = item.optString("listType", "todo"),
                     amountCents = item.optLong("amountCents", -1L).takeIf { it >= 0 },
                     completed = item.optBoolean("completed"),
+                    kanbanStage = item.optString("kanbanStage"),
                     createdAt = item.optLong("createdAt", System.currentTimeMillis())
                 )
             }
