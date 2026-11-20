@@ -243,7 +243,7 @@ class MainActivity : FragmentActivity() {
         val initialSettings = getSharedPreferences("task_organizer_settings", MODE_PRIVATE)
         val initialTheme = OrganizerTheme.fromStorage(
             initialSettings.getString("theme_mode", null),
-            initialSettings.getBoolean("dark_theme", true)
+            initialSettings.getBoolean("dark_theme", false)
         )
         val initialEffectiveTheme = if (initialSettings.getBoolean("follow_system_theme", false)) systemTheme() else initialTheme
         updateSystemBars(initialEffectiveTheme)
@@ -263,7 +263,7 @@ class MainActivity : FragmentActivity() {
                 mutableStateOf(
                     OrganizerTheme.fromStorage(
                         preferences.getString("theme_mode", null),
-                        preferences.getBoolean("dark_theme", true)
+                        preferences.getBoolean("dark_theme", false)
                     )
                 )
             }
