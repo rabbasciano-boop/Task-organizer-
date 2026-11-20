@@ -1430,7 +1430,7 @@ private fun TodayScreen(
         }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            listOf("all" to "Tutto (${selectedTasks.size})", "scheduled" to "📅 Programmate", "logged" to "✓ Registrate").forEach { (key, label) ->
+            listOf("all" to "Tutto (${selectedTasks.size})", "scheduled" to "📅 Programmate", "logged" to "✓ Completate").forEach { (key, label) ->
                 val active = agendaFilter == key
                 TextButton(
                     onClick = { agendaFilter = key },
@@ -1557,7 +1557,7 @@ private fun HomeAgendaTaskCard(
                     ) { Text(if (task.completed) "✓" else "○", color = if (task.completed) NightBlue else Gold, fontWeight = FontWeight.Bold) }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(task.title, color = MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · registrata" else ""}", color = SoftText, fontSize = 12.sp)
+                        Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · completata" else ""}", color = SoftText, fontSize = 12.sp)
                     }
                 }
             }
@@ -1818,13 +1818,6 @@ private fun ActivitiesScreen(
             }
         }
         item { Text("${sortedTasks.size} attività mostrate", color = SoftText, fontSize = 13.sp) }
-        if (deletedTasks.isNotEmpty()) {
-            item {
-                OutlinedButton(onClick = { trashOpen = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-                    Text("Cestino (${deletedTasks.size})", color = Gold, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
         if (sortedTasks.isEmpty()) {
             item { EmptyState("Nessuna attività trovata", "Prova a cambiare i filtri oppure aggiungi una nuova attività.") }
         } else {
@@ -1835,6 +1828,13 @@ private fun ActivitiesScreen(
         item {
             OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
                 Text("+ Nuova attività", color = Gold, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (deletedTasks.isNotEmpty()) {
+            item {
+                OutlinedButton(onClick = { trashOpen = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                    Text("Cestino (${deletedTasks.size})", color = Gold, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
@@ -1903,6 +1903,8 @@ private fun TrashDialog(
     onPermanentlyDelete: (String) -> Unit
 ) {
     var permanentDeleteTask by remember { mutableStateOf<OrganizerTask?>(null) }
+    var deleteAllConfirmationOpen by remember { mutableStateOf(false) }
+    var selectedTaskIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = CardBlue,
@@ -1910,10 +1912,37 @@ private fun TrashDialog(
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Le attività nel Cestino possono essere ripristinate per 30 giorni.", color = SoftText, fontSize = 13.sp)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            selectedTaskIds = if (selectedTaskIds.size == tasks.size) emptySet() else tasks.mapTo(mutableSetOf()) { it.id }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(if (selectedTaskIds.size == tasks.size) "Deseleziona" else "Seleziona tutto", color = Gold, fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { deleteAllConfirmationOpen = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("Elimina tutto", color = Danger, fontSize = 12.sp) }
+                }
                 tasks.forEach { task ->
-                    Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(14.dp)) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = if (task.id in selectedTaskIds) Gold.copy(alpha = 0.18f) else CardBlueLight),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.clickable {
+                            selectedTaskIds = if (task.id in selectedTaskIds) selectedTaskIds - task.id else selectedTaskIds + task.id
+                        }
+                    ) {
                         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text(task.title, color = MainText, fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Checkbox(checked = task.id in selectedTaskIds, onCheckedChange = { checked ->
+                                    selectedTaskIds = if (checked) selectedTaskIds + task.id else selectedTaskIds - task.id
+                                })
+                                Text(task.title, color = MainText, fontWeight = FontWeight.Bold)
+                            }
                             Text("${formatItalianDate(task.date)}${formatTimeRange(task)?.let { " · $it" } ?: ""}", color = SoftText, fontSize = 12.sp)
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 TextButton(onClick = { onRestore(task.id) }) { Text("Ripristina", color = Success) }
@@ -1939,6 +1968,23 @@ private fun TrashDialog(
                 }) { Text("Elimina definitivamente", color = Danger) }
             },
             dismissButton = { TextButton(onClick = { permanentDeleteTask = null }) { Text("Annulla", color = SoftText) } }
+        )
+    }
+    if (deleteAllConfirmationOpen) {
+        AlertDialog(
+            onDismissRequest = { deleteAllConfirmationOpen = false },
+            containerColor = CardBlue,
+            title = { Text("Eliminare tutto il Cestino?", color = MainText) },
+            text = { Text("Le ${tasks.size} attività nel Cestino non potranno più essere recuperate.", color = SoftText) },
+            confirmButton = {
+                TextButton(onClick = {
+                    tasks.forEach { onPermanentlyDelete(it.id) }
+                    selectedTaskIds = emptySet()
+                    deleteAllConfirmationOpen = false
+                    onDismiss()
+                }) { Text("Elimina tutto", color = Danger) }
+            },
+            dismissButton = { TextButton(onClick = { deleteAllConfirmationOpen = false }) { Text("Annulla", color = SoftText) } }
         )
     }
 }
@@ -3142,13 +3188,75 @@ private fun TaskEditorScreen(
     fun requestClose() {
         if (hasUnsavedChanges) discardDialogOpen = true else onCancel()
     }
+
+    fun attemptSave() {
+        val parsedDate = parseItalianDate(date)
+        val normalizedTime = normalizeTime(time)
+        val normalizedEndTime = normalizeTime(endTime)
+        val validTime = time.isBlank() || normalizedTime != null
+        val validEndTime = endTime.isBlank() || normalizedEndTime != null
+        error = when {
+            title.isBlank() -> "Inserisci un titolo."
+            parsedDate == null -> "La data deve essere nel formato GG-MM-AAAA."
+            !validTime -> "L'orario deve essere nel formato 00:00."
+            !validEndTime -> "L'orario di fine deve essere nel formato 00:00."
+            normalizedTime != null && normalizedEndTime != null && normalizedEndTime <= normalizedTime -> "L'orario di fine deve essere successivo all'inizio."
+            else -> ""
+        }
+        if (error.isBlank()) {
+            val recurrenceScheduleChanged = task != null &&
+                (task.date != parsedDate.toString() || task.recurrence != recurrence)
+            onSave(
+                OrganizerTask(
+                    id = task?.id ?: java.util.UUID.randomUUID().toString(), title = title.trim(), date = parsedDate.toString(),
+                    time = normalizedTime, endTime = normalizedEndTime, category = category, categoryIcon = categoryIcon, priority = priority, note = note.trim(),
+                    completed = task?.completed ?: false, reminderEnabled = reminderEnabled && normalizedTime != null, reminderMinutesBefore = reminderMinutesBefore, reminderRepeatMinutes = reminderRepeatMinutes, alarmEnabled = alarmEnabled && reminderEnabled && normalizedTime != null, cardColor = cardColor, examStatus = if (category == "Esami") examStatus else null,
+                    createdAt = task?.createdAt ?: System.currentTimeMillis(), deletedAt = task?.deletedAt ?: 0L, recurrence = recurrence,
+                    seriesId = if (recurrence == "none") null else task?.seriesId,
+                    recurrenceAnchorDate = if (recurrence == "none" || recurrenceScheduleChanged) null else task?.recurrenceAnchorDate
+                )
+            )
+        }
+    }
     BackHandler(onBack = ::requestClose)
 
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
     PageColumn(safeBottom = true, safeTop = true) {
-        Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Inserisci qui la tua attività", color = SoftText)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            IconButton(onClick = ::requestClose) { Text("×", color = MainText, fontSize = 26.sp) }
+            Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            TextButton(onClick = ::attemptSave) { Text("Salva", color = Gold, fontWeight = FontWeight.Bold) }
+        }
+        TaskEditorPreview(
+            title = title,
+            note = note,
+            date = date,
+            time = time,
+            endTime = endTime,
+            category = category,
+            categoryIcon = categoryIcon,
+            priority = priority,
+            reminderEnabled = reminderEnabled,
+            reminderMinutesBefore = reminderMinutesBefore,
+            alarmEnabled = alarmEnabled,
+            cardColor = cardColor
+        )
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Dettagli", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Titolo") }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = editorFieldColors())
+                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note · facoltative") }, placeholder = { Text("Aggiungi dettagli o cose da ricordare") }, modifier = Modifier.fillMaxWidth(), minLines = 2, colors = editorFieldColors())
+                TaskColorPicker(selectedColor = cardColor, onSelected = { cardColor = it })
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Data e fascia oraria", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { date = LocalDate.now().format(ItalianDateFormatter) }, modifier = Modifier.weight(1f)) { Text("Oggi", color = Gold) }
+                    TextButton(onClick = { date = LocalDate.now().plusDays(1).format(ItalianDateFormatter) }, modifier = Modifier.weight(1f)) { Text("Domani", color = Gold) }
+                    TextButton(onClick = { datePickerOpen = true }, modifier = Modifier.weight(1f)) { Text("Calendario", color = Gold, fontSize = 12.sp) }
+                }
         OutlinedTextField(
             value = date,
             onValueChange = { date = it },
@@ -3186,8 +3294,15 @@ private fun TaskEditorScreen(
                 DatePicker(state = datePickerState)
             }
         }
-        TimeField(label = "Orario di inizio", value = time, onValueChange = { time = it })
-        TimeField(label = "Orario di fine", value = endTime, optional = true, onValueChange = { endTime = it })
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TimeField(label = "Ora inizio", value = time, onValueChange = { time = it }, modifier = Modifier.weight(1f))
+                    TimeField(label = "Ora fine", value = endTime, optional = true, onValueChange = { endTime = it }, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Promemoria e sveglia", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text("Promemoria", color = MainText, fontWeight = FontWeight.SemiBold)
@@ -3237,6 +3352,11 @@ private fun TaskEditorScreen(
                 shape = RoundedCornerShape(14.dp)
             ) { Text("Consenti sveglie precise", color = Gold, fontWeight = FontWeight.SemiBold) }
         }
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Organizzazione", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         CategoryField(
             value = category,
             icon = categoryIcon,
@@ -3258,11 +3378,11 @@ private fun TaskEditorScreen(
         OptionField("Ripetizione", recurrenceOptions[recurrence] ?: "Non ripetere", recurrenceOptions.values.toList()) { choice ->
             recurrence = recurrenceOptions.entries.firstOrNull { it.value == choice }?.key ?: "none"
         }
-        TaskColorPicker(selectedColor = cardColor, onSelected = { cardColor = it })
         if (category == "Esami") {
             OptionField("Stato dell'esame", examStatus, listOf("Da prenotare", "Prenotato", "Fatto")) { examStatus = it }
         }
-        OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note") }, placeholder = { Text("Es. svolta metà attività") }, modifier = Modifier.fillMaxWidth(), minLines = 3, colors = editorFieldColors())
+            }
+        }
         if (error.isNotBlank()) Text(error, color = Danger, fontSize = 13.sp)
         Button(
             onClick = {
@@ -3317,9 +3437,54 @@ private fun TaskEditorScreen(
     }
 }
 
+@Composable
+private fun TaskEditorPreview(
+    title: String,
+    note: String,
+    date: String,
+    time: String,
+    endTime: String,
+    category: String,
+    categoryIcon: String?,
+    priority: String,
+    reminderEnabled: Boolean,
+    reminderMinutesBefore: Int,
+    alarmEnabled: Boolean,
+    cardColor: String
+) {
+    val previewBackground = taskCardBackground(cardColor)
+    val previewText = if (cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
+    val previewMuted = if (cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
+    val reminderText = when (reminderMinutesBefore) {
+        0 -> "All'orario"
+        60 -> "1 ora prima"
+        120 -> "2 ore prima"
+        1440 -> "1 giorno prima"
+        else -> "$reminderMinutesBefore min prima"
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = previewBackground), shape = RoundedCornerShape(22.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("${categoryDisplay(category, categoryIcon)}", color = previewText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    if (alarmEnabled) Text("⏰ Sveglia", color = previewText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(priority, color = previewText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Text(title.ifBlank { "Titolo nuova attività" }, color = previewText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            if (note.isNotBlank()) Text("📝 $note", color = previewMuted, fontSize = 11.sp, maxLines = 1)
+            HorizontalDivider(color = previewMuted.copy(alpha = 0.25f))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("📅 $date${if (time.isNotBlank()) " · $time${if (endTime.isNotBlank()) "–$endTime" else ""}" else ""}", color = previewMuted, fontSize = 10.sp)
+                if (reminderEnabled && time.isNotBlank()) Text("🔔 $reminderText", color = previewMuted, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeField(label: String, value: String, optional: Boolean = false, onValueChange: (String) -> Unit) {
+private fun TimeField(label: String, value: String, optional: Boolean = false, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
     var pickerOpen by remember { mutableStateOf(false) }
     val normalized = normalizeTime(value)
     val initialHour = normalized?.substringBefore(":")?.toIntOrNull() ?: 0
@@ -3332,7 +3497,7 @@ private fun TimeField(label: String, value: String, optional: Boolean = false, o
         label = { Text(label) },
         placeholder = { Text(if (optional) "00:00 — facoltativo" else "00:00 — formato 24 ore") },
         trailingIcon = { TextButton(onClick = { pickerOpen = true }) { Text("Scegli", color = Gold) } },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         singleLine = true,
         colors = editorFieldColors()
     )
