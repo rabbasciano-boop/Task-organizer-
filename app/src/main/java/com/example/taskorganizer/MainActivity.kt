@@ -75,6 +75,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -950,6 +953,7 @@ private fun TaskOrganizerApp(
                     onToggleTask = ::toggleTaskById,
                     onCompleteTask = ::completeTaskById,
                     onDeleteTask = ::deleteTaskById,
+                    onRestoreTask = ::restoreTaskById,
                     onEdit = openEditTask,
                     onManageAccount = { navigateToTab(4) },
                     onOpenPrivacy = { privacyInfoOpen = true }
@@ -1035,6 +1039,7 @@ private fun KanbanListsScreen(
     var title by rememberSaveable { mutableStateOf("") }
     var amount by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf("") }
+    var deleteCandidate by remember { mutableStateOf<OrganizerListItem?>(null) }
     val active = KanbanColumns.first { it.id == activeColumn }
     val visibleItems = items.filter { kanbanStageOf(it) == activeColumn }.sortedByDescending { it.createdAt }
 
@@ -1133,7 +1138,7 @@ private fun KanbanListsScreen(
                                 Text(item.title, color = if (item.completed) SoftText else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                                 item.amountCents?.let { Text(formatCurrency(it), color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                             }
-                            TextButton(onClick = { onDelete(item) }) { Text("×", color = Danger, fontSize = 20.sp) }
+                            TextButton(onClick = { deleteCandidate = item }) { Text("×", color = Danger, fontSize = 20.sp) }
                         }
                         HorizontalDivider(color = CardBlueLight)
                         Text("Sposta in:", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -1157,6 +1162,16 @@ private fun KanbanListsScreen(
                 }
             }
         }
+    }
+    deleteCandidate?.let { item ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            containerColor = CardBlue,
+            title = { Text("Eliminare elemento?", color = MainText) },
+            text = { Text("Vuoi eliminare “${item.title}”? L'operazione non può essere annullata.", color = SoftText) },
+            confirmButton = { TextButton(onClick = { onDelete(item); deleteCandidate = null }) { Text("Elimina", color = Danger) } },
+            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text("Annulla", color = SoftText) } }
+        )
     }
 }
 
@@ -1198,10 +1213,20 @@ private fun TodayScreen(
     onToggleTask: (String) -> Unit,
     onCompleteTask: (String) -> Unit,
     onDeleteTask: (String) -> Unit,
+    onRestoreTask: (String) -> Unit,
     onEdit: (OrganizerTask) -> Unit,
     onManageAccount: () -> Unit,
     onOpenPrivacy: () -> Unit
 ) {
+    val deleteSnackbar = remember { SnackbarHostState() }
+    var deletedTaskId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(deletedTaskId) {
+        val taskId = deletedTaskId ?: return@LaunchedEffect
+        if (deleteSnackbar.showSnackbar("Attività spostata nel Cestino", "Annulla") == SnackbarResult.ActionPerformed) {
+            onRestoreTask(taskId)
+        }
+        deletedTaskId = null
+    }
     var selectedDateValue by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     var currentDate by remember { mutableStateOf(LocalDate.now()) }
     LaunchedEffect(Unit) {
@@ -1248,6 +1273,7 @@ private fun TodayScreen(
     val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALY) }
     var profileMenuOpen by remember { mutableStateOf(false) }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     PageColumn {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Task Organizer", color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -1408,7 +1434,7 @@ private fun TodayScreen(
                         task = task,
                         onToggle = { onToggleTask(task.id) },
                         onComplete = { onCompleteTask(task.id) },
-                        onDelete = { onDeleteTask(task.id) },
+                        onDelete = { onDeleteTask(task.id); deletedTaskId = task.id },
                         onEdit = { onEdit(task) }
                     )
                 }
@@ -1418,6 +1444,8 @@ private fun TodayScreen(
             onClick = onAdd, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
         ) { Text("+  Registra / Pianifica", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+    }
+        SnackbarHost(hostState = deleteSnackbar, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
     }
 }
 
