@@ -10,6 +10,7 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -205,7 +206,6 @@ class MainActivity : FragmentActivity() {
     private var notificationPermissionAllowed by mutableStateOf(true)
     private var pendingBackupImportUri by mutableStateOf<Uri?>(null)
     private var pendingBackupExportUri by mutableStateOf<Uri?>(null)
-    private var pendingBackupExportPassword: CharArray? = null
     private lateinit var backupImportLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var backupExportLauncher: ActivityResultLauncher<String>
     private val uiSession by lazy(LazyThreadSafetyMode.NONE) {
@@ -219,8 +219,7 @@ class MainActivity : FragmentActivity() {
         }
         backupExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
             if (uri == null) {
-                pendingBackupExportPassword?.fill('\u0000')
-                pendingBackupExportPassword = null
+                uiSession.clearBackupExportPassword()
             }
             pendingBackupExportUri = uri
         }
@@ -333,13 +332,10 @@ class MainActivity : FragmentActivity() {
                         onBackupImportHandled = { pendingBackupImportUri = null },
                         pendingBackupExportUri = pendingBackupExportUri,
                         onCreateBackupExport = { fileName, password ->
-                            pendingBackupExportPassword?.fill('\u0000')
-                            pendingBackupExportPassword = password
+                            uiSession.setBackupExportPassword(password)
                             backupExportLauncher.launch(fileName)
                         },
-                        takeBackupExportPassword = {
-                            pendingBackupExportPassword.also { pendingBackupExportPassword = null }
-                        },
+                        takeBackupExportPassword = uiSession::takeBackupExportPassword,
                         onBackupExportHandled = { pendingBackupExportUri = null },
                         onSecurityChanged = {
                             updateSecureWindow()
@@ -2597,6 +2593,14 @@ private fun BackupScreen(
         val uri = pendingExportUri ?: return@LaunchedEffect
         val password = takeExportPassword()
         if (password == null) {
+            val deleted = withContext(Dispatchers.IO) {
+                runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }.getOrDefault(false)
+            }
+            message = if (deleted) {
+                "Backup non creato: la richiesta è stata interrotta e il file vuoto è stato rimosso."
+            } else {
+                "Backup non creato: la richiesta è stata interrotta. Se vedi un file vuoto nella cartella scelta, puoi eliminarlo."
+            }
             onExportUriHandled()
             return@LaunchedEffect
         }
@@ -2609,6 +2613,17 @@ private fun BackupScreen(
                         output.write(encrypted)
                         output.flush()
                     } ?: error("Non è stato possibile creare il file scelto.")
+                    val savedBytes = context.contentResolver.openInputStream(uri)?.use { input ->
+                        val buffer = ByteArray(8 * 1024)
+                        var total = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            total += read
+                        }
+                        total
+                    } ?: 0L
+                    check(savedBytes > 0L) { "Il file di backup risulta vuoto." }
                 } finally {
                     password.fill('\u0000')
                 }

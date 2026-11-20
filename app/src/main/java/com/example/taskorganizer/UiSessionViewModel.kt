@@ -14,6 +14,7 @@ import androidx.lifecycle.ViewModelProvider
 class UiSessionViewModel(hasPin: Boolean) : ViewModel() {
     var isUnlocked by mutableStateOf(!hasPin)
     var showOpening by mutableStateOf(true)
+    private var pendingBackupExportPassword: CharArray? = null
 
     fun unlock() {
         isUnlocked = true
@@ -21,6 +22,25 @@ class UiSessionViewModel(hasPin: Boolean) : ViewModel() {
 
     fun lock() {
         isUnlocked = false
+    }
+
+    fun setBackupExportPassword(password: CharArray) {
+        pendingBackupExportPassword?.fill('\u0000')
+        pendingBackupExportPassword = password
+    }
+
+    fun takeBackupExportPassword(): CharArray? = pendingBackupExportPassword.also {
+        pendingBackupExportPassword = null
+    }
+
+    fun clearBackupExportPassword() {
+        pendingBackupExportPassword?.fill('\u0000')
+        pendingBackupExportPassword = null
+    }
+
+    override fun onCleared() {
+        clearBackupExportPassword()
+        super.onCleared()
     }
 }
 
