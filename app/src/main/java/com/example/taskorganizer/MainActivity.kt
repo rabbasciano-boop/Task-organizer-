@@ -1351,7 +1351,13 @@ private fun TodayScreen(
             EmptyState("Nessuna attività in questa data", if (agendaFilter == "logged") "Non hai ancora registrato attività." else "Puoi pianificare un nuovo impegno quando vuoi.")
         } else {
             visibleTasks.forEach { task ->
-                HomeAgendaTaskCard(task = task, onToggle = { onChange(task.copy(completed = !task.completed)) }, onDelete = { onDelete(task) }, onEdit = { onEdit(task) })
+                HomeAgendaTaskCard(
+                    task = task,
+                    onToggle = { onChange(task.copy(completed = !task.completed)) },
+                    onComplete = { if (!task.completed) onChange(task.copy(completed = true)) },
+                    onDelete = { onDelete(task) },
+                    onEdit = { onEdit(task) }
+                )
             }
         }
         Button(
@@ -1373,13 +1379,14 @@ private fun formatLiveTimer(seconds: Int): String {
 private fun HomeAgendaTaskCard(
     task: OrganizerTask,
     onToggle: () -> Unit,
+    onComplete: () -> Unit,
     onDelete: () -> Unit,
     onEdit: () -> Unit
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { target ->
             when (target) {
-                SwipeToDismissBoxValue.StartToEnd -> onToggle()
+                SwipeToDismissBoxValue.StartToEnd -> onComplete()
                 SwipeToDismissBoxValue.EndToStart -> onDelete()
                 SwipeToDismissBoxValue.Settled -> Unit
             }
@@ -1387,46 +1394,56 @@ private fun HomeAgendaTaskCard(
             false
         }
     )
+    val swipeAction = when (dismissState.dismissDirection) {
+        SwipeToDismissBoxValue.StartToEnd -> "complete"
+        SwipeToDismissBoxValue.EndToStart -> "delete"
+        SwipeToDismissBoxValue.Settled -> null
+    }
     SwipeToDismissBox(
         state = dismissState,
         modifier = Modifier.fillMaxWidth(),
-        backgroundContent = {
-            Row(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.weight(1f).fillMaxHeight().background(Success).padding(start = 18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("✓", color = NightBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("Completata", color = NightBlue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-                Row(
-                    modifier = Modifier.weight(1f).fillMaxHeight().background(Danger).padding(end = 18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text("Elimina", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.size(8.dp))
-                    Text("🗑", fontSize = 18.sp)
-                }
-            }
-        }
+        enableDismissFromStartToEnd = !task.completed,
+        backgroundContent = { Spacer(Modifier.fillMaxSize()) }
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
             Text(task.time ?: "--:--", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 13.dp))
             Card(
-                colors = CardDefaults.cardColors(containerColor = CardBlue),
+                colors = CardDefaults.cardColors(
+                    containerColor = when (swipeAction) {
+                        "complete" -> Success
+                        "delete" -> Danger
+                        else -> CardBlue
+                    }
+                ),
                 shape = RoundedCornerShape(20.dp),
                 modifier = Modifier.weight(1f).clickable(onClick = onEdit)
             ) {
-                Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(
-                        modifier = Modifier.size(32.dp).background(if (task.completed) Success else CardBlueLight, RoundedCornerShape(50)).clickable(onClick = onToggle),
-                        contentAlignment = Alignment.Center
-                    ) { Text(if (task.completed) "✓" else "○", color = if (task.completed) NightBlue else Gold, fontWeight = FontWeight.Bold) }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(task.title, color = MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · registrata" else ""}", color = SoftText, fontSize = 11.sp)
+                if (swipeAction != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        if (swipeAction == "complete") {
+                            Text("✓", color = NightBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.size(8.dp))
+                            Text("Completata", color = NightBlue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        } else {
+                            Text("🗑", fontSize = 19.sp)
+                            Spacer(Modifier.size(8.dp))
+                            Text("Elimina", color = MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(
+                            modifier = Modifier.size(32.dp).background(if (task.completed) Success else CardBlueLight, RoundedCornerShape(50)).clickable(onClick = onToggle),
+                            contentAlignment = Alignment.Center
+                        ) { Text(if (task.completed) "✓" else "○", color = if (task.completed) NightBlue else Gold, fontWeight = FontWeight.Bold) }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(task.title, color = MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("${categoryDisplay(task.category, task.categoryIcon)}${if (task.completed) " · registrata" else ""}", color = SoftText, fontSize = 11.sp)
+                        }
                     }
                 }
             }
