@@ -24,6 +24,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -1202,6 +1203,17 @@ private fun TodayScreen(
     onOpenPrivacy: () -> Unit
 ) {
     var selectedDateValue by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    var currentDate by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            val today = LocalDate.now()
+            if (today != currentDate) {
+                currentDate = today
+                selectedDateValue = today.toString()
+            }
+        }
+    }
     val selectedDate = LocalDate.parse(selectedDateValue)
     val weekStart = selectedDate.with(DayOfWeek.MONDAY)
     val weekDays = (0L..6L).map { weekStart.plusDays(it) }
@@ -1216,7 +1228,7 @@ private fun TodayScreen(
         (timerNowMillis - timerStartedAtMillis).coerceAtLeast(0L)
     } else 0L
     val timerSeconds = (timerElapsedMillis / 1_000L).toInt()
-    val canSaveLiveLog = timerSeconds >= 60 && !selectedDate.isAfter(LocalDate.now())
+    val canSaveLiveLog = timerSeconds >= 60 && !selectedDate.isAfter(currentDate)
     LaunchedEffect(timerRunning, timerStartedAtMillis) {
         while (timerRunning) {
             timerNowMillis = System.currentTimeMillis()
@@ -1270,7 +1282,10 @@ private fun TodayScreen(
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(monthFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(monthFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = { selectedDateValue = currentDate.toString() }) { Text("Oggi", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+            }
             Text(greetingFor(nickname), color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Il tuo calendario e registro attività", color = SoftText, fontSize = 13.sp)
         }
@@ -1298,10 +1313,12 @@ private fun TodayScreen(
             ) {
                 weekDays.forEach { date ->
                     val isSelected = date == selectedDate
+                    val isToday = date == currentDate
                     val hasScheduled = tasks.any { it.date == date.toString() && !it.completed }
                     val hasLogged = tasks.any { it.date == date.toString() && it.completed }
                     Column(
                         modifier = Modifier.weight(1f).background(if (isSelected) Gold else CardBlue, RoundedCornerShape(18.dp))
+                            .then(if (isToday && !isSelected) Modifier.border(1.dp, Gold, RoundedCornerShape(18.dp)) else Modifier)
                             .clickable { selectedDateValue = date.toString() }.padding(vertical = 9.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -1335,7 +1352,7 @@ private fun TodayScreen(
                         TextButton(onClick = { activeTimerTitle = title; activeTimerCategory = category }) { Text(label, color = SoftText, fontSize = 11.sp) }
                     }
                 }
-                if (selectedDate.isAfter(LocalDate.now())) {
+                if (selectedDate.isAfter(currentDate)) {
                     Text("Puoi registrare un'attività solo per oggi o per una data passata.", color = Danger, fontSize = 12.sp)
                 } else if (timerSeconds < 60) {
                     Text("Registra almeno un minuto di attività.", color = SoftText, fontSize = 12.sp)
