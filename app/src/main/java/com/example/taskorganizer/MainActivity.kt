@@ -930,19 +930,21 @@ private fun TaskOrganizerApp(
                     signedInAccount = signedInAccount,
                     onAdd = openNewTask,
                     onAddLog = { title, category, minutes, date ->
-                        updateArchive(change = { disk ->
-                            disk.copy(
-                                tasks = disk.tasks + OrganizerTask(
-                                    title = title,
-                                    date = date.toString(),
-                                    time = LocalTime.now().withSecond(0).withNano(0).toString(),
-                                    category = category,
-                                    note = "Log registrato · $minutes min",
-                                    completed = true,
-                                    reminderEnabled = false
+                        if (!date.isAfter(LocalDate.now()) && minutes >= 1) {
+                            updateArchive(change = { disk ->
+                                disk.copy(
+                                    tasks = disk.tasks + OrganizerTask(
+                                        title = title,
+                                        date = date.toString(),
+                                        time = LocalTime.now().withSecond(0).withNano(0).toString(),
+                                        category = category,
+                                        note = minutes.toString(),
+                                        completed = true,
+                                        reminderEnabled = false
+                                    )
                                 )
-                            )
-                        })
+                            })
+                        }
                     },
                     onToggleTask = ::toggleTaskById,
                     onCompleteTask = ::completeTaskById,
@@ -1214,6 +1216,7 @@ private fun TodayScreen(
         (timerNowMillis - timerStartedAtMillis).coerceAtLeast(0L)
     } else 0L
     val timerSeconds = (timerElapsedMillis / 1_000L).toInt()
+    val canSaveLiveLog = timerSeconds >= 60 && !selectedDate.isAfter(LocalDate.now())
     LaunchedEffect(timerRunning, timerStartedAtMillis) {
         while (timerRunning) {
             timerNowMillis = System.currentTimeMillis()
@@ -1324,9 +1327,18 @@ private fun TodayScreen(
                     Text(formatLiveTimer(timerSeconds), color = Gold, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("💼 Lavoro" to "Lavoro", "🏃 Sport" to "Sport", "📚 Studio" to "Studio").forEach { (label, category) ->
-                        TextButton(onClick = { activeTimerTitle = label.drop(3); activeTimerCategory = category }) { Text(label, color = SoftText, fontSize = 11.sp) }
+                    listOf(
+                        Triple("💼 Lavoro", "Lavoro", "Lavoro"),
+                        Triple("👤 Personale", "Personale", "Personale"),
+                        Triple("📚 Studio", "Studio", "Studio")
+                    ).forEach { (label, title, category) ->
+                        TextButton(onClick = { activeTimerTitle = title; activeTimerCategory = category }) { Text(label, color = SoftText, fontSize = 11.sp) }
                     }
+                }
+                if (selectedDate.isAfter(LocalDate.now())) {
+                    Text("Puoi registrare un'attività solo per oggi o per una data passata.", color = Danger, fontSize = 12.sp)
+                } else if (timerSeconds < 60) {
+                    Text("Registra almeno un minuto di attività.", color = SoftText, fontSize = 12.sp)
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = {
@@ -1344,12 +1356,13 @@ private fun TodayScreen(
                     }
                     Button(
                         onClick = {
-                            onAddLog(activeTimerTitle, activeTimerCategory, (timerSeconds / 60).coerceAtLeast(1), selectedDate)
+                            onAddLog(activeTimerTitle, activeTimerCategory, timerSeconds / 60, selectedDate)
                             timerRunning = false
                             timerStartedAtMillis = 0L
                             timerAccumulatedMillis = 0L
                             timerNowMillis = System.currentTimeMillis()
                         },
+                        enabled = canSaveLiveLog,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
