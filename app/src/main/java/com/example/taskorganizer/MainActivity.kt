@@ -1022,10 +1022,11 @@ private val KanbanColumns = listOf(
     KanbanColumn("doing", "In corso", "⚡"),
     KanbanColumn("done", "Fatto", "✓")
 )
+private val KanbanStageIds = KanbanColumns.mapTo(mutableSetOf()) { it.id }
 
 private fun kanbanStageOf(item: OrganizerListItem): String = when {
     item.completed -> "done"
-    item.kanbanStage in KanbanColumns.map { it.id } -> item.kanbanStage
+    item.kanbanStage in KanbanStageIds -> item.kanbanStage
     item.listType == "shopping" -> "shopping"
     else -> "todo"
 }
@@ -1049,7 +1050,7 @@ private fun KanbanListsScreen(
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text("Flusso operativo", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text("Lavagna Kanban", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("Liste e spesa", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             }
             Text("4 corsie", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(CardBlue, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 7.dp))
         }
@@ -1127,6 +1128,7 @@ private fun KanbanListsScreen(
             EmptyState("Nessuna card in questa corsia", "Aggiungi una voce oppure sposta qui una card esistente.")
         } else {
             visibleItems.forEach { item ->
+                key(item.id) {
                 Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
                     Column(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
@@ -1161,6 +1163,7 @@ private fun KanbanListsScreen(
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -1633,6 +1636,7 @@ private fun decodeProfileImage(bytes: ByteArray): Bitmap? {
 
 private const val MAX_PROFILE_IMAGE_BYTES = 2 * 1024 * 1024
 
+/* Legacy list screen replaced by KanbanListsScreen.
 @Composable
 private fun ListsScreen(
     items: List<OrganizerListItem>,
@@ -1736,6 +1740,7 @@ private fun ListsScreen(
         }
     }
 }
+*/
 
 @Composable
 private fun ActivitiesScreen(
@@ -3131,7 +3136,7 @@ private fun TaskEditorScreen(
     BackHandler(onBack = ::requestClose)
 
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
-    PageColumn(safeBottom = true) {
+    PageColumn(safeBottom = true, safeTop = true) {
         Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Inserisci qui la tua attività", color = SoftText)
         OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Titolo") }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = editorFieldColors())
