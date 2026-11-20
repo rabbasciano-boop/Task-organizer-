@@ -3228,10 +3228,15 @@ private fun TaskEditorScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = ::requestClose) { Text("×", color = MainText, fontSize = 26.sp) }
-            Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             TextButton(onClick = ::attemptSave) { Text("Salva", color = Gold, fontWeight = FontWeight.Bold) }
         }
-        Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("ANTEPRIMA CARD LIVE", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("0 attività salvate oggi", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.size(5.dp))
             TaskEditorPreview(
                 title = title,
                 note = note,
@@ -3253,19 +3258,20 @@ private fun TaskEditorScreen(
         ) {
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Dettagli", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Titolo") }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = editorFieldColors())
-                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note · facoltative") }, placeholder = { Text("Aggiungi dettagli o cose da ricordare") }, modifier = Modifier.fillMaxWidth(), minLines = 2, colors = editorFieldColors())
+                Text("TITOLO ATTIVITÀ", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        OutlinedTextField(value = title, onValueChange = { title = it }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = compactEditorFieldColors())
+                Text("NOTE · FACOLTATIVE", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                OutlinedTextField(value = note, onValueChange = { note = it }, placeholder = { Text("Aggiungi dettagli o cose da ricordare") }, modifier = Modifier.fillMaxWidth(), minLines = 2, colors = compactEditorFieldColors())
                 TaskColorPicker(selectedColor = cardColor, onSelected = { cardColor = it })
             }
         }
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Data e fascia oraria", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("DATA E FASCIA ORARIA", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(onClick = { date = LocalDate.now().format(ItalianDateFormatter) }, modifier = Modifier.weight(1f)) { Text("Oggi", color = Gold) }
-                    TextButton(onClick = { date = LocalDate.now().plusDays(1).format(ItalianDateFormatter) }, modifier = Modifier.weight(1f)) { Text("Domani", color = Gold) }
-                    TextButton(onClick = { datePickerOpen = true }, modifier = Modifier.weight(1f)) { Text("Calendario", color = Gold, fontSize = 12.sp) }
+                    CompactEditorChip("Oggi", date == LocalDate.now().format(ItalianDateFormatter), { date = LocalDate.now().format(ItalianDateFormatter) }, Modifier.weight(1f))
+                    CompactEditorChip("Domani", date == LocalDate.now().plusDays(1).format(ItalianDateFormatter), { date = LocalDate.now().plusDays(1).format(ItalianDateFormatter) }, Modifier.weight(1f))
+                    CompactEditorChip("📅 $date", false, { datePickerOpen = true }, Modifier.weight(1f))
                 }
         OutlinedTextField(
             value = date,
@@ -3283,7 +3289,7 @@ private fun TaskEditorScreen(
             },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            colors = editorFieldColors()
+            colors = compactEditorFieldColors()
         )
         if (datePickerOpen) {
             val initialDateMillis = remember(date) { parseItalianDate(date)?.toPickerMillis() }
@@ -3504,6 +3510,16 @@ private fun TaskEditorPreview(
 }
 
 @Composable
+private fun CompactEditorChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.height(40.dp).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp)).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = if (selected) NightBlue else MainText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+    }
+}
+
+@Composable
 private fun EditorChoiceChips(
     options: List<Pair<String, String>>,
     selectedKey: String,
@@ -3514,9 +3530,9 @@ private fun EditorChoiceChips(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { (key, label) ->
                     val selected = key == selectedKey
-                    TextButton(
-                        onClick = { onSelected(key) },
-                        modifier = Modifier.weight(1f).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp))
+                    Box(
+                        modifier = Modifier.weight(1f).height(40.dp).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp)).clickable { onSelected(key) },
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(label, color = if (selected) NightBlue else MainText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     }
@@ -3544,7 +3560,7 @@ private fun TimeField(label: String, value: String, optional: Boolean = false, o
         trailingIcon = { TextButton(onClick = { pickerOpen = true }) { Text("Scegli", color = Gold) } },
         modifier = modifier.fillMaxWidth(),
         singleLine = true,
-        colors = editorFieldColors()
+        colors = compactEditorFieldColors()
     )
     if (pickerOpen) {
         AlertDialog(
@@ -3633,12 +3649,12 @@ private fun CategoryField(
                 row.forEach { category ->
                     val selected = category == value
                     val isCustomCategory = category in customCategories
-                    TextButton(
-                        onClick = { onSelected(category) },
-                        modifier = Modifier.weight(1f).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp)).combinedClickable(
+                    Box(
+                        modifier = Modifier.weight(1f).height(40.dp).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp)).combinedClickable(
                             onClick = { onSelected(category) },
                             onLongClick = if (isCustomCategory) { { categoryToDelete = category } } else null
-                        )
+                        ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(categoryDisplay(category, customCategoryIcons[category]), color = if (selected) NightBlue else MainText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     }
@@ -3771,6 +3787,21 @@ private fun editorFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedContainerColor = CardBlue,
     focusedBorderColor = Gold,
     unfocusedBorderColor = SoftText,
+    focusedLabelColor = Gold,
+    unfocusedLabelColor = SoftText,
+    cursorColor = Gold,
+    focusedPlaceholderColor = SoftText,
+    unfocusedPlaceholderColor = SoftText
+)
+
+@Composable
+private fun compactEditorFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = MainText,
+    unfocusedTextColor = MainText,
+    focusedContainerColor = CardBlueLight,
+    unfocusedContainerColor = CardBlueLight,
+    focusedBorderColor = Gold,
+    unfocusedBorderColor = SoftText.copy(alpha = 0.45f),
     focusedLabelColor = Gold,
     unfocusedLabelColor = SoftText,
     cursorColor = Gold,
