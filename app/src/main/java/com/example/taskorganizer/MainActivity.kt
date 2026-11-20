@@ -3221,26 +3221,36 @@ private fun TaskEditorScreen(
     BackHandler(onBack = ::requestClose)
 
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
-    PageColumn(safeBottom = true, safeTop = true) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             IconButton(onClick = ::requestClose) { Text("×", color = MainText, fontSize = 26.sp) }
             Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             TextButton(onClick = ::attemptSave) { Text("Salva", color = Gold, fontWeight = FontWeight.Bold) }
         }
-        TaskEditorPreview(
-            title = title,
-            note = note,
-            date = date,
-            time = time,
-            endTime = endTime,
-            category = category,
-            categoryIcon = categoryIcon,
-            priority = priority,
-            reminderEnabled = reminderEnabled,
-            reminderMinutesBefore = reminderMinutesBefore,
-            alarmEnabled = alarmEnabled,
-            cardColor = cardColor
-        )
+        Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+            TaskEditorPreview(
+                title = title,
+                note = note,
+                date = date,
+                time = time,
+                endTime = endTime,
+                category = category,
+                categoryIcon = categoryIcon,
+                priority = priority,
+                reminderEnabled = reminderEnabled,
+                reminderMinutesBefore = reminderMinutesBefore,
+                alarmEnabled = alarmEnabled,
+                cardColor = cardColor
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Dettagli", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -3319,14 +3329,20 @@ private fun TaskEditorScreen(
                     shape = RoundedCornerShape(14.dp)
                 ) { Text("Attiva notifiche", color = Gold, fontWeight = FontWeight.SemiBold) }
             }
-            val advanceOptions = linkedMapOf(0 to "All'orario", 5 to "5 minuti prima", 10 to "10 minuti prima", 15 to "15 minuti prima", 30 to "30 minuti prima", 60 to "1 ora prima", 120 to "2 ore prima", 1440 to "1 giorno prima")
-            val repeatOptions = linkedMapOf(0 to "Non ripetere", 5 to "Ogni 5 minuti", 10 to "Ogni 10 minuti", 15 to "Ogni 15 minuti", 30 to "Ogni 30 minuti", 60 to "Ogni ora")
-            OptionField("Avvisami", advanceOptions[reminderMinutesBefore] ?: "15 minuti prima", advanceOptions.values.toList()) { choice ->
-                reminderMinutesBefore = advanceOptions.entries.firstOrNull { it.value == choice }?.key ?: 15
-            }
-            OptionField("Ripeti avviso", repeatOptions[reminderRepeatMinutes] ?: "Non ripetere", repeatOptions.values.toList()) { choice ->
-                reminderRepeatMinutes = repeatOptions.entries.firstOrNull { it.value == choice }?.key ?: 0
-            }
+            val advanceOptions = listOf(0 to "All'orario", 5 to "5 min", 10 to "10 min", 15 to "15 min", 30 to "30 min", 60 to "1 ora", 120 to "2 ore", 1440 to "1 giorno")
+            Text("Avvisami", color = MainText, fontWeight = FontWeight.SemiBold)
+            EditorChoiceChips(
+                options = advanceOptions.map { (minutes, label) -> minutes.toString() to label },
+                selectedKey = reminderMinutesBefore.toString(),
+                onSelected = { reminderMinutesBefore = it.toIntOrNull() ?: 15 }
+            )
+            val repeatOptions = listOf(0 to "Non ripetere", 5 to "Ogni 5 min", 10 to "Ogni 10 min", 15 to "Ogni 15 min", 30 to "Ogni 30 min", 60 to "Ogni ora")
+            Text("Ripeti avviso", color = MainText, fontWeight = FontWeight.SemiBold)
+            EditorChoiceChips(
+                options = repeatOptions.map { (minutes, label) -> minutes.toString() to label },
+                selectedKey = reminderRepeatMinutes.toString(),
+                onSelected = { reminderRepeatMinutes = it.toIntOrNull() ?: 0 }
+            )
         }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
@@ -3373,11 +3389,15 @@ private fun TaskEditorScreen(
             },
             onDeleteCustomCategory = onDeleteCustomCategory
         )
-        OptionField("Priorità", priority, listOf("Bassa", "Media", "Alta")) { priority = it }
+        Text("Priorità", color = MainText, fontWeight = FontWeight.SemiBold)
+        EditorChoiceChips(
+            options = listOf("Bassa" to "🟢 Bassa", "Media" to "🟡 Media", "Alta" to "🔴 Alta"),
+            selectedKey = priority,
+            onSelected = { priority = it }
+        )
         val recurrenceOptions = linkedMapOf("none" to "Non ripetere", "daily" to "Ogni giorno", "weekly" to "Ogni settimana", "monthly" to "Ogni mese")
-        OptionField("Ripetizione", recurrenceOptions[recurrence] ?: "Non ripetere", recurrenceOptions.values.toList()) { choice ->
-            recurrence = recurrenceOptions.entries.firstOrNull { it.value == choice }?.key ?: "none"
-        }
+        Text("Ripetizione", color = MainText, fontWeight = FontWeight.SemiBold)
+        EditorChoiceChips(options = recurrenceOptions.toList(), selectedKey = recurrence, onSelected = { recurrence = it })
         if (category == "Esami") {
             OptionField("Stato dell'esame", examStatus, listOf("Da prenotare", "Prenotato", "Fatto")) { examStatus = it }
         }
@@ -3418,6 +3438,7 @@ private fun TaskEditorScreen(
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
         ) { Text("Salva attività", fontWeight = FontWeight.Bold) }
         TextButton(onClick = ::requestClose, modifier = Modifier.fillMaxWidth()) { Text("Annulla", color = SoftText) }
+        }
     }
     }
     if (discardDialogOpen) {
@@ -3482,6 +3503,30 @@ private fun TaskEditorPreview(
     }
 }
 
+@Composable
+private fun EditorChoiceChips(
+    options: List<Pair<String, String>>,
+    selectedKey: String,
+    onSelected: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.chunked(3).forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { (key, label) ->
+                    val selected = key == selectedKey
+                    TextButton(
+                        onClick = { onSelected(key) },
+                        modifier = Modifier.weight(1f).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp))
+                    ) {
+                        Text(label, color = if (selected) NightBlue else MainText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeField(label: String, value: String, optional: Boolean = false, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
@@ -3520,21 +3565,23 @@ private fun TimeField(label: String, value: String, optional: Boolean = false, o
 
 @Composable
 private fun TaskColorPicker(selectedColor: String, onSelected: (String) -> Unit) {
-    Text("Colore della card", color = SoftText, fontSize = 13.sp)
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("Colore della card", color = MainText, fontWeight = FontWeight.SemiBold)
+        Text(TaskCardColorOptions.firstOrNull { it.first == selectedColor }?.second ?: "Predefinito", color = SoftText, fontSize = 12.sp)
+    }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         TaskCardColorOptions.forEach { (color, label) ->
             Card(
-                modifier = Modifier.size(44.dp).clickable { onSelected(color) },
+                modifier = Modifier.size(34.dp).border(if (selectedColor == color) 2.dp else 0.dp, Gold, RoundedCornerShape(50)).clickable { onSelected(color) },
                 colors = CardDefaults.cardColors(containerColor = taskCardBackground(color)),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(50)
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(if (selectedColor == color) "✓" else "", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(if (selectedColor == color) "✓" else "", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
-    Text(TaskCardColorOptions.firstOrNull { it.first == selectedColor }?.second ?: "Predefinito", color = Gold, fontSize = 12.sp)
 }
 
 @Composable
@@ -3576,16 +3623,29 @@ private fun CategoryField(
     val standardCategories = listOf("Studio", "Personale", "Lavoro", "Esami")
     val categories = standardCategories + customCategories.filter { it !in standardCategories }
 
-    Text("Categoria", color = SoftText, fontSize = 13.sp)
-    OutlinedButton(
-        onClick = { pickerOpen = true },
-        modifier = Modifier.fillMaxWidth().height(52.dp),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, SoftText),
-        colors = ButtonDefaults.outlinedButtonColors(containerColor = CardBlue, contentColor = MainText)
-    ) {
-        Text(categoryDisplay(value, icon), color = MainText, modifier = Modifier.fillMaxWidth())
-        Text("⌄", color = Gold, fontSize = 20.sp)
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("Categoria", color = MainText, fontWeight = FontWeight.SemiBold)
+        TextButton(onClick = { customDialogOpen = true }) { Text("+ Nuova categoria", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        categories.chunked(2).forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { category ->
+                    val selected = category == value
+                    val isCustomCategory = category in customCategories
+                    TextButton(
+                        onClick = { onSelected(category) },
+                        modifier = Modifier.weight(1f).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp)).combinedClickable(
+                            onClick = { onSelected(category) },
+                            onLongClick = if (isCustomCategory) { { categoryToDelete = category } } else null
+                        )
+                    ) {
+                        Text(categoryDisplay(category, customCategoryIcons[category]), color = if (selected) NightBlue else MainText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    }
+                }
+                repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
     if (pickerOpen) {
         AlertDialog(
