@@ -51,7 +51,9 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/task_organizer_widget_large" />
         </receiver>
-        <receiver android:name=".WidgetRefreshReceiver" android:exported="false">
+        <!-- This receiver only redraws widget content. It is exported so Android can deliver
+             configuration changes (including night mode) while the app is not running. -->
+        <receiver android:name=".WidgetRefreshReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
