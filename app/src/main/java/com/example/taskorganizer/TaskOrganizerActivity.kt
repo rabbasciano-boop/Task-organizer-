@@ -125,7 +125,10 @@ open class TaskOrganizerActivity : FragmentActivity() {
             val effectiveTheme = if (followSystemTheme) {
                 if (isSystemInDarkTheme()) OrganizerTheme.ORIGINAL_DARK else OrganizerTheme.CARTA_DORATA
             } else selectedTheme
-            LaunchedEffect(effectiveTheme) { updateSystemBars(effectiveTheme) }
+            LaunchedEffect(effectiveTheme) {
+                updateSystemBars(effectiveTheme)
+                Thread { TaskWidgetUpdater.updateAll(this@TaskOrganizerActivity) }.start()
+            }
             var privacyAcknowledged by remember { mutableStateOf(preferences.getBoolean("privacy_acknowledged", false)) }
             LaunchedEffect(session.showOpening) {
                 if (!session.showOpening) return@LaunchedEffect
@@ -162,6 +165,7 @@ open class TaskOrganizerActivity : FragmentActivity() {
                         },
                         security = security,
                         biometricAvailable = canUseBiometrics(),
+                        onRequestBiometric = { onResult -> authenticateWithBiometrics(onResult) },
                         openNewFromWidget = widgetQuickAdd,
                         onWidgetQuickAddHandled = { widgetQuickAdd = false },
                         signedInAccount = signedInAccount,
@@ -402,6 +406,7 @@ private fun TaskOrganizerPreview() {
             onFollowSystemThemeChanged = {},
             security = AppSecurity(context),
             biometricAvailable = false,
+            onRequestBiometric = {},
             openNewFromWidget = false,
             onWidgetQuickAddHandled = {},
             signedInAccount = null,

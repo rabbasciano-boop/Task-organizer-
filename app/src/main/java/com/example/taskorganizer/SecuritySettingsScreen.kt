@@ -12,17 +12,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 @Composable
 fun SecuritySettingsScreen(
     security: AppSecurity,
     biometricAvailable: Boolean,
+    onRequestBiometric: ((Boolean, String?) -> Unit) -> Unit,
     onSecurityChanged: () -> Unit,
     onBack: () -> Unit
 ) {
     var pinDialogOpen by remember { mutableStateOf(false) }
     var disableDialogOpen by remember { mutableStateOf(false) }
+    var disableAuthorizationOpen by remember { mutableStateOf(false) }
     var pinEnabled by remember { mutableStateOf(security.hasPin()) }
     var biometricEnabled by remember { mutableStateOf(security.isBiometricEnabled()) }
     BackHandler(onBack = onBack)
@@ -61,10 +68,106 @@ fun SecuritySettingsScreen(
             onDismissRequest = { disableDialogOpen = false }, containerColor = CardBlue,
             title = { Text(stringResource(R.string.disable_lock_title), color = MainText) },
             text = { Text(stringResource(R.string.disable_lock_description), color = SoftText) },
-            confirmButton = { TextButton(onClick = { security.clear(); pinEnabled = false; biometricEnabled = false; disableDialogOpen = false; onSecurityChanged() }) { Text(stringResource(R.string.disable), color = Danger) } },
+            confirmButton = { TextButton(onClick = { disableDialogOpen = false; disableAuthorizationOpen = true }) { Text(stringResource(R.string.disable), color = Danger) } },
             dismissButton = { TextButton(onClick = { disableDialogOpen = false }) { Text(stringResource(R.string.cancel), color = SoftText) } }
         )
     }
+    if (disableAuthorizationOpen) {
+        DisableLockAuthorizationDialog(
+            security = security,
+            biometricAvailable = biometricAvailable && security.isBiometricEnabled(),
+            onRequestBiometric = onRequestBiometric,
+            onAuthorized = {
+                security.clear()
+                pinEnabled = false
+                biometricEnabled = false
+                disableAuthorizationOpen = false
+                onSecurityChanged()
+            },
+            onDismiss = { disableAuthorizationOpen = false }
+        )
+    }
+}
+
+@Composable
+private fun DisableLockAuthorizationDialog(
+    security: AppSecurity,
+    biometricAvailable: Boolean,
+    onRequestBiometric: ((Boolean, String?) -> Unit) -> Unit,
+    onAuthorized: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var working by remember { mutableStateOf(false) }
+
+    fun checkPin() {
+        working = true
+        scope.launch {
+            when (val result = withContext(Dispatchers.Default) { security.verifyPinWithRateLimit(pin) }) {
+                PinVerification.Verified -> onAuthorized()
+                is PinVerification.Incorrect -> {
+                    error = if (result.delayMillis > 0L) {
+                        "Troppi tentativi. Attendi ${formatSecurityLockDelay(result.delayMillis)} prima di riprovare."
+                    } else {
+                        "PIN non corretto. Riprova."
+                    }
+                }
+                is PinVerification.Locked -> {
+                    error = "Troppi tentativi. Attendi ${formatSecurityLockDelay((result.untilMillis - System.currentTimeMillis()).coerceAtLeast(0L))} prima di riprovare."
+                }
+            }
+            working = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        containerColor = CardBlue,
+        title = { Text("Conferma la tua identità", color = MainText) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Per disattivare il blocco app, inserisci il PIN oppure usa l'impronta configurata.", color = SoftText, fontSize = 13.sp)
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { pin = it.filter(Char::isDigit).take(12); error = null },
+                    label = { Text("PIN") },
+                    placeholder = { Text("Almeno 6 cifre") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    colors = editorFieldColors(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                error?.let { Text(it, color = Danger, fontSize = 13.sp) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = ::checkPin, enabled = !working && pin.isNotBlank()) {
+                Text(if (working) "Verifica…" else "Conferma PIN", color = Gold)
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (biometricAvailable) {
+                    TextButton(onClick = {
+                        working = true
+                        onRequestBiometric { success, message ->
+                            working = false
+                            if (success) onAuthorized() else error = message ?: "Impronta non riconosciuta."
+                        }
+                    }, enabled = !working) { Text("Usa impronta", color = Gold) }
+                }
+                TextButton(onClick = onDismiss, enabled = !working) { Text(stringResource(R.string.cancel), color = SoftText) }
+            }
+        }
+    )
+}
+
+private fun formatSecurityLockDelay(milliseconds: Long): String {
+    val seconds = ((milliseconds + 999) / 1_000).coerceAtLeast(1)
+    return if (seconds < 60) "$seconds secondi" else "${(seconds + 59) / 60} minuti"
 }
 
 @Composable

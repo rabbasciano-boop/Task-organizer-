@@ -16,6 +16,7 @@ fun SettingsScreen(
     onFollowSystemThemeChanged: (Boolean) -> Unit,
     security: AppSecurity,
     biometricAvailable: Boolean,
+    onRequestBiometric: ((Boolean, String?) -> Unit) -> Unit,
     onSecurityChanged: () -> Unit,
     onOpenBackup: () -> Unit,
     nickname: String,
@@ -72,6 +73,7 @@ fun SettingsScreen(
         "security" -> SecuritySettingsScreen(
             security = security,
             biometricAvailable = biometricAvailable,
+            onRequestBiometric = onRequestBiometric,
             onSecurityChanged = onSecurityChanged,
             onBack = ::goBack
         )

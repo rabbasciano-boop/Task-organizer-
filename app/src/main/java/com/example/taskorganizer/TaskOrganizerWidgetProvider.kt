@@ -30,8 +30,14 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         updateOnWorker(context) {
-            val archive = TaskWidgetUpdater.loadArchive(context) ?: return@updateOnWorker
-            appWidgetIds.forEach { id -> TaskWidgetUpdater.update(context, appWidgetManager, id, form, archive) }
+            when (val result = TaskWidgetUpdater.loadArchiveResult(context)) {
+                is TaskArchiveLoadResult.Loaded -> appWidgetIds.forEach { id ->
+                    TaskWidgetUpdater.update(context, appWidgetManager, id, form, result.archive)
+                }
+                is TaskArchiveLoadResult.Unreadable -> appWidgetIds.forEach { id ->
+                    TaskWidgetUpdater.updateUnreadable(context, appWidgetManager, id, form)
+                }
+            }
         }
     }
 
@@ -76,7 +82,8 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
                 }
                 TaskWidgetUpdater.updateAll(appContext, savedArchive)
             } catch (_: Exception) {
-                // The app retains the encrypted archive unchanged. It can offer recovery on next open.
+                // Never replace unreadable data. Tell the person to open the app for safe recovery.
+                TaskWidgetUpdater.updateAll(context.applicationContext)
             } finally {
                 pendingResult.finish()
             }
@@ -145,7 +152,7 @@ object TaskWidgetUpdater {
 
     fun updateAll(context: Context, archive: TaskArchive? = null): Boolean {
         val manager = AppWidgetManager.getInstance(context)
-        val latestArchive = archive ?: loadArchive(context) ?: return false
+        val loadResult = archive?.let(TaskArchiveLoadResult::Loaded) ?: loadArchiveResult(context)
         var hasWidgets = false
         listOf(
             TaskOrganizerProgressWidgetProvider::class.java to WidgetForm.SMALL,
@@ -155,7 +162,10 @@ object TaskWidgetUpdater {
             val component = ComponentName(context, provider)
             manager.getAppWidgetIds(component).forEach {
                 hasWidgets = true
-                update(context, manager, it, form, latestArchive)
+                when (loadResult) {
+                    is TaskArchiveLoadResult.Loaded -> update(context, manager, it, form, loadResult.archive)
+                    is TaskArchiveLoadResult.Unreadable -> updateUnreadable(context, manager, it, form)
+                }
             }
         }
         WidgetMidnightRefresh.schedule(context, hasWidgets)
@@ -172,11 +182,70 @@ object TaskWidgetUpdater {
             .apply()
     }
 
-    fun loadArchive(context: Context): TaskArchive? =
-        runCatching { EncryptedTaskStore(context).load() }.getOrNull()
+    fun loadArchiveResult(context: Context): TaskArchiveLoadResult =
+        EncryptedTaskStore(context).loadSafely()
 
     fun update(context: Context, manager: AppWidgetManager, appWidgetId: Int, form: WidgetForm) {
-        loadArchive(context)?.let { archive -> update(context, manager, appWidgetId, form, archive) }
+        when (val result = loadArchiveResult(context)) {
+            is TaskArchiveLoadResult.Loaded -> update(context, manager, appWidgetId, form, result.archive)
+            is TaskArchiveLoadResult.Unreadable -> updateUnreadable(context, manager, appWidgetId, form)
+        }
+    }
+
+    fun updateUnreadable(context: Context, manager: AppWidgetManager, appWidgetId: Int, form: WidgetForm) {
+        val layout = when (form) {
+            WidgetForm.SMALL -> R.layout.widget_small
+            WidgetForm.MEDIUM -> R.layout.widget_medium
+            WidgetForm.LARGE -> R.layout.widget_large
+        }
+        val palette = palette(context)
+        val views = RemoteViews(context.packageName, layout)
+        applyColors(views, layout, palette)
+        views.setTextViewText(R.id.widget_title, "Task Organizer")
+        views.setOnClickPendingIntent(R.id.widget_title, openAppIntent(context, addNew = false))
+        views.setOnClickPendingIntent(R.id.widget_add, openAppIntent(context, addNew = false))
+        views.setContentDescription(R.id.widget_add, "Apri Task Organizer")
+        when (form) {
+            WidgetForm.SMALL -> {
+                views.setTextViewText(R.id.widget_progress, "!")
+                views.setTextViewText(R.id.widget_progress_label, "Archivio da controllare")
+                views.setTextViewText(R.id.widget_summary, "Apri l'app per verificare i dati")
+                views.setTextViewText(R.id.widget_motto, "I dati non sono stati modificati.")
+            }
+            WidgetForm.MEDIUM -> {
+                views.setTextViewText(R.id.widget_medium_heading, "Archivio da controllare")
+                views.setTextViewText(R.id.widget_progress, "!")
+                views.setTextViewText(R.id.widget_progress_label, "Apri l'app")
+                views.setTextViewText(R.id.widget_summary, "Verifica i dati")
+                views.setTextViewText(R.id.widget_week_heading, "I dati non sono stati modificati")
+                views.setTextViewText(R.id.widget_week_total, "")
+                views.setTextViewText(R.id.widget_week_done, "")
+                views.setTextViewText(R.id.widget_week_todo, "")
+                views.setTextViewText(R.id.widget_next_title, "Apri Task Organizer")
+                views.setTextViewText(R.id.widget_next_meta, "per controllare o ripristinare l'archivio")
+                views.setTextViewText(R.id.widget_next_toggle, "→")
+                views.setOnClickPendingIntent(R.id.widget_next_toggle, openAppIntent(context, addNew = false))
+            }
+            WidgetForm.LARGE -> {
+                views.setTextViewText(R.id.widget_day, "Archivio locale da controllare")
+                views.setTextViewText(R.id.widget_progress, "!")
+                views.setTextViewText(R.id.widget_total_counts, "I dati non sono stati modificati")
+                bindFilters(context, views, appWidgetId, "all", palette)
+                views.removeAllViews(R.id.widget_task_rows)
+                val row = RemoteViews(context.packageName, R.layout.widget_task_row)
+                row.setInt(R.id.widget_row_root, "setBackgroundColor", palette.card)
+                row.setTextColor(R.id.widget_row_title, palette.text)
+                row.setTextColor(R.id.widget_row_meta, palette.muted)
+                row.setTextColor(R.id.widget_row_toggle, palette.accent)
+                row.setTextViewText(R.id.widget_row_title, "Apri l'app per controllare i dati")
+                row.setTextViewText(R.id.widget_row_meta, "Potrai riprovare o avviare il recupero in sicurezza")
+                row.setTextViewText(R.id.widget_row_toggle, "→")
+                row.setOnClickPendingIntent(R.id.widget_row_root, openAppIntent(context, addNew = false))
+                row.setOnClickPendingIntent(R.id.widget_row_toggle, openAppIntent(context, addNew = false))
+                views.addView(R.id.widget_task_rows, row)
+            }
+        }
+        manager.updateAppWidget(appWidgetId, views)
     }
 
     fun update(
