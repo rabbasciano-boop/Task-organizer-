@@ -1196,73 +1196,7 @@ private fun formatLiveTimer(seconds: Int): String {
 }
 
 @Composable
-private fun SettingsScreen(
-    selectedTheme: OrganizerTheme,
-    followSystemTheme: Boolean,
-    onThemeChanged: (OrganizerTheme) -> Unit,
-    onFollowSystemThemeChanged: (Boolean) -> Unit,
-    security: AppSecurity,
-    biometricAvailable: Boolean,
-    onSecurityChanged: () -> Unit,
-    onOpenBackup: () -> Unit,
-    nickname: String,
-    onNicknameChanged: (String) -> Unit,
-    onOpenPrivacy: () -> Unit,
-    signedInAccount: SignedInAccount?,
-    accountWorking: Boolean,
-    accountMessage: String?,
-    onGoogleSignIn: () -> Unit,
-    onSignOut: (deleteLocalData: Boolean) -> Unit,
-    onDeleteAccount: (deleteLocalData: Boolean) -> Unit
-) {
-    var section by rememberSaveable { mutableStateOf("root") }
-    BackHandler(enabled = section != "root") { section = "root" }
-    when (section) {
-        "root" -> SettingsHubScreen(
-            signedInAccount = signedInAccount,
-            onOpen = { section = it }
-        )
-        "account" -> AccountHubScreen(
-            signedInAccount = signedInAccount,
-            onBack = { section = "root" },
-            onOpenProfile = { section = "accountProfile" },
-            onOpenBackup = onOpenBackup,
-            onOpenPrivacy = onOpenPrivacy,
-            onOpenCalendar = { section = "accountCalendar" }
-        )
-        "accountProfile" -> AccountProfileScreen(
-            nickname = nickname,
-            onNicknameChanged = onNicknameChanged,
-            signedInAccount = signedInAccount,
-            accountWorking = accountWorking,
-            accountMessage = accountMessage,
-            onGoogleSignIn = onGoogleSignIn,
-            onSignOut = onSignOut,
-            onDeleteAccount = onDeleteAccount,
-            onBack = { section = "account" }
-        )
-        "accountCalendar" -> AccountCalendarSettingsScreen(onBack = { section = "account" })
-        "appearance" -> AppearanceSettingsScreen(
-            selectedTheme = selectedTheme,
-            followSystemTheme = followSystemTheme,
-            onThemeChanged = onThemeChanged,
-            onFollowSystemThemeChanged = onFollowSystemThemeChanged,
-            onBack = { section = "root" }
-        )
-        "home" -> HomeSettingsScreen(onBack = { section = "root" })
-        "activities" -> ActivitySettingsScreen(onBack = { section = "root" })
-        "security" -> SecuritySettingsScreen(
-            security = security,
-            biometricAvailable = biometricAvailable,
-            onSecurityChanged = onSecurityChanged,
-            onBack = { section = "root" }
-        )
-        "information" -> InformationSettingsScreen(onBack = { section = "root" })
-    }
-}
-
-@Composable
-private fun SettingsHubScreen(signedInAccount: SignedInAccount?, onOpen: (String) -> Unit) {
+internal fun SettingsHubScreen(signedInAccount: SignedInAccount?, onOpen: (String) -> Unit) {
     PageColumn {
         Text("Impostazioni", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Personalizza Task Organizer in un unico posto.", color = SoftText)
@@ -1308,7 +1242,7 @@ private fun SettingsNavigationCard(icon: String, title: String, subtitle: String
 }
 
 @Composable
-private fun AccountHubScreen(
+internal fun AccountHubScreen(
     signedInAccount: SignedInAccount?,
     onBack: () -> Unit,
     onOpenProfile: () -> Unit,
@@ -1333,7 +1267,7 @@ private fun AccountHubScreen(
 }
 
 @Composable
-private fun AccountCalendarSettingsScreen(onBack: () -> Unit) {
+internal fun AccountCalendarSettingsScreen(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     PageColumn {
         TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna ad Account", color = Gold) }
@@ -1344,7 +1278,7 @@ private fun AccountCalendarSettingsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AppearanceSettingsScreen(
+internal fun AppearanceSettingsScreen(
     selectedTheme: OrganizerTheme,
     followSystemTheme: Boolean,
     onThemeChanged: (OrganizerTheme) -> Unit,
@@ -1375,7 +1309,7 @@ private fun AppearanceSettingsScreen(
 }
 
 @Composable
-private fun HomeSettingsScreen(onBack: () -> Unit) {
+internal fun HomeSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var hideWidgetTitles by remember { mutableStateOf(TaskWidgetUpdater.areTaskTitlesHidden(context)) }
@@ -1402,7 +1336,7 @@ private fun HomeSettingsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun ActivitySettingsScreen(onBack: () -> Unit) {
+internal fun ActivitySettingsScreen(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     PageColumn {
         TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle impostazioni", color = Gold) }
@@ -1415,7 +1349,7 @@ private fun ActivitySettingsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun SecuritySettingsScreen(
+internal fun SecuritySettingsScreen(
     security: AppSecurity,
     biometricAvailable: Boolean,
     onSecurityChanged: () -> Unit,
@@ -1468,7 +1402,7 @@ private fun SecuritySettingsScreen(
 }
 
 @Composable
-private fun InformationSettingsScreen(onBack: () -> Unit) {
+internal fun InformationSettingsScreen(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     PageColumn {
         TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle impostazioni", color = Gold) }
