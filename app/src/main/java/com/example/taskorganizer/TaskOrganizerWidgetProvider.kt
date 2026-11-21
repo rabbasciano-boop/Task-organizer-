@@ -169,6 +169,7 @@ object TaskWidgetUpdater {
             }
         }
         WidgetMidnightRefresh.schedule(context, hasWidgets)
+        WidgetThemeRefreshJob.schedule(context, hasWidgets)
         return hasWidgets
     }
 
