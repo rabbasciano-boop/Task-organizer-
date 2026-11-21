@@ -58,6 +58,7 @@ class RecurrenceTimingTest {
         val completedAgain = RecurrenceTiming.toggleTask(reopened, task.id, LocalDate.of(2026, 11, 1))
         assertEquals(2, completedAgain.tasks.size)
         assertEquals(1, completedAgain.tasks.count { it.date == "2026-12-01" })
+        assertTrue(!completedAgain.tasks.single { it.date == "2026-12-01" }.completed)
     }
 
     @Test
