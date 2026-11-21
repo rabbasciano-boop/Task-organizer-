@@ -349,14 +349,15 @@ internal fun TaskOrganizerApp(
                     archiveUpdateMutex.withLock {
                         val result = withContext(Dispatchers.IO) {
                             runCatching {
-                                store.replaceArchive(importedArchive)
+                                val restoreOutcome = store.replaceArchiveWithSafetyCopy(importedArchive)
                                 previousTasks.forEach { TaskReminderScheduler.cancel(context, it) }
                                 importedArchive.tasks.forEach { TaskReminderScheduler.schedule(context, it) }
                                 TaskWidgetUpdater.updateAll(context, importedArchive)
+                                restoreOutcome
                             }
                         }
                         result.onSuccess { applyArchive(importedArchive) }
-                        onCompleted(result.map { Unit })
+                        onCompleted(result)
                     }
                 }
             }

@@ -55,7 +55,7 @@ internal fun BackupScreen(
     onCreateExport: (String, CharArray) -> Unit,
     takeExportPassword: () -> CharArray?,
     onExportUriHandled: () -> Unit,
-    onImported: (TaskArchive, (Result<Unit>) -> Unit) -> Unit
+    onImported: (TaskArchive, (Result<ArchiveRestoreOutcome>) -> Unit) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -272,7 +272,11 @@ internal fun BackupScreen(
                                     onImported(archive) { applied ->
                                         working = false
                                         message = if (applied.isSuccess) {
-                                            "Backup ripristinato. Promemoria e widget sono stati aggiornati."
+                                            if (applied.getOrThrow().safetyCopyCreated) {
+                                                "Backup ripristinato. Una copia cifrata dei dati precedenti è stata conservata in sicurezza sul telefono."
+                                            } else {
+                                                "Backup ripristinato. Promemoria e widget sono stati aggiornati."
+                                            }
                                         } else {
                                             "Il backup è valido, ma non è stato possibile applicarlo. I dati attuali non sono stati modificati."
                                         }

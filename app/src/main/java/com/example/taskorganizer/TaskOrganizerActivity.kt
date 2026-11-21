@@ -112,7 +112,7 @@ open class TaskOrganizerActivity : FragmentActivity() {
             val accountManager = remember { FirebaseAccountManager(this@TaskOrganizerActivity) }
             var signedInAccount by remember { mutableStateOf(accountManager.currentAccount()) }
             var accountWorking by remember { mutableStateOf(false) }
-            var accountMessage by remember { mutableStateOf<String?>(null) }
+            var accountMessage by remember { mutableStateOf(accountManager.takePendingResultMessage()) }
             var selectedTheme by remember {
                 mutableStateOf(
                     OrganizerTheme.fromStorage(

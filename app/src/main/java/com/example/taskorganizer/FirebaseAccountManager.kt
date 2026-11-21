@@ -7,11 +7,13 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
-import androidx.lifecycle.lifecycleScope
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /** Handles the optional identity session only. Organizer data remains in EncryptedTaskStore. */
@@ -24,6 +26,8 @@ data class SignedInAccount(
 class FirebaseAccountManager(private val activity: ComponentActivity) {
     private val auth = FirebaseAuth.getInstance()
     private val credentialManager = CredentialManager.create(activity)
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val resultPreferences = activity.applicationContext.getSharedPreferences(ACCOUNT_RESULT_PREFERENCES, ComponentActivity.MODE_PRIVATE)
 
     fun currentAccount(): SignedInAccount? = auth.currentUser?.let { user ->
         SignedInAccount(
@@ -31,6 +35,10 @@ class FirebaseAccountManager(private val activity: ComponentActivity) {
             email = user.email?.ifBlank { null } ?: "Account Google",
             photoUrl = user.photoUrl?.toString()
         )
+    }
+
+    fun takePendingResultMessage(): String? = resultPreferences.getString(PENDING_RESULT_MESSAGE, null).also {
+        resultPreferences.edit().remove(PENDING_RESULT_MESSAGE).apply()
     }
 
     fun signInWithGoogle(onResult: (SignedInAccount?, String?) -> Unit) {
@@ -49,7 +57,7 @@ class FirebaseAccountManager(private val activity: ComponentActivity) {
 
     fun signOut(onComplete: () -> Unit) {
         auth.signOut()
-        activity.lifecycleScope.launch {
+        appScope.launch {
             runCatching { credentialManager.clearCredentialState(ClearCredentialStateRequest()) }
             onComplete()
         }
@@ -68,19 +76,19 @@ class FirebaseAccountManager(private val activity: ComponentActivity) {
                 return@requestGoogleToken
             }
             val credential = GoogleAuthProvider.getCredential(idToken, null)
-            currentUser.reauthenticate(credential).addOnCompleteListener(activity) { reauth ->
+            currentUser.reauthenticate(credential).addOnCompleteListener { reauth ->
                 if (!reauth.isSuccessful) {
-                    onResult(false, "La conferma dell'account non è riuscita. Riprova e scegli il tuo account Google.")
+                    finishDeletion(onResult, false, "La conferma dell'account non è riuscita. Riprova e scegli il tuo account Google.")
                     return@addOnCompleteListener
                 }
-                currentUser.delete().addOnCompleteListener(activity) { deletion ->
+                currentUser.delete().addOnCompleteListener { deletion ->
                     if (deletion.isSuccessful) {
-                        activity.lifecycleScope.launch {
+                        appScope.launch {
                             runCatching { credentialManager.clearCredentialState(ClearCredentialStateRequest()) }
-                            onResult(true, null)
+                            finishDeletion(onResult, true, "Account eliminato correttamente.")
                         }
                     } else {
-                        onResult(false, "Non è stato possibile eliminare l'account. Riprova tra poco.")
+                        finishDeletion(onResult, false, "Non è stato possibile eliminare l'account. Riprova tra poco.")
                     }
                 }
             }
@@ -95,7 +103,7 @@ class FirebaseAccountManager(private val activity: ComponentActivity) {
         )
             .build()
         val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
-        activity.lifecycleScope.launch {
+        appScope.launch {
             try {
                 val credential = credentialManager.getCredential(activity, request).credential
                 if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
@@ -108,5 +116,17 @@ class FirebaseAccountManager(private val activity: ComponentActivity) {
                 onResult(null, "Accesso annullato o non disponibile. Puoi riprovare quando vuoi.")
             }
         }
+    }
+
+    private fun finishDeletion(onResult: (Boolean, String?) -> Unit, deleted: Boolean, message: String) {
+        // The Firebase task can finish while the activity is stopped. Preserve its result so the
+        // next visible session can report the real outcome instead of leaving the person unsure.
+        resultPreferences.edit().putString(PENDING_RESULT_MESSAGE, message).apply()
+        onResult(deleted, message)
+    }
+
+    private companion object {
+        const val ACCOUNT_RESULT_PREFERENCES = "task_organizer_account_results"
+        const val PENDING_RESULT_MESSAGE = "pending_account_result"
     }
 }

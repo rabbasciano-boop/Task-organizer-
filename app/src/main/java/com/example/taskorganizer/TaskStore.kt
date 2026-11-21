@@ -85,11 +85,14 @@ sealed interface TaskArchiveLoadResult {
     data class Unreadable(val error: Exception) : TaskArchiveLoadResult
 }
 
+data class ArchiveRestoreOutcome(val safetyCopyCreated: Boolean)
+
 /** Stores the organizer only in the app-private folder, encrypted with an Android Keystore key. */
 class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_ALIAS) {
     private val appContext = context.applicationContext
     private val dataFile = File(appContext.filesDir, "task-organizer.enc")
     private val atomicFile = AtomicFile(dataFile)
+    private val restoreSafetyFile = File(appContext.filesDir, "task-organizer-before-restore.enc")
 
     fun load(): TaskArchive = synchronized(archiveLock) { loadUnlocked() }
 
@@ -158,7 +161,37 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
     fun importPasswordProtectedBackup(data: ByteArray, password: CharArray): TaskArchive =
         decodePasswordProtectedBackup(data, password).also(::replaceArchive)
 
+    /**
+     * Keeps one encrypted, app-private copy of the current archive before a restore replaces it.
+     * If the safety copy cannot be written, the restore is stopped and no existing data is touched.
+     */
+    fun replaceArchiveWithSafetyCopy(archive: TaskArchive): ArchiveRestoreOutcome = synchronized(archiveLock) {
+        val safetyCopyCreated = if (dataFile.exists()) {
+            copyCurrentArchiveForRestoreUnlocked()
+            true
+        } else {
+            false
+        }
+        saveUnlocked(archive)
+        ArchiveRestoreOutcome(safetyCopyCreated)
+    }
+
+    /** Used by the already verified portable-backup import API. UI restores use the safety-copy variant. */
     fun replaceArchive(archive: TaskArchive) = synchronized(archiveLock) { saveUnlocked(archive) }
+
+    private fun copyCurrentArchiveForRestoreUnlocked() {
+        val safetyAtomicFile = AtomicFile(restoreSafetyFile)
+        val output = safetyAtomicFile.startWrite()
+        try {
+            dataFile.inputStream().use { input -> input.copyTo(output) }
+            output.flush()
+            output.fd.sync()
+            safetyAtomicFile.finishWrite(output)
+        } catch (error: Exception) {
+            safetyAtomicFile.failWrite(output)
+            throw error
+        }
+    }
 
     /** Removes items that have remained in the recycle bin for longer than 30 days. */
     private fun loadAndPruneExpiredTrash(now: Long = System.currentTimeMillis()): TaskArchive = synchronized(archiveLock) {
@@ -237,6 +270,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         synchronized(archiveLock) {
             atomicFile.delete()
             recoveryFiles().forEach(File::delete)
+            restoreSafetyFile.delete()
         }
     }
 
@@ -245,6 +279,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         synchronized(archiveLock) {
             atomicFile.delete()
             recoveryFiles().forEach(File::delete)
+            restoreSafetyFile.delete()
             // The encrypted files are already gone, so a Keystore failure must not prevent the
             // rest of the privacy cleanup (preferences and PIN) from continuing.
             runCatching { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(keyAlias) }
