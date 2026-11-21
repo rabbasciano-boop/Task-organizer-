@@ -104,6 +104,22 @@ class DatePickerConversionsTest {
     }
 }
 
+class OrganizerFormattingTest {
+    @Test
+    fun acceptsOnlyRealItalianCalendarDates() {
+        assertEquals(null, parseItalianDate("31-02-2026"))
+        assertEquals(null, parseItalianDate("31/04/2026"))
+        assertEquals(LocalDate.of(2028, 2, 29), parseItalianDate("29-02-2028"))
+    }
+
+    @Test
+    fun parsesItalianAmountsWithoutOverflow() {
+        assertEquals(350L, parseAmountCents("3,5"))
+        assertEquals(123_450L, parseAmountCents("1.234,50"))
+        assertEquals(null, parseAmountCents("99999999999999999999"))
+    }
+}
+
 class UiSessionViewModelTest {
     @Test
     fun startsUnlockedOnlyWhenThereIsNoPinAndCanBeLockedAgain() {

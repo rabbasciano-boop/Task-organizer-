@@ -5,10 +5,13 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
 import java.util.Locale
 
 val ItalianDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-uuuu", Locale.ITALY)
+    .withResolverStyle(ResolverStyle.STRICT)
 val ItalianSlashDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/uuuu", Locale.ITALY)
+    .withResolverStyle(ResolverStyle.STRICT)
 
 fun parseItalianDate(value: String): LocalDate? = sequenceOf(ItalianDateFormatter, ItalianSlashDateFormatter)
     .mapNotNull { formatter -> runCatching { LocalDate.parse(value.trim(), formatter) }.getOrNull() }
@@ -27,10 +30,13 @@ fun formatTimeRange(task: OrganizerTask): String? = task.time?.let { start ->
 }
 
 fun parseAmountCents(value: String): Long? {
-    val entered = value.trim().replace("€", "").trim().replace(',', '.')
+    val raw = value.trim().replace("€", "").trim()
+    val withoutThousands = if (raw.matches(Regex("\\d{1,3}(\\.\\d{3})+(,\\d{1,2})?"))) raw.replace(".", "") else raw
+    val entered = withoutThousands.replace(',', '.')
     if (entered.isBlank() || !entered.matches(Regex("\\d+(\\.\\d{1,2})?"))) return null
     val parts = entered.split('.')
     val euros = parts[0].toLongOrNull() ?: return null
+    if (euros > 9_999_999L) return null
     val cents = parts.getOrNull(1)?.padEnd(2, '0')?.toLongOrNull() ?: 0L
     return euros * 100 + cents
 }
