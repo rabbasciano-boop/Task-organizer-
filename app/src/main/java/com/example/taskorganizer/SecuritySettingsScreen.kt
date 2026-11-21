@@ -51,7 +51,7 @@ fun SecuritySettingsScreen(
     }
     if (pinDialogOpen) {
         PinSetupDialog(security = security, changing = pinEnabled, onDismiss = { pinDialogOpen = false }, onSave = {
-            security.setPin(it); pinEnabled = true; pinDialogOpen = false; onSecurityChanged()
+            pinEnabled = true; pinDialogOpen = false; onSecurityChanged()
         })
     }
     if (disableDialogOpen) {

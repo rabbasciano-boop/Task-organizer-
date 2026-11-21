@@ -778,13 +778,21 @@ private fun TaskOrganizerApp(
             onCreateExport = onCreateBackupExport,
             takeExportPassword = takeBackupExportPassword,
             onExportUriHandled = onBackupExportHandled,
-            onImported = { importedArchive ->
+            onImported = { importedArchive, onCompleted ->
                 val previousTasks = (tasks + deletedTasks).toList()
-                applyArchive(importedArchive)
-                appScope.launch(Dispatchers.IO) {
-                    previousTasks.forEach { TaskReminderScheduler.cancel(context, it) }
-                    importedArchive.tasks.forEach { TaskReminderScheduler.schedule(context, it) }
-                    TaskWidgetUpdater.updateAll(context, importedArchive)
+                appScope.launch {
+                    archiveUpdateMutex.withLock {
+                        val result = withContext(Dispatchers.IO) {
+                            runCatching {
+                                store.replaceArchive(importedArchive)
+                                previousTasks.forEach { TaskReminderScheduler.cancel(context, it) }
+                                importedArchive.tasks.forEach { TaskReminderScheduler.schedule(context, it) }
+                                TaskWidgetUpdater.updateAll(context, importedArchive)
+                            }
+                        }
+                        result.onSuccess { applyArchive(importedArchive) }
+                        onCompleted(result.map { Unit })
+                    }
                 }
             }
         )
@@ -1383,7 +1391,7 @@ private fun BackupScreen(
     onCreateExport: (String, CharArray) -> Unit,
     takeExportPassword: () -> CharArray?,
     onExportUriHandled: () -> Unit,
-    onImported: (TaskArchive) -> Unit
+    onImported: (TaskArchive, (Result<Unit>) -> Unit) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1393,6 +1401,7 @@ private fun BackupScreen(
     var importPassword by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
+    BackHandler(enabled = working) { }
 
     LaunchedEffect(pendingImportUri) {
         val uri = pendingImportUri ?: return@LaunchedEffect
@@ -1587,19 +1596,25 @@ private fun BackupScreen(
                                     runCatching {
                                         val passwordChars = importPassword.toCharArray()
                                         try {
-                                            store.importPasswordProtectedBackup(data, passwordChars)
+                                            store.decodePasswordProtectedBackup(data, passwordChars)
                                         } finally {
                                             passwordChars.fill('\u0000')
                                         }
                                     }
                                 }
-                                working = false
                                 result.onSuccess { archive ->
                                     importPassword = ""
                                     importedBytes = null
-                                    onImported(archive)
-                                    message = "Backup ripristinato. Promemoria e widget sono stati aggiornati."
+                                    onImported(archive) { applied ->
+                                        working = false
+                                        message = if (applied.isSuccess) {
+                                            "Backup ripristinato. Promemoria e widget sono stati aggiornati."
+                                        } else {
+                                            "Il backup è valido, ma non è stato possibile applicarlo. I dati attuali non sono stati modificati."
+                                        }
+                                    }
                                 }.onFailure {
+                                    working = false
                                     message = "Password errata oppure backup non valido. I dati attuali non sono stati modificati."
                                 }
                             }
@@ -1650,9 +1665,9 @@ private fun ThemeChoiceCard(
     val previewText = if (theme.isDark) Color(0xFFF8FAFC) else Color(0xFF14243B)
     val previewAccent = when (theme) {
         OrganizerTheme.ORIGINAL_DARK -> Color(0xFFD7B46A)
-        OrganizerTheme.CARTA_DORATA -> Color(0xFFA47528)
+        OrganizerTheme.CARTA_DORATA -> Color(0xFF805C1D)
         OrganizerTheme.AURORA_MIDNIGHT -> Color(0xFF38BDF8)
-        OrganizerTheme.AURORA_NORDIC -> Color(0xFF0D9488)
+        OrganizerTheme.AURORA_NORDIC -> Color(0xFF08766D)
     }
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onThemeChanged(theme) },
@@ -1678,12 +1693,14 @@ internal fun PinSetupDialog(
     security: AppSecurity,
     changing: Boolean,
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit
+    onSave: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var currentPin by remember { mutableStateOf("") }
     var newPin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1702,14 +1719,32 @@ internal fun PinSetupDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                error = when {
-                    changing && !security.verifyPin(currentPin) -> "Il PIN attuale non è corretto."
-                    !newPin.matches(Regex("\\d{6,}")) -> "Il PIN deve contenere almeno 6 cifre."
-                    newPin != confirmPin -> "I due PIN non coincidono."
-                    else -> ""
+                if (!newPin.matches(Regex("\\d{6,}"))) {
+                    error = "Il PIN deve contenere almeno 6 cifre."
+                } else if (newPin != confirmPin) {
+                    error = "I due PIN non coincidono."
+                } else {
+                    working = true
+                    scope.launch {
+                        val verification = if (changing) withContext(Dispatchers.Default) { security.verifyPinWithRateLimit(currentPin) } else PinVerification.Verified
+                        when (verification) {
+                            PinVerification.Verified -> {
+                                withContext(Dispatchers.Default) { security.setPin(newPin) }
+                                working = false
+                                onSave()
+                            }
+                            is PinVerification.Locked -> {
+                                working = false
+                                error = "Troppi tentativi. Attendi ${formatLockDelay((verification.untilMillis - System.currentTimeMillis()).coerceAtLeast(0L))} prima di riprovare."
+                            }
+                            is PinVerification.Incorrect -> {
+                                working = false
+                                error = if (verification.delayMillis > 0) "Troppi tentativi. Attendi ${formatLockDelay(verification.delayMillis)} prima di riprovare." else "Il PIN attuale non è corretto."
+                            }
+                        }
+                    }
                 }
-                if (error.isBlank()) onSave(newPin)
-            }) { Text("Salva", color = Gold) }
+            }, enabled = !working) { Text(if (working) "Verifica…" else "Salva", color = Gold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annulla", color = SoftText) } }
     )
@@ -1739,6 +1774,8 @@ private fun AppLockScreen(
 ) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize().organizerBackground(), contentAlignment = Alignment.Center) {
         Card(
@@ -1758,7 +1795,9 @@ private fun AppLockScreen(
                 if (error.isNotBlank()) Text(error, color = Danger, fontSize = 13.sp, textAlign = TextAlign.Center)
                 Button(
                     onClick = {
-                        when (val result = security.verifyPinWithRateLimit(pin)) {
+                        working = true
+                        scope.launch {
+                        when (val result = withContext(Dispatchers.Default) { security.verifyPinWithRateLimit(pin) }) {
                             PinVerification.Verified -> {
                                 pin = ""
                                 error = ""
@@ -1775,11 +1814,14 @@ private fun AppLockScreen(
                                 error = "Troppi tentativi. Attendi ${formatLockDelay((result.untilMillis - System.currentTimeMillis()).coerceAtLeast(0L))} prima di riprovare."
                             }
                         }
+                        working = false
+                        }
                     },
+                    enabled = !working,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
-                ) { Text("Sblocca", fontWeight = FontWeight.Bold) }
+                ) { Text(if (working) "Verifica…" else "Sblocca", fontWeight = FontWeight.Bold) }
                 if (biometricAvailable && security.isBiometricEnabled()) {
                     OutlinedButton(onClick = {
                         onRequestBiometric { success, message ->

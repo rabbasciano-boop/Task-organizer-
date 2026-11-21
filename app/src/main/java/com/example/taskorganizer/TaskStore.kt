@@ -135,8 +135,8 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         }
     }
 
-    /** Replaces local organizer data only after a complete, password-verified backup is decoded. */
-    fun importPasswordProtectedBackup(data: ByteArray, password: CharArray): TaskArchive = synchronized(archiveLock) {
+    /** Decodes a verified backup without changing the local archive. */
+    fun decodePasswordProtectedBackup(data: ByteArray, password: CharArray): TaskArchive = synchronized(archiveLock) {
         require(password.size >= MIN_BACKUP_PASSWORD_LENGTH) { "La password deve contenere almeno 8 caratteri." }
         require(data.size >= BACKUP_MAGIC.size + 3) { "File di backup non valido." }
         require(data.copyOfRange(0, BACKUP_MAGIC.size).contentEquals(BACKUP_MAGIC)) { "Questo file non è un backup di Task Organizer." }
@@ -151,10 +151,14 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         position += ivSize
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, backupSecretKey(password, salt), GCMParameterSpec(128, iv))
-        val archive = decode(cipher.doFinal(data.copyOfRange(position, data.size)))
-        saveUnlocked(archive)
-        archive
+        decode(cipher.doFinal(data.copyOfRange(position, data.size)))
     }
+
+    /** Replaces local organizer data only after a complete, password-verified backup is decoded. */
+    fun importPasswordProtectedBackup(data: ByteArray, password: CharArray): TaskArchive =
+        decodePasswordProtectedBackup(data, password).also(::replaceArchive)
+
+    fun replaceArchive(archive: TaskArchive) = synchronized(archiveLock) { saveUnlocked(archive) }
 
     /** Removes items that have remained in the recycle bin for longer than 30 days. */
     private fun loadAndPruneExpiredTrash(now: Long = System.currentTimeMillis()): TaskArchive = synchronized(archiveLock) {

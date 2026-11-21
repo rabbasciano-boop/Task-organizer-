@@ -348,10 +348,10 @@ object TaskWidgetUpdater {
             preferences.getString("theme_mode", "original_dark")
         }
         return when (mode) {
-            "carta_dorata" -> WidgetPalette(Color.rgb(246, 240, 229), Color.rgb(255, 253, 248), Color.rgb(164, 117, 40), Color.rgb(20, 36, 59), Color.rgb(95, 104, 114), Color.rgb(45, 140, 105))
-            "aurora_midnight" -> WidgetPalette(Color.rgb(23, 30, 58), Color.rgb(31, 41, 77), Color.rgb(56, 189, 248), Color.rgb(248, 250, 252), Color.rgb(203, 213, 225), Color.rgb(52, 211, 153))
-            "aurora_nordic" -> WidgetPalette(Color.rgb(225, 246, 241), Color.rgb(248, 255, 255), Color.rgb(13, 148, 136), Color.rgb(15, 23, 42), Color.rgb(51, 65, 85), Color.rgb(5, 150, 105))
-            else -> WidgetPalette(Color.rgb(16, 25, 43), Color.rgb(21, 32, 54), Color.rgb(215, 180, 106), Color.rgb(244, 246, 250), Color.rgb(174, 185, 201), Color.rgb(66, 184, 131))
+            "carta_dorata" -> WidgetPalette(Color.rgb(246, 240, 229), Color.rgb(255, 253, 248), Color.rgb(128, 92, 29), Color.rgb(20, 36, 59), Color.rgb(76, 88, 100), Color.rgb(30, 127, 87))
+            "aurora_midnight" -> WidgetPalette(Color.rgb(7, 10, 24), Color.rgb(23, 24, 48), Color.rgb(56, 189, 248), Color.rgb(248, 250, 252), Color.rgb(203, 213, 225), Color.rgb(74, 222, 128))
+            "aurora_nordic" -> WidgetPalette(Color.rgb(238, 246, 248), Color.rgb(255, 255, 255), Color.rgb(8, 118, 109), Color.rgb(15, 23, 42), Color.rgb(51, 65, 85), Color.rgb(23, 107, 77))
+            else -> WidgetPalette(Color.rgb(13, 27, 47), Color.rgb(20, 36, 59), Color.rgb(215, 180, 106), Color.rgb(244, 246, 250), Color.rgb(174, 185, 201), Color.rgb(66, 184, 131))
         }
     }
 
