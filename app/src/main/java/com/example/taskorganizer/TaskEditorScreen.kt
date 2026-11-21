@@ -217,7 +217,6 @@ internal fun TaskEditorScreen(
             !validEndTime -> "L'orario di fine deve essere nel formato 00:00."
             normalizedTime == null && normalizedEndTime != null -> "Inserisci prima l'orario di inizio."
             normalizedTime != null && normalizedEndTime != null && normalizedEndTime <= normalizedTime -> "L'orario di fine deve essere successivo all'inizio."
-            reminderEnabled && normalizedTime == null -> "Per il promemoria serve un orario di inizio."
             else -> ""
         }
         if (error.isBlank()) {
@@ -250,7 +249,7 @@ internal fun TaskEditorScreen(
         }
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("ANTEPRIMA CARD LIVE", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("ANTEPRIMA CARD LIVE", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.size(5.dp))
             TaskEditorPreview(
@@ -274,16 +273,16 @@ internal fun TaskEditorScreen(
         ) {
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TITOLO ATTIVITÀ", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("TITOLO ATTIVITÀ", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         OutlinedTextField(value = title, onValueChange = { title = it }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(18.dp), colors = compactEditorFieldColors())
-                Text("NOTE · FACOLTATIVE", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("NOTE · FACOLTATIVE", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 OutlinedTextField(value = note, onValueChange = { note = it }, placeholder = { Text("Aggiungi dettagli o cose da ricordare") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = RoundedCornerShape(18.dp), colors = compactEditorFieldColors())
                 TaskColorPicker(selectedColor = cardColor, onSelected = { cardColor = it })
             }
         }
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("DATA E FASCIA ORARIA", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("DATA E FASCIA ORARIA", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     CompactEditorChip("Oggi", date == LocalDate.now().format(ItalianDateFormatter), { date = LocalDate.now().format(ItalianDateFormatter) }, Modifier.weight(1f))
                     CompactEditorChip("Domani", date == LocalDate.now().plusDays(1).format(ItalianDateFormatter), { date = LocalDate.now().plusDays(1).format(ItalianDateFormatter) }, Modifier.weight(1f))
@@ -327,15 +326,15 @@ internal fun TaskEditorScreen(
                 DatePicker(state = datePickerState)
             }
         }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TimeField(label = "Ora inizio", value = time, onValueChange = { time = it }, modifier = Modifier.weight(1f))
-                    TimeField(label = "Ora fine", value = endTime, optional = true, onValueChange = { endTime = it }, modifier = Modifier.weight(1f))
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TimeField(label = "Ora inizio", value = time, onValueChange = { time = it })
+                    TimeField(label = "Ora fine", value = endTime, optional = true, onValueChange = { endTime = it })
                 }
             }
         }
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Promemoria e sveglia", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Promemoria e sveglia", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text("Promemoria", color = MainText, fontWeight = FontWeight.SemiBold)
@@ -395,7 +394,7 @@ internal fun TaskEditorScreen(
         }
         Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Organizzazione", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Organizzazione", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         CategoryField(
             value = category,
             icon = categoryIcon,
@@ -428,35 +427,7 @@ internal fun TaskEditorScreen(
         }
         if (error.isNotBlank()) Text(error, color = Danger, fontSize = 13.sp)
         Button(
-            onClick = {
-                val parsedDate = parseItalianDate(date)
-                val normalizedTime = normalizeTime(time)
-                val normalizedEndTime = normalizeTime(endTime)
-                val validTime = time.isBlank() || normalizedTime != null
-                val validEndTime = endTime.isBlank() || normalizedEndTime != null
-                error = when {
-                    title.isBlank() -> "Inserisci un titolo."
-                    parsedDate == null -> "La data deve essere nel formato GG-MM-AAAA."
-                    !validTime -> "L'orario deve essere nel formato 00:00."
-                    !validEndTime -> "L'orario di fine deve essere nel formato 00:00."
-                    normalizedTime != null && normalizedEndTime != null && normalizedEndTime <= normalizedTime -> "L'orario di fine deve essere successivo all'inizio."
-                    else -> ""
-                }
-                if (error.isBlank()) {
-                    val recurrenceScheduleChanged = task != null &&
-                        (task.date != parsedDate.toString() || task.recurrence != recurrence)
-                    onSave(
-                        OrganizerTask(
-                            id = task?.id ?: java.util.UUID.randomUUID().toString(), title = title.trim(), date = parsedDate.toString(),
-                            time = normalizedTime, endTime = normalizedEndTime, category = category, categoryIcon = categoryIcon, priority = priority, note = note.trim(),
-                            completed = task?.completed ?: false, reminderEnabled = reminderEnabled && normalizedTime != null, reminderMinutesBefore = reminderMinutesBefore, reminderRepeatMinutes = reminderRepeatMinutes, alarmEnabled = alarmEnabled && reminderEnabled && normalizedTime != null, cardColor = cardColor, examStatus = if (category == "Esami") examStatus else null,
-                            createdAt = task?.createdAt ?: System.currentTimeMillis(), deletedAt = task?.deletedAt ?: 0L, recurrence = recurrence,
-                            seriesId = if (recurrence == "none") null else task?.seriesId,
-                            recurrenceAnchorDate = if (recurrence == "none" || recurrenceScheduleChanged) null else task?.recurrenceAnchorDate
-                        )
-                    )
-                }
-            },
+            onClick = ::attemptSave,
             modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
         ) { Text("Salva attività", fontWeight = FontWeight.Bold) }
@@ -509,18 +480,18 @@ private fun TaskEditorPreview(
     Card(colors = CardDefaults.cardColors(containerColor = previewBackground), shape = RoundedCornerShape(22.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("${categoryDisplay(category, categoryIcon)}", color = previewText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("${categoryDisplay(category, categoryIcon)}", color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    if (alarmEnabled) Text("⏰ Sveglia", color = previewText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text(priority, color = previewText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    if (alarmEnabled) Text("⏰ Sveglia", color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(priority, color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Text(title.ifBlank { "Titolo nuova attività" }, color = previewText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            if (note.isNotBlank()) Text("📝 $note", color = previewMuted, fontSize = 11.sp, maxLines = 1)
+            if (note.isNotBlank()) Text("📝 $note", color = previewMuted, fontSize = 12.sp, maxLines = 1)
             HorizontalDivider(color = previewMuted.copy(alpha = 0.25f))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("📅 $date${if (time.isNotBlank()) " · $time${if (endTime.isNotBlank()) "–$endTime" else ""}" else ""}", color = previewMuted, fontSize = 10.sp)
-                if (reminderEnabled && time.isNotBlank()) Text("🔔 $reminderText", color = previewMuted, fontSize = 10.sp)
+                Text("📅 $date${if (time.isNotBlank()) " · $time${if (endTime.isNotBlank()) "–$endTime" else ""}" else ""}", color = previewMuted, fontSize = 12.sp)
+                if (reminderEnabled && time.isNotBlank()) Text("🔔 $reminderText", color = previewMuted, fontSize = 12.sp)
             }
         }
     }
@@ -532,7 +503,7 @@ private fun CompactEditorChip(label: String, selected: Boolean, onClick: () -> U
         modifier = modifier.height(40.dp).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp)).clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, color = if (selected) NightBlue else MainText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+        Text(label, color = if (selected) NightBlue else MainText, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
     }
 }
 
@@ -551,7 +522,7 @@ private fun EditorChoiceChips(
                         modifier = Modifier.weight(1f).height(40.dp).background(if (selected) Gold else CardBlueLight, RoundedCornerShape(12.dp)).clickable { onSelected(key) },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(label, color = if (selected) NightBlue else MainText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text(label, color = if (selected) NightBlue else MainText, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     }
                 }
                 repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
@@ -677,7 +648,7 @@ private fun CategoryField(
                         ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(categoryDisplay(category, customCategoryIcons[category]), color = if (selected) NightBlue else MainText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text(categoryDisplay(category, customCategoryIcons[category]), color = if (selected) NightBlue else MainText, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     }
                 }
                 repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }

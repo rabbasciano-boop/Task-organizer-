@@ -29,7 +29,7 @@ object TaskReminderScheduler {
     /** Schedules the requested reminders and always keeps the final, most useful alert. */
     fun schedule(context: Context, task: OrganizerTask) {
         cancel(context, task)
-        if (!task.reminderEnabled || task.completed || task.time == null) return
+        if (task.deletedAt > 0L || !task.reminderEnabled || task.completed || task.time == null) return
         val taskMoment = runCatching {
             LocalDateTime.of(LocalDate.parse(task.date), LocalTime.parse(task.time))
         }.getOrNull() ?: return

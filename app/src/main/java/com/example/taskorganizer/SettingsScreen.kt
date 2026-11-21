@@ -29,16 +29,27 @@ fun SettingsScreen(
     onDeleteAccount: (deleteLocalData: Boolean) -> Unit
 ) {
     var section by rememberSaveable { mutableStateOf("root") }
-    BackHandler(enabled = section != "root") { section = "root" }
+    var sectionHistory by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    fun openSection(destination: String) {
+        if (destination != section) {
+            sectionHistory = sectionHistory + section
+            section = destination
+        }
+    }
+    fun goBack() {
+        section = sectionHistory.lastOrNull() ?: "root"
+        sectionHistory = sectionHistory.dropLast(1)
+    }
+    BackHandler(enabled = section != "root") { goBack() }
     when (section) {
-        "root" -> SettingsHubScreen(signedInAccount = signedInAccount, onOpen = { section = it })
+        "root" -> SettingsHubScreen(signedInAccount = signedInAccount, onOpen = ::openSection)
         "account" -> AccountHubScreen(
             signedInAccount = signedInAccount,
-            onBack = { section = "root" },
-            onOpenProfile = { section = "accountProfile" },
+            onBack = ::goBack,
+            onOpenProfile = { openSection("accountProfile") },
             onOpenBackup = onOpenBackup,
             onOpenPrivacy = onOpenPrivacy,
-            onOpenCalendar = { section = "accountCalendar" }
+            onOpenCalendar = { openSection("accountCalendar") }
         )
         "accountProfile" -> AccountProfileScreen(
             nickname = nickname,
@@ -49,24 +60,24 @@ fun SettingsScreen(
             onGoogleSignIn = onGoogleSignIn,
             onSignOut = onSignOut,
             onDeleteAccount = onDeleteAccount,
-            onBack = { section = "account" }
+            onBack = ::goBack
         )
-        "accountCalendar" -> AccountCalendarSettingsScreen(onBack = { section = "account" })
+        "accountCalendar" -> AccountCalendarSettingsScreen(onBack = ::goBack)
         "appearance" -> AppearanceSettingsScreen(
             selectedTheme = selectedTheme,
             followSystemTheme = followSystemTheme,
             onThemeChanged = onThemeChanged,
             onFollowSystemThemeChanged = onFollowSystemThemeChanged,
-            onBack = { section = "root" }
+            onBack = ::goBack
         )
-        "home" -> HomeSettingsScreen(onBack = { section = "root" })
-        "activities" -> ActivitySettingsScreen(onBack = { section = "root" })
+        "home" -> HomeSettingsScreen(onBack = ::goBack)
+        "activities" -> ActivitySettingsScreen(onBack = ::goBack)
         "security" -> SecuritySettingsScreen(
             security = security,
             biometricAvailable = biometricAvailable,
             onSecurityChanged = onSecurityChanged,
-            onBack = { section = "root" }
+            onBack = ::goBack
         )
-        "information" -> InformationSettingsScreen(onBack = { section = "root" })
+        "information" -> InformationSettingsScreen(onBack = ::goBack)
     }
 }

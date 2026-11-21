@@ -241,8 +241,9 @@ open class TaskOrganizerActivity : FragmentActivity() {
                         preferences.edit().putBoolean("privacy_acknowledged", true).apply()
                         privacyAcknowledged = true
                     })
-                } else if (session.isUnlocked) {
-                    TaskOrganizerApp(
+                } else {
+                    androidx.compose.foundation.layout.Box {
+                        TaskOrganizerApp(
                         selectedTheme = effectiveTheme,
                         followSystemTheme = followSystemTheme,
                         onThemeChanged = { theme ->
@@ -312,14 +313,16 @@ open class TaskOrganizerActivity : FragmentActivity() {
                             updateSecureWindow()
                             if (!security.hasPin()) session.unlock()
                         }
-                    )
-                } else {
-                    AppLockScreen(
-                        security = security,
-                        biometricAvailable = canUseBiometrics(),
-                        onUnlocked = session::unlock,
-                        onRequestBiometric = { onResult -> authenticateWithBiometrics(onResult) }
-                    )
+                        )
+                        if (!session.isUnlocked) {
+                            AppLockScreen(
+                                security = security,
+                                biometricAvailable = canUseBiometrics(),
+                                onUnlocked = session::unlock,
+                                onRequestBiometric = { onResult -> authenticateWithBiometrics(onResult) }
+                            )
+                        }
+                    }
                 }
             }
         }

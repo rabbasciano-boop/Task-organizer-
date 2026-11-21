@@ -50,7 +50,9 @@ internal object RecurrenceTiming {
                 recurrenceAnchorDate = anchorDate
             )
         } else null
-        val generatedOccurrence = if (reopensRecurrence) {
+        val generatedOccurrence = if (reopensRecurrence && archive.tasks.none { candidate ->
+                candidate.id != previous.id && candidate.seriesId == previous.seriesId && candidate.completed && candidate.date > previous.date
+            }) {
             val expectedDate = firstFutureDate(
                 previous.date,
                 previous.recurrenceAnchorDate ?: previous.date,

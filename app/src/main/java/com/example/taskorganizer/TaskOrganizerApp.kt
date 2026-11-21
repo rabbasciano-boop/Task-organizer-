@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -524,7 +525,7 @@ internal fun TaskOrganizerApp(
             )
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().organizerBackground().padding(padding)) {
+        Box(modifier = Modifier.fillMaxSize().organizerBackground().padding(padding).consumeWindowInsets(padding)) {
             val openNewTask = {
                 editorTaskId = null
                 editorOpen = true

@@ -80,6 +80,18 @@ class RecurrenceTimingTest {
     }
 
     @Test
+    fun reopeningAnOlderCompletedOccurrenceLeavesTheFutureOccurrenceUntouched() {
+        val october = OrganizerTask(id = "october", title = "Affitto", date = "2026-10-01", recurrence = "monthly", completed = true, seriesId = "rent", recurrenceAnchorDate = "2026-10-01")
+        val november = october.copy(id = "november", date = "2026-11-01")
+        val december = october.copy(id = "december", date = "2026-12-01", completed = false)
+
+        val result = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(october, november, december)), october.id, LocalDate.of(2026, 11, 20))
+
+        assertTrue(result.tasks.any { it.id == "december" && !it.completed })
+        assertTrue(result.deletedTasks.none { it.id == "december" })
+    }
+
+    @Test
     fun createsTheFirstFutureOccurrenceForOverdueActivities() {
         val task = OrganizerTask(id = "daily", title = "Acqua", date = "2026-11-01", recurrence = "daily")
         val updated = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(task)), task.id, LocalDate.of(2026, 11, 19))
