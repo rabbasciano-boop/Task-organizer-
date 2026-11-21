@@ -48,8 +48,7 @@ fun SettingsScreen(
             onBack = ::goBack,
             onOpenProfile = { openSection("accountProfile") },
             onOpenBackup = onOpenBackup,
-            onOpenPrivacy = onOpenPrivacy,
-            onOpenCalendar = { openSection("accountCalendar") }
+            onOpenPrivacy = onOpenPrivacy
         )
         "accountProfile" -> AccountProfileScreen(
             nickname = nickname,
@@ -62,7 +61,6 @@ fun SettingsScreen(
             onDeleteAccount = onDeleteAccount,
             onBack = ::goBack
         )
-        "accountCalendar" -> AccountCalendarSettingsScreen(onBack = ::goBack)
         "appearance" -> AppearanceSettingsScreen(
             selectedTheme = selectedTheme,
             followSystemTheme = followSystemTheme,
@@ -71,7 +69,6 @@ fun SettingsScreen(
             onBack = ::goBack
         )
         "home" -> HomeSettingsScreen(onBack = ::goBack)
-        "activities" -> ActivitySettingsScreen(onBack = ::goBack)
         "security" -> SecuritySettingsScreen(
             security = security,
             biometricAvailable = biometricAvailable,

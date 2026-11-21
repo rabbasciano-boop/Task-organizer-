@@ -1,7 +1,8 @@
 package com.example.taskorganizer
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -13,9 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.Color
 import com.example.taskorganizer.ui.theme.OrganizerPalette
-
 @Composable
 fun FilterChoice(label: String, value: String, onClick: () -> Unit) {
     Card(
