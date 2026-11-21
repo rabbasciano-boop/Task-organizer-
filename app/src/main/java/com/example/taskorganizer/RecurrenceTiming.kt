@@ -29,15 +29,17 @@ internal object RecurrenceTiming {
         }
         val updatedTask = requestedTask.copy(seriesId = seriesId, recurrenceAnchorDate = anchorDate)
         val nextDate = if (completesRecurrence) firstFutureDate(updatedTask.date, anchorDate ?: updatedTask.date, updatedTask.recurrence, today) else null
-        val restoredOccurrence = if (nextDate != null) {
+        val activeFutureOccurrences = if (nextDate != null) archive.tasks.filter { candidate ->
+            candidate.id != previous.id && candidate.seriesId == seriesId && candidate.date == nextDate
+        } else emptyList()
+        val retainedActiveOccurrence = activeFutureOccurrences.firstOrNull()?.copy(completed = false, deletedAt = 0L)
+        val duplicateActiveOccurrences = activeFutureOccurrences.drop(1)
+        val restoredOccurrence = if (nextDate != null && retainedActiveOccurrence == null) {
             archive.deletedTasks.firstOrNull { candidate ->
                 candidate.seriesId == seriesId && candidate.date == nextDate
             }?.copy(completed = false, deletedAt = 0L)
         } else null
-        val alreadyCreated = nextDate != null && archive.tasks.any { candidate ->
-            candidate.id != previous.id && candidate.date == nextDate && candidate.seriesId == seriesId
-        }
-        val nextTask = if (nextDate != null && !alreadyCreated && restoredOccurrence == null) {
+        val nextTask = if (nextDate != null && retainedActiveOccurrence == null && restoredOccurrence == null) {
             updatedTask.copy(
                 id = java.util.UUID.randomUUID().toString(),
                 date = nextDate,
@@ -63,12 +65,16 @@ internal object RecurrenceTiming {
                     candidate.deletedAt == 0L
             }
         } else null
+        val duplicateIds = duplicateActiveOccurrences.mapTo(mutableSetOf()) { it.id }
         val activeTasks = archive.tasks.toMutableList().also { it[index] = updatedTask }
-            .filterNot { it.id == generatedOccurrence?.id } + listOfNotNull(restoredOccurrence, nextTask)
+            .filterNot { it.id == generatedOccurrence?.id || it.id in duplicateIds }
+            .map { candidate -> if (candidate.id == retainedActiveOccurrence?.id) retainedActiveOccurrence else candidate } +
+            listOfNotNull(restoredOccurrence, nextTask)
         return archive.copy(
             tasks = activeTasks,
             deletedTasks = archive.deletedTasks.filterNot { it.id == generatedOccurrence?.id || it.id == restoredOccurrence?.id } +
-                listOfNotNull(generatedOccurrence?.copy(deletedAt = System.currentTimeMillis()))
+                listOfNotNull(generatedOccurrence?.copy(deletedAt = System.currentTimeMillis())) +
+                duplicateActiveOccurrences.map { it.copy(deletedAt = System.currentTimeMillis()) }
         )
     }
 

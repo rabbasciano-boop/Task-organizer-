@@ -62,6 +62,24 @@ class RecurrenceTimingTest {
     }
 
     @Test
+    fun reactivationKeepsOnlyOneOpenFutureOccurrence() {
+        val today = LocalDate.of(2026, 11, 1)
+        val original = OrganizerTask(id = "daily", title = "Acqua", date = "2026-11-01", recurrence = "daily", seriesId = "daily")
+        val activeDuplicate = original.copy(id = "tomorrow-active", date = "2026-11-02", completed = true)
+        val trashedDuplicate = original.copy(id = "tomorrow-trash", date = "2026-11-02", deletedAt = 1L)
+
+        val result = RecurrenceTiming.updateTask(
+            TaskArchive(tasks = listOf(original, activeDuplicate), deletedTasks = listOf(trashedDuplicate)),
+            original.copy(completed = true),
+            today
+        )
+
+        val tomorrow = result.tasks.filter { it.date == "2026-11-02" }
+        assertEquals(1, tomorrow.size)
+        assertTrue(!tomorrow.single().completed)
+    }
+
+    @Test
     fun createsTheFirstFutureOccurrenceForOverdueActivities() {
         val task = OrganizerTask(id = "daily", title = "Acqua", date = "2026-11-01", recurrence = "daily")
         val updated = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(task)), task.id, LocalDate.of(2026, 11, 19))
