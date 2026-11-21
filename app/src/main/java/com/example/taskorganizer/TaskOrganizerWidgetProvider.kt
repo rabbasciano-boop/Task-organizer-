@@ -30,7 +30,7 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         updateOnWorker(context) {
-            val archive = TaskWidgetUpdater.loadArchive(context)
+            val archive = TaskWidgetUpdater.loadArchive(context) ?: return@updateOnWorker
             appWidgetIds.forEach { id -> TaskWidgetUpdater.update(context, appWidgetManager, id, form, archive) }
         }
     }
@@ -145,7 +145,7 @@ object TaskWidgetUpdater {
 
     fun updateAll(context: Context, archive: TaskArchive? = null): Boolean {
         val manager = AppWidgetManager.getInstance(context)
-        val latestArchive = archive ?: loadArchive(context)
+        val latestArchive = archive ?: loadArchive(context) ?: return false
         var hasWidgets = false
         listOf(
             TaskOrganizerProgressWidgetProvider::class.java to WidgetForm.SMALL,
@@ -172,11 +172,11 @@ object TaskWidgetUpdater {
             .apply()
     }
 
-    fun loadArchive(context: Context): TaskArchive =
-        runCatching { EncryptedTaskStore(context).load() }.getOrDefault(TaskArchive())
+    fun loadArchive(context: Context): TaskArchive? =
+        runCatching { EncryptedTaskStore(context).load() }.getOrNull()
 
     fun update(context: Context, manager: AppWidgetManager, appWidgetId: Int, form: WidgetForm) {
-        update(context, manager, appWidgetId, form, loadArchive(context))
+        loadArchive(context)?.let { archive -> update(context, manager, appWidgetId, form, archive) }
     }
 
     fun update(

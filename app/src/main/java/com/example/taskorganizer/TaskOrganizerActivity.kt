@@ -869,7 +869,7 @@ private fun TaskOrganizerApp(
                                         date = date.toString(),
                                         time = LocalTime.now().withSecond(0).withNano(0).toString(),
                                         category = category,
-                                        note = minutes.toString(),
+                                        note = "Durata: $minutes min",
                                         completed = true,
                                         reminderEnabled = false
                                     )
@@ -946,6 +946,7 @@ internal fun PageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, c
             modifier = Modifier.fillMaxWidth().widthIn(max = 600.dp)
                 .then(if (safeTop) Modifier.statusBarsPadding() else Modifier)
                 .then(if (safeBottom) Modifier.navigationBarsPadding() else Modifier)
+                .imePadding()
                 .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content
@@ -959,7 +960,8 @@ internal fun LazyPageColumn(safeBottom: Boolean = false, safeTop: Boolean = fals
         LazyColumn(
             modifier = Modifier.fillMaxWidth().widthIn(max = 600.dp)
                 .then(if (safeTop) Modifier.statusBarsPadding() else Modifier)
-                .then(if (safeBottom) Modifier.navigationBarsPadding() else Modifier),
+                .then(if (safeBottom) Modifier.navigationBarsPadding() else Modifier)
+                .imePadding(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content
