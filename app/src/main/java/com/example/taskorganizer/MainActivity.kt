@@ -151,17 +151,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-private val NightBlue get() = OrganizerPalette.background
-private val CardBlue get() = OrganizerPalette.card
-private val CardBlueLight get() = OrganizerPalette.cardLight
-private val Gold get() = OrganizerPalette.accent
-private val SoftText get() = OrganizerPalette.muted
-private val MainText get() = OrganizerPalette.text
-private val AccentSecondary get() = OrganizerPalette.accentSecondary
-private val Success get() = OrganizerPalette.success
-private val Danger get() = OrganizerPalette.danger
-private const val DefaultCardColor = "default"
-private val TaskCardColorOptions = listOf(
+internal val NightBlue get() = OrganizerPalette.background
+internal val CardBlue get() = OrganizerPalette.card
+internal val CardBlueLight get() = OrganizerPalette.cardLight
+internal val Gold get() = OrganizerPalette.accent
+internal val SoftText get() = OrganizerPalette.muted
+internal val MainText get() = OrganizerPalette.text
+internal val AccentSecondary get() = OrganizerPalette.accentSecondary
+internal val Success get() = OrganizerPalette.success
+internal val Danger get() = OrganizerPalette.danger
+internal const val DefaultCardColor = "default"
+internal val TaskCardColorOptions = listOf(
     DefaultCardColor to "Predefinito",
     "oceano" to "Oceano",
     "salvia" to "Salvia",
@@ -170,7 +170,7 @@ private val TaskCardColorOptions = listOf(
     "miele" to "Miele"
 )
 
-private fun taskCardBackground(color: String): Color = when (color) {
+internal fun taskCardBackground(color: String): Color = when (color) {
     "oceano" -> Color(0xFF23456E)
     "salvia" -> Color(0xFF245548)
     "prugna" -> Color(0xFF4A345D)
@@ -179,9 +179,9 @@ private fun taskCardBackground(color: String): Color = when (color) {
     else -> CardBlue
 }
 
-private fun taskCardTextColor(task: OrganizerTask): Color = if (task.cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
-private fun taskCardMutedColor(task: OrganizerTask): Color = if (task.cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
-private fun taskCompletionColor(task: OrganizerTask): Color = when {
+internal fun taskCardTextColor(task: OrganizerTask): Color = if (task.cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
+internal fun taskCardMutedColor(task: OrganizerTask): Color = if (task.cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
+internal fun taskCompletionColor(task: OrganizerTask): Color = when {
     task.cardColor == DefaultCardColor && task.completed -> Success
     task.cardColor == DefaultCardColor -> Gold
     task.completed -> Color(0xFF7EE2B1)
@@ -189,7 +189,7 @@ private fun taskCompletionColor(task: OrganizerTask): Color = when {
 }
 private val CustomCategoryIconOptions = listOf("🏷️", "📌", "❤️", "🏃", "💊", "✈️", "🎨", "💰", "🛒", "🐾", "🏡", "🎯")
 
-private fun categoryIcon(category: String, iconOverride: String? = null): String = iconOverride ?: when (category) {
+internal fun categoryIcon(category: String, iconOverride: String? = null): String = iconOverride ?: when (category) {
     "Studio" -> "📚"
     "Personale" -> "🏠"
     "Lavoro" -> "💼"
@@ -197,7 +197,7 @@ private fun categoryIcon(category: String, iconOverride: String? = null): String
     else -> "🏷️"
 }
 
-private fun categoryDisplay(category: String, iconOverride: String? = null): String = "${categoryIcon(category, iconOverride)}  $category"
+internal fun categoryDisplay(category: String, iconOverride: String? = null): String = "${categoryIcon(category, iconOverride)}  $category"
 
 private fun auroraBackgroundBrush(): Brush? = when (OrganizerPalette.currentTheme) {
     OrganizerTheme.AURORA_MIDNIGHT -> Brush.linearGradient(
@@ -209,9 +209,9 @@ private fun auroraBackgroundBrush(): Brush? = when (OrganizerPalette.currentThem
     else -> null
 }
 
-private fun Modifier.organizerBackground(): Modifier = auroraBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
+internal fun Modifier.organizerBackground(): Modifier = auroraBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
 
-private fun openingHaloBrush(): Brush = when (OrganizerPalette.currentTheme) {
+internal fun openingHaloBrush(): Brush = when (OrganizerPalette.currentTheme) {
     OrganizerTheme.ORIGINAL_DARK -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.20f), Color.Transparent))
     OrganizerTheme.CARTA_DORATA -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.24f), Color.Transparent))
     OrganizerTheme.AURORA_MIDNIGHT -> Brush.radialGradient(listOf(AccentSecondary.copy(alpha = 0.28f), Gold.copy(alpha = 0.10f), Color.Transparent))
@@ -469,123 +469,6 @@ class MainActivity : FragmentActivity() {
     companion object {
         const val EXTRA_OPEN_NEW_TASK = "open_new_task"
         private const val NOTIFICATION_PERMISSION_REQUEST = 1
-    }
-}
-
-@Composable
-private fun OpeningScreen() {
-    val progress by animateFloatAsState(
-        targetValue = 0.92f,
-        animationSpec = tween(durationMillis = 1_100),
-        label = "openingProgress"
-    )
-    Box(
-        modifier = Modifier.fillMaxSize().organizerBackground(),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(modifier = Modifier.fillMaxSize().background(openingHaloBrush()))
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Image(
-                painter = painterResource(R.drawable.splash_mark_transparent),
-                contentDescription = "Task Organizer",
-                modifier = Modifier.size(210.dp),
-                contentScale = ContentScale.Fit
-            )
-            Text("Task Organizer", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Sto preparando tutto", color = SoftText, fontSize = 13.sp)
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxWidth(0.46f).height(5.dp),
-                color = Gold,
-                trackColor = CardBlueLight
-            )
-        }
-    }
-}
-
-@Composable
-private fun PrivacyConsentScreen(onContinueAsGuest: () -> Unit) {
-    var confirmed by remember { mutableStateOf(false) }
-    Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
-        PageColumn(safeBottom = true, safeTop = true) {
-            Text("Prima di iniziare", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("La tua privacy viene prima dell'organizzazione.", color = SoftText)
-            InfoCard(
-                "I tuoi dati restano qui",
-                "Attività, note, liste, categorie, preferenze e PIN restano nel telefono in un archivio cifrato. Non vengono inviati agli sviluppatori.",
-                "Solo sul telefono"
-            )
-            InfoCard(
-                "Account facoltativo",
-                "Potrai accedere con Google o Microsoft soltanto se vorrai usare backup, calendario o servizi collegati. L'accesso non caricherà automaticamente le tue attività.",
-                "Potrai decidere in seguito"
-            )
-            InfoCard(
-                "Niente pubblicità o tracciamento",
-                "Non vendiamo dati, non mostriamo pubblicità e non analizziamo le tue attività. Le notifiche verranno chieste solo quando deciderai di attivarle.",
-                "Trasparenza"
-            )
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = confirmed, onCheckedChange = { confirmed = it })
-                Text("Ho letto come vengono trattati i miei dati.", color = MainText, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp))
-            }
-            Button(
-                onClick = onContinueAsGuest,
-                enabled = confirmed,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
-            ) { Text("Continua come ospite", fontWeight = FontWeight.Bold) }
-            Text("Potrai aggiungere un account in qualsiasi momento dalla scheda Account.", color = SoftText, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
-private fun ArchiveRecoveryScreen(onRetry: () -> Unit, onStartFresh: (onFinished: (Boolean) -> Unit) -> Unit) {
-    var showConfirmation by remember { mutableStateOf(false) }
-    var recoveryError by remember { mutableStateOf(false) }
-    Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
-        PageColumn(safeBottom = true, safeTop = true) {
-            Text("Archivio da recuperare", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Task Organizer non riesce a leggere l'archivio locale. Per proteggere le tue attività non abbiamo modificato né cancellato nulla.", color = SoftText)
-            InfoCard(
-                "I dati restano al sicuro",
-                "Potrebbe trattarsi di un file danneggiato o di una chiave di sicurezza non più disponibile sul telefono. Puoi riprovare oppure iniziare con un archivio nuovo.",
-                "Nessuna cancellazione automatica"
-            )
-            Button(
-                onClick = { recoveryError = false; onRetry() },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
-            ) { Text("Riprova", fontWeight = FontWeight.Bold) }
-            OutlinedButton(
-                onClick = { showConfirmation = true },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) { Text("Inizia con un nuovo archivio", color = MainText) }
-            if (recoveryError) {
-                Text("Non è stato possibile preparare una copia di sicurezza. I tuoi dati non sono stati toccati.", color = Danger, fontSize = 13.sp)
-            }
-        }
-    }
-    if (showConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showConfirmation = false },
-            title = { Text("Iniziare da zero?", color = MainText) },
-            text = { Text("Prima conserveremo una copia dell'archivio non leggibile sul telefono. Solo dopo verrà creato un nuovo archivio vuoto.", color = SoftText) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showConfirmation = false
-                    onStartFresh { succeeded -> recoveryError = !succeeded }
-                }) { Text("Conserva copia e continua", color = Gold) }
-            },
-            dismissButton = { TextButton(onClick = { showConfirmation = false }) { Text("Annulla", color = SoftText) } }
-        )
     }
 }
 
@@ -1024,170 +907,8 @@ private fun TaskOrganizerApp(
     }
 }
 
-private data class KanbanColumn(val id: String, val label: String, val icon: String)
-
-private val KanbanColumns = listOf(
-    KanbanColumn("todo", "Da fare", "📥"),
-    KanbanColumn("shopping", "Spesa", "🛒"),
-    KanbanColumn("doing", "In corso", "⚡"),
-    KanbanColumn("done", "Fatto", "✓")
-)
-private val KanbanStageIds = KanbanColumns.mapTo(mutableSetOf()) { it.id }
-
-private fun kanbanStageOf(item: OrganizerListItem): String = when {
-    item.completed -> "done"
-    item.kanbanStage in KanbanStageIds -> item.kanbanStage
-    item.listType == "shopping" -> "shopping"
-    else -> "todo"
-}
-
 @Composable
-private fun KanbanListsScreen(
-    items: List<OrganizerListItem>,
-    onAdd: (OrganizerListItem) -> Unit,
-    onChange: (OrganizerListItem) -> Unit,
-    onDelete: (OrganizerListItem) -> Unit
-) {
-    var activeColumn by rememberSaveable { mutableStateOf("todo") }
-    var title by rememberSaveable { mutableStateOf("") }
-    var amount by rememberSaveable { mutableStateOf("") }
-    var error by rememberSaveable { mutableStateOf("") }
-    var deleteCandidate by remember { mutableStateOf<OrganizerListItem?>(null) }
-    val active = KanbanColumns.first { it.id == activeColumn }
-    val visibleItems = items.filter { kanbanStageOf(it) == activeColumn }.sortedByDescending { it.createdAt }
-
-    PageColumn {
-        Text("Liste e spesa", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            KanbanColumns.forEach { column ->
-                val selected = column.id == activeColumn
-                val count = items.count { kanbanStageOf(it) == column.id }
-                TextButton(
-                    onClick = { activeColumn = column.id; error = "" },
-                    modifier = Modifier.weight(1f).background(if (selected) Gold else CardBlue, RoundedCornerShape(14.dp)).padding(vertical = 4.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(column.icon, fontSize = 14.sp)
-                        Text(column.label, color = if (selected) NightBlue else SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                        Text(count.toString(), color = if (selected) NightBlue else MainText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Aggiungi in ${active.icon} ${active.label}", color = MainText, fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    placeholder = { Text(if (activeColumn == "shopping") "Cosa devi comprare?" else "Scrivi una nuova voce...") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = compactEditorFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (activeColumn == "shopping") {
-                    OutlinedTextField(
-                        value = amount,
-                        onValueChange = { amount = it },
-                        placeholder = { Text("Spesa prevista · facoltativa") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = compactEditorFieldColors(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                if (error.isNotBlank()) Text(error, color = Danger, fontSize = 12.sp)
-                Button(
-                    onClick = {
-                        val cents = if (activeColumn == "shopping") parseAmountCents(amount) else null
-                        error = when {
-                            title.isBlank() -> "Scrivi prima una voce."
-                            activeColumn == "shopping" && amount.isNotBlank() && cents == null -> "Inserisci un importo valido, ad esempio 3,50."
-                            else -> ""
-                        }
-                        if (error.isBlank()) {
-                            onAdd(
-                                OrganizerListItem(
-                                    title = title.trim(),
-                                    listType = if (activeColumn == "shopping") "shopping" else "todo",
-                                    amountCents = cents,
-                                    completed = activeColumn == "done",
-                                    kanbanStage = activeColumn
-                                )
-                            )
-                            title = ""
-                            amount = ""
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
-                ) { Text("+ Card", fontWeight = FontWeight.Bold) }
-            }
-        }
-
-        if (visibleItems.isEmpty()) {
-            EmptyState("Nessuna card in questa corsia", "Aggiungi una voce oppure sposta qui una card esistente.")
-        } else {
-            visibleItems.forEach { item ->
-                key(item.id) {
-                Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(
-                                    if (item.listType == "shopping") "🛒 Spesa" else "📌 Lista",
-                                    color = if (item.listType == "shopping") Gold else SoftText,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(item.title, color = if (item.completed) SoftText else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                                item.amountCents?.let { Text(formatCurrency(it), color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                            }
-                            TextButton(onClick = { deleteCandidate = item }) { Text("×", color = Danger, fontSize = 20.sp) }
-                        }
-                        HorizontalDivider(color = CardBlueLight)
-                        Text("Sposta in:", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            KanbanColumns.filter { it.id != activeColumn }.forEach { target ->
-                                TextButton(
-                                    onClick = {
-                                        onChange(
-                                            item.copy(
-                                                kanbanStage = target.id,
-                                                listType = if (target.id == "shopping") "shopping" else "todo",
-                                                completed = target.id == "done"
-                                            )
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f).background(CardBlueLight, RoundedCornerShape(10.dp))
-                                ) { Text("${target.icon} ${target.label}", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
-                            }
-                        }
-                    }
-                }
-                }
-            }
-        }
-    }
-    deleteCandidate?.let { item ->
-        AlertDialog(
-            onDismissRequest = { deleteCandidate = null },
-            containerColor = CardBlue,
-            title = { Text("Eliminare elemento?", color = MainText) },
-            text = { Text("Vuoi eliminare “${item.title}”? L'operazione non può essere annullata.", color = SoftText) },
-            confirmButton = { TextButton(onClick = { onDelete(item); deleteCandidate = null }) { Text("Elimina", color = Danger) } },
-            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text("Annulla", color = SoftText) } }
-        )
-    }
-}
-
-@Composable
-private fun PageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+internal fun PageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             modifier = Modifier.fillMaxWidth().widthIn(max = 600.dp)
@@ -1201,7 +922,7 @@ private fun PageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, co
 }
 
 @Composable
-private fun LazyPageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, content: LazyListScope.() -> Unit) {
+internal fun LazyPageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, content: LazyListScope.() -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth().widthIn(max = 600.dp)
@@ -1989,168 +1710,6 @@ private fun TrashDialog(
             },
             dismissButton = { TextButton(onClick = { deleteAllConfirmationOpen = false }) { Text("Annulla", color = SoftText) } }
         )
-    }
-}
-
-@Composable
-private fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(18.dp)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(48.dp).clickable(onClick = onToggle).semantics {
-                    contentDescription = if (task.completed) "Segna ${task.title} come da fare" else "Segna ${task.title} come completata"
-                    role = Role.Button
-                },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(if (task.completed) "✓" else "○", color = taskCompletionColor(task), fontSize = 24.sp)
-            }
-            Spacer(Modifier.size(4.dp))
-            Column(modifier = Modifier.weight(1f).clickable(onClick = onEdit)) {
-                Text(task.title, color = if (task.completed) SoftText else MainText, fontWeight = FontWeight.Bold)
-                Text(listOfNotNull(formatTimeRange(task), categoryDisplay(task.category, task.categoryIcon)).joinToString(" · "), color = SoftText, fontSize = 13.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val titleColor = taskCardTextColor(task)
-    val mutedColor = taskCardMutedColor(task)
-    Card(colors = CardDefaults.cardColors(containerColor = taskCardBackground(task.cardColor)), shape = RoundedCornerShape(20.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(48.dp).clickable(onClick = onToggle).semantics {
-                        contentDescription = if (task.completed) "Segna ${task.title} come da fare" else "Segna ${task.title} come completata"
-                        role = Role.Button
-                    },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(if (task.completed) "✓" else "○", color = taskCompletionColor(task), fontSize = 25.sp)
-                }
-                Spacer(Modifier.size(2.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(task.title, color = if (task.completed) mutedColor else titleColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text("${formatItalianDate(task.date)}${formatTimeRange(task)?.let { " · $it" } ?: ""}", color = mutedColor, fontSize = 13.sp)
-                }
-            }
-            Text("${categoryDisplay(task.category, task.categoryIcon)} · priorità ${task.priority.lowercase()}", color = Gold, fontSize = 13.sp)
-            task.examStatus?.let { Text("Esame: $it", color = Gold, fontSize = 13.sp) }
-            if (task.note.isNotBlank()) Text(task.note, color = mutedColor, fontSize = 14.sp)
-            HorizontalDivider(color = if (task.cardColor == DefaultCardColor) CardBlueLight else mutedColor.copy(alpha = 0.25f))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = onToggle) { Text(if (task.completed) "Riapri" else "Completa", color = Success) }
-                TextButton(onClick = onEdit) { Text("Modifica", color = Gold) }
-                TextButton(onClick = onDelete) { Text("Elimina", color = Danger) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CalendarScreen(
-    tasks: List<OrganizerTask>,
-    onAdd: () -> Unit,
-    onToggle: (String) -> Unit,
-    onEdit: (OrganizerTask) -> Unit
-) {
-    var displayedMonthValue by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
-    var selectedDateValue by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
-    val displayedMonth = YearMonth.parse(displayedMonthValue)
-    val selectedDate = LocalDate.parse(selectedDateValue)
-    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALY) }
-    val firstDayOffset = displayedMonth.atDay(1).dayOfWeek.value - 1
-    val daysInMonth = displayedMonth.lengthOfMonth()
-    val gridCells = (0 until 42).toList()
-    val selectedTasks by remember(selectedDateValue) {
-        derivedStateOf {
-            tasks.filter { it.date == selectedDateValue }.sortedBy { it.time ?: "99:99" }
-        }
-    }
-    val previousMonthDescription = stringResource(R.string.previous_month)
-    val nextMonthDescription = stringResource(R.string.next_month)
-
-    LazyPageColumn {
-        item { Text("Calendario", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(
-                    onClick = { displayedMonthValue = displayedMonth.minusMonths(1).toString() },
-                    modifier = Modifier.size(48.dp).semantics { contentDescription = previousMonthDescription }
-                ) { Icon(painterResource(R.drawable.ic_arrow_left), contentDescription = null, tint = Gold) }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(displayedMonth.format(monthFormatter).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = Gold, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                    TextButton(onClick = { displayedMonthValue = YearMonth.now().toString(); selectedDateValue = LocalDate.now().toString() }) { Text("Oggi", color = SoftText, fontSize = 12.sp) }
-                }
-                TextButton(
-                    onClick = { displayedMonthValue = displayedMonth.plusMonths(1).toString() },
-                    modifier = Modifier.size(48.dp).semantics { contentDescription = nextMonthDescription }
-                ) { Icon(painterResource(R.drawable.ic_arrow_right), contentDescription = null, tint = Gold) }
-            }
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        listOf("L", "M", "M", "G", "V", "S", "D").forEach { day ->
-                            Text(day, modifier = Modifier.weight(1f), color = Gold, fontSize = 12.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    gridCells.chunked(7).forEach { week ->
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            week.forEach { cell ->
-                                val dayNumber = cell - firstDayOffset + 1
-                                val date = if (dayNumber in 1..daysInMonth) displayedMonth.atDay(dayNumber) else null
-                                val hasTasks = date != null && tasks.any { it.date == date.toString() }
-                                val isSelected = date == selectedDate
-                                CalendarDayCell(date, hasTasks, isSelected) { clickedDate -> selectedDateValue = clickedDate.toString() }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        item { Text("${formatItalianDate(selectedDate.toString())}", color = MainText, fontSize = 19.sp, fontWeight = FontWeight.Bold) }
-        if (selectedTasks.isEmpty()) {
-            item { EmptyState("Nessun impegno", "Non hai attività previste per questo giorno.") }
-        } else {
-            items(selectedTasks, key = { it.id }) { task ->
-                CompactTaskCard(
-                    task,
-                    onToggle = { onToggle(task.id) },
-                    onEdit = { onEdit(task) }
-                )
-            }
-        }
-        item {
-            OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
-                Text("+ Nuova attività", color = Gold, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-private fun RowScope.CalendarDayCell(date: LocalDate?, hasTasks: Boolean, isSelected: Boolean, onSelected: (LocalDate) -> Unit) {
-    Box(
-        modifier = Modifier.weight(1f).height(48.dp).background(
-            color = when {
-                isSelected -> Gold
-                date == LocalDate.now() -> CardBlueLight
-                else -> Color.Transparent
-            },
-            shape = RoundedCornerShape(10.dp)
-        ).then(if (date != null) Modifier.clickable { onSelected(date) } else Modifier),
-        contentAlignment = Alignment.Center
-    ) {
-        if (date != null) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(date.dayOfMonth.toString(), color = if (isSelected) NightBlue else MainText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                if (hasTasks) Text("•", color = if (isSelected) NightBlue else Gold, fontSize = 16.sp, lineHeight = 12.sp)
-            }
-        }
     }
 }
 
@@ -3800,7 +3359,7 @@ private fun editorFieldColors() = OutlinedTextFieldDefaults.colors(
 )
 
 @Composable
-private fun compactEditorFieldColors() = OutlinedTextFieldDefaults.colors(
+internal fun compactEditorFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = MainText,
     unfocusedTextColor = MainText,
     focusedContainerColor = CardBlueLight.copy(alpha = 0.62f),
