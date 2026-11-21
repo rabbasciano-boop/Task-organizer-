@@ -435,7 +435,10 @@ internal fun AppLockScreen(
     var working by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    Box(modifier = Modifier.fillMaxSize().organizerBackground(), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier.fillMaxSize().organizerBackground().clickable(onClick = {}),
+        contentAlignment = Alignment.Center
+    ) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(24.dp),
             colors = CardDefaults.cardColors(containerColor = CardBlue),
