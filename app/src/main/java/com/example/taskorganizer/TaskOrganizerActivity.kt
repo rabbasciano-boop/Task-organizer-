@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -624,7 +625,7 @@ private fun TaskOrganizerApp(
             val index = disk.tasks.indexOfFirst { it.id == task.id }
             disk.copy(tasks = if (index >= 0) disk.tasks.toMutableList().also { it[index] = task } else disk.tasks + task)
         }) {
-            TaskReminderScheduler.schedule(context, task)
+            appScope.launch(Dispatchers.IO) { TaskReminderScheduler.schedule(context, task) }
             editorOpen = false
             editorTaskId = null
             navigateToTab(1)
@@ -636,7 +637,9 @@ private fun TaskOrganizerApp(
             RecurrenceTiming.toggleTask(disk, taskId)
         }) { updated ->
             if (updated.tasks.any { it.id == taskId }) {
-                RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
+                appScope.launch(Dispatchers.IO) {
+                    RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
+                }
             }
         }
     }
@@ -647,7 +650,9 @@ private fun TaskOrganizerApp(
             if (current.completed) disk else RecurrenceTiming.updateTask(disk, current.copy(completed = true))
         }) { updated ->
             if (updated.tasks.any { it.id == taskId }) {
-                RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
+                appScope.launch(Dispatchers.IO) {
+                    RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
+                }
             }
         }
     }
@@ -672,7 +677,9 @@ private fun TaskOrganizerApp(
                 deletedTasks = disk.deletedTasks.filterNot { it.id == taskId }
             )
         }) { updated ->
-            updated.tasks.firstOrNull { it.id == taskId }?.let { TaskReminderScheduler.schedule(context, it) }
+            updated.tasks.firstOrNull { it.id == taskId }?.let { task ->
+                appScope.launch(Dispatchers.IO) { TaskReminderScheduler.schedule(context, task) }
+            }
         }
     }
 
@@ -680,6 +687,23 @@ private fun TaskOrganizerApp(
         updateArchive(change = { disk ->
             disk.copy(deletedTasks = disk.deletedTasks.filterNot { it.id == taskId })
         })
+    }
+
+    fun restoreTasksById(taskIds: Set<String>) {
+        if (taskIds.isEmpty()) return
+        updateArchive(change = { disk ->
+            val restored = disk.deletedTasks.filter { it.id in taskIds }.map { it.copy(deletedAt = 0L) }
+            disk.copy(tasks = disk.tasks.filterNot { it.id in taskIds } + restored, deletedTasks = disk.deletedTasks.filterNot { it.id in taskIds })
+        }) { updated ->
+            appScope.launch(Dispatchers.IO) {
+                updated.tasks.filter { it.id in taskIds }.forEach { TaskReminderScheduler.schedule(context, it) }
+            }
+        }
+    }
+
+    fun permanentlyDeleteTasksById(taskIds: Set<String>) {
+        if (taskIds.isEmpty()) return
+        updateArchive(change = { disk -> disk.copy(deletedTasks = disk.deletedTasks.filterNot { it.id in taskIds }) })
     }
 
     fun clearLocalData() {
@@ -853,7 +877,7 @@ private fun TaskOrganizerApp(
                     onManageAccount = { navigateToTab(4) },
                     onOpenPrivacy = { privacyInfoOpen = true }
                 )
-                OrganizerScreen.Activities -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::toggleTaskById, openEditTask, ::deleteTaskById, ::restoreTaskById, ::permanentlyDeleteTaskById)
+                OrganizerScreen.Activities -> ActivitiesScreen(tasks, deletedTasks, openNewTask, ::toggleTaskById, openEditTask, ::deleteTaskById, ::restoreTaskById, ::permanentlyDeleteTaskById, ::restoreTasksById, ::permanentlyDeleteTasksById)
                 OrganizerScreen.Lists -> KanbanListsScreen(
                     items = listItems,
                     onAdd = { item -> updateArchive(change = { disk -> disk.copy(listItems = disk.listItems + item) }) },
@@ -1839,7 +1863,9 @@ private fun TaskEditorScreen(
             parsedDate == null -> "La data deve essere nel formato GG-MM-AAAA."
             !validTime -> "L'orario deve essere nel formato 00:00."
             !validEndTime -> "L'orario di fine deve essere nel formato 00:00."
+            normalizedTime == null && normalizedEndTime != null -> "Inserisci prima l'orario di inizio."
             normalizedTime != null && normalizedEndTime != null && normalizedEndTime <= normalizedTime -> "L'orario di fine deve essere successivo all'inizio."
+            reminderEnabled && normalizedTime == null -> "Per il promemoria serve un orario di inizio."
             else -> ""
         }
         if (error.isBlank()) {
@@ -1860,7 +1886,7 @@ private fun TaskEditorScreen(
     BackHandler(onBack = ::requestClose)
 
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1873,7 +1899,6 @@ private fun TaskEditorScreen(
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("ANTEPRIMA CARD LIVE", color = SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("0 attività salvate oggi", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.size(5.dp))
             TaskEditorPreview(
@@ -2188,9 +2213,6 @@ private fun EditorChoiceChips(
 private fun TimeField(label: String, value: String, optional: Boolean = false, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
     var pickerOpen by remember { mutableStateOf(false) }
     val normalized = normalizeTime(value)
-    val initialHour = normalized?.substringBefore(":")?.toIntOrNull() ?: 0
-    val initialMinute = normalized?.substringAfter(":")?.toIntOrNull() ?: 0
-    val pickerState = rememberTimePickerState(initialHour = initialHour, initialMinute = initialMinute, is24Hour = true)
 
     OutlinedTextField(
         value = value,
@@ -2204,7 +2226,12 @@ private fun TimeField(label: String, value: String, optional: Boolean = false, o
         colors = compactEditorFieldColors()
     )
     if (pickerOpen) {
-        AlertDialog(
+        val currentTime = LocalTime.now().withSecond(0).withNano(0)
+        val initialHour = normalized?.substringBefore(":")?.toIntOrNull() ?: currentTime.hour
+        val initialMinute = normalized?.substringAfter(":")?.toIntOrNull() ?: currentTime.minute
+        key(value, pickerOpen) {
+            val pickerState = rememberTimePickerState(initialHour = initialHour, initialMinute = initialMinute, is24Hour = true)
+            AlertDialog(
             onDismissRequest = { pickerOpen = false },
             containerColor = CardBlue,
             title = { Text("Scegli l'orario", color = MainText) },
@@ -2216,7 +2243,8 @@ private fun TimeField(label: String, value: String, optional: Boolean = false, o
                 }) { Text("Conferma", color = Gold) }
             },
             dismissButton = { TextButton(onClick = { pickerOpen = false }) { Text("Annulla", color = SoftText) } }
-        )
+            )
+        }
     }
 }
 

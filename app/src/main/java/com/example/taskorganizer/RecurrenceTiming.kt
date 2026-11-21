@@ -16,6 +16,7 @@ internal object RecurrenceTiming {
         val previous = archive.tasks[index]
         val recurrenceEnabled = requestedTask.recurrence != "none"
         val completesRecurrence = !previous.completed && requestedTask.completed && recurrenceEnabled
+        val reopensRecurrence = previous.completed && !requestedTask.completed && recurrenceEnabled
         val seriesId = when {
             !recurrenceEnabled -> null
             completesRecurrence -> previous.seriesId ?: previous.id
@@ -42,13 +43,36 @@ internal object RecurrenceTiming {
                 recurrenceAnchorDate = anchorDate
             )
         } else null
-        return archive.copy(tasks = archive.tasks.toMutableList().also { it[index] = updatedTask } + listOfNotNull(nextTask))
+        val generatedOccurrence = if (reopensRecurrence) {
+            val expectedDate = firstFutureDate(
+                previous.date,
+                previous.recurrenceAnchorDate ?: previous.date,
+                previous.recurrence,
+                today
+            )
+            archive.tasks.firstOrNull { candidate ->
+                candidate.id != previous.id &&
+                    candidate.seriesId == previous.seriesId &&
+                    candidate.date == expectedDate &&
+                    !candidate.completed &&
+                    candidate.deletedAt == 0L
+            }
+        } else null
+        val activeTasks = archive.tasks.toMutableList().also { it[index] = updatedTask }
+            .filterNot { it.id == generatedOccurrence?.id } + listOfNotNull(nextTask)
+        return archive.copy(
+            tasks = activeTasks,
+            deletedTasks = archive.deletedTasks.filterNot { it.id == generatedOccurrence?.id } +
+                listOfNotNull(generatedOccurrence?.copy(deletedAt = System.currentTimeMillis()))
+        )
     }
 
     fun reminderTasks(archive: TaskArchive, taskId: String): List<OrganizerTask> {
         val task = archive.tasks.firstOrNull { it.id == taskId } ?: return emptyList()
         val seriesId = task.seriesId ?: return listOf(task)
-        return archive.tasks.filter { it.id == task.id || it.seriesId == seriesId }
+        return archive.tasks.filter { candidate ->
+            candidate.id == task.id || (candidate.seriesId == seriesId && !candidate.completed && candidate.deletedAt == 0L)
+        } + archive.deletedTasks.filter { it.seriesId == seriesId && it.deletedAt > 0L }
     }
 
     private fun firstFutureDate(

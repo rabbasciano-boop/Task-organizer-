@@ -165,7 +165,11 @@ fun KanbanListsScreen(
                                             onChange(
                                                 item.copy(
                                                     kanbanStage = target.id,
-                                                    listType = if (target.id == "shopping") "shopping" else "todo",
+                                                    listType = when (target.id) {
+                                                        "shopping" -> "shopping"
+                                                        "todo" -> "todo"
+                                                        else -> item.listType
+                                                    },
                                                     completed = target.id == "done"
                                                 )
                                             )

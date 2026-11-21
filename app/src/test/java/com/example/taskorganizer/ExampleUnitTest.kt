@@ -45,6 +45,22 @@ class PinAttemptPolicyTest {
 
 class RecurrenceTimingTest {
     @Test
+    fun reopeningARecurringTaskRemovesItsGeneratedFutureOccurrence() {
+        val task = OrganizerTask(id = "rent", title = "Affitto", date = "2026-11-01", recurrence = "monthly")
+        val completed = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(task)), task.id, LocalDate.of(2026, 11, 1))
+        val reopened = RecurrenceTiming.toggleTask(completed, task.id, LocalDate.of(2026, 11, 1))
+
+        assertEquals(1, reopened.tasks.size)
+        assertTrue(!reopened.tasks.single().completed)
+        assertEquals(1, reopened.deletedTasks.size)
+        assertEquals("2026-12-01", reopened.deletedTasks.single().date)
+
+        val completedAgain = RecurrenceTiming.toggleTask(reopened, task.id, LocalDate.of(2026, 11, 1))
+        assertEquals(2, completedAgain.tasks.size)
+        assertEquals(1, completedAgain.tasks.count { it.date == "2026-12-01" })
+    }
+
+    @Test
     fun createsTheFirstFutureOccurrenceForOverdueActivities() {
         val task = OrganizerTask(id = "daily", title = "Acqua", date = "2026-11-01", recurrence = "daily")
         val updated = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(task)), task.id, LocalDate.of(2026, 11, 19))
@@ -117,6 +133,20 @@ class OrganizerFormattingTest {
         assertEquals(350L, parseAmountCents("3,5"))
         assertEquals(123_450L, parseAmountCents("1.234,50"))
         assertEquals(null, parseAmountCents("99999999999999999999"))
+    }
+}
+
+class WidgetOrderingTest {
+    @Test
+    fun keepsUpcomingTasksBeforeOverdueAndCompletedHistory() {
+        val tasks = listOf(
+            OrganizerTask(id = "old-done", title = "Fatto", date = "2026-10-01", completed = true),
+            OrganizerTask(id = "overdue", title = "Ieri", date = "2026-11-19"),
+            OrganizerTask(id = "tomorrow", title = "Domani", date = "2026-11-21"),
+            OrganizerTask(id = "today", title = "Oggi", date = "2026-11-20")
+        )
+        assertEquals(listOf("today", "tomorrow", "overdue", "old-done"), widgetTasksForFilter(tasks, "all", LocalDate.of(2026, 11, 20)).map { it.id })
+        assertEquals(listOf("old-done"), widgetTasksForFilter(tasks, "done", LocalDate.of(2026, 11, 20)).map { it.id })
     }
 }
 

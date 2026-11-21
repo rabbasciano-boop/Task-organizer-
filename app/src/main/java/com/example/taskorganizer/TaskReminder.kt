@@ -156,13 +156,17 @@ class TaskReminderReceiver : BroadcastReceiver() {
 
         val timing = TaskReminderScheduler.remainingLabel(TaskReminderScheduler.taskStartAt(intent))
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, channelId) else Notification.Builder(context)
+        val notificationDefaults = when {
+            !isAlarm -> 0
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> Notification.DEFAULT_ALL
+            else -> Notification.DEFAULT_VIBRATE
+        }
         if (isAlarm && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             builder
                 .setSound(
                     RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
                     AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
                 )
-                .setDefaults(Notification.DEFAULT_VIBRATE)
         }
         val notification = builder
             .setSmallIcon(R.drawable.ic_stat_task_organizer)
@@ -173,7 +177,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setPublicVersion(publicVersion.build())
             .setCategory(if (isAlarm) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
-            .setDefaults(if (isAlarm && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.DEFAULT_ALL else 0)
+            .setDefaults(notificationDefaults)
             .build()
         manager.notify(TaskReminderScheduler.taskId(intent), TaskReminderScheduler.reminderIndex(intent), notification)
     }

@@ -66,7 +66,8 @@ class AppSecurity(context: Context) {
         val savedBootCount = preferences.getInt(LOCK_BOOT_COUNT, -1)
         val currentBootCount = bootCount()
         val lockDuration = preferences.getLong(LOCK_DURATION, 0L)
-        if (lockDuration > 0L && savedBootCount >= 0 && currentBootCount >= 0 && savedBootCount != currentBootCount) {
+        val wallClockRemaining = (preferences.getLong(LOCKED_UNTIL, 0L) - now).coerceAtLeast(0L)
+        if (lockDuration > 0L && wallClockRemaining > 0L && savedBootCount >= 0 && currentBootCount >= 0 && savedBootCount != currentBootCount) {
             // elapsedRealtime resets after a reboot. Rebase the lock once, so a reboot followed by
             // a manual clock change cannot immediately bypass the attempt limit.
             preferences.edit()
@@ -77,7 +78,9 @@ class AppSecurity(context: Context) {
                 .apply()
             return lockDuration
         }
-        val wallClockRemaining = (preferences.getLong(LOCKED_UNTIL, 0L) - now).coerceAtLeast(0L)
+        if (lockDuration > 0L && wallClockRemaining == 0L) {
+            preferences.edit().putInt(LOCK_BOOT_COUNT, currentBootCount).remove(LOCK_DURATION).apply()
+        }
         val startedElapsed = preferences.getLong(LOCK_STARTED_ELAPSED, -1L)
         val elapsedLockUntil = preferences.getLong(LOCKED_UNTIL_ELAPSED, 0L)
         // elapsedRealtime cannot be changed from the date/time settings. After a reboot it starts

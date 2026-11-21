@@ -209,12 +209,7 @@ object TaskWidgetUpdater {
         val hideTaskTitles = areTaskTitlesHidden(context)
         val activeFilter = context.getSharedPreferences(TaskOrganizerWidgetProvider.WIDGET_PREFERENCES, Context.MODE_PRIVATE)
             .getString("filter_$appWidgetId", "all") ?: "all"
-        val visibleTasks = when (activeFilter) {
-            "today" -> todayTasks
-            "todo" -> tasks.filter { !it.completed }
-            "done" -> tasks.filter { it.completed }
-            else -> tasks
-        }.sortedWith(compareBy<OrganizerTask> { it.date }.thenBy { it.time ?: "" })
+        val visibleTasks = widgetTasksForFilter(tasks, activeFilter, today)
         val views = RemoteViews(context.packageName, layout)
         applyColors(views, layout, palette)
         views.setImageViewBitmap(R.id.widget_ring, progressRing(progress, palette))
@@ -401,6 +396,25 @@ object TaskWidgetUpdater {
     }
 
     private fun formatDate(date: LocalDate): String = "${date.dayOfMonth.toString().padStart(2, '0')}/${date.monthValue.toString().padStart(2, '0')}"
+}
+
+/** Ordering shared by the widget layouts: current work always comes before old history. */
+internal fun widgetTasksForFilter(tasks: List<OrganizerTask>, filter: String, today: LocalDate): List<OrganizerTask> {
+    if (filter == "today") return tasks.filter { it.date == today.toString() }
+        .sortedWith(compareBy<OrganizerTask> { it.time == null }.thenBy { it.time ?: "" })
+    if (filter == "done") return tasks.filter { it.completed }
+        .sortedWith(compareByDescending<OrganizerTask> { it.date }.thenByDescending { it.time ?: "" })
+
+    val filtered = if (filter == "todo") tasks.filter { !it.completed } else tasks
+    return filtered.sortedWith(
+        compareBy<OrganizerTask> {
+            when {
+                !it.completed && runCatching { !LocalDate.parse(it.date).isBefore(today) }.getOrDefault(false) -> 0
+                !it.completed -> 1
+                else -> 2
+            }
+        }.thenBy { it.date }.thenBy { it.time ?: "" }
+    )
 }
 
 /** A battery-friendly fallback for phones that delay the DATE_CHANGED broadcast. */

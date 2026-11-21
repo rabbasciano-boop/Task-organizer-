@@ -25,7 +25,9 @@ fun ActivitiesScreen(
     onEdit: (OrganizerTask) -> Unit,
     onDelete: (String) -> Unit,
     onRestore: (String) -> Unit,
-    onPermanentlyDelete: (String) -> Unit
+    onPermanentlyDelete: (String) -> Unit,
+    onRestoreMany: (Set<String>) -> Unit,
+    onPermanentlyDeleteMany: (Set<String>) -> Unit
 ) {
     var selectedMonth by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("") }
@@ -155,7 +157,9 @@ fun ActivitiesScreen(
             tasks = deletedTasks.sortedByDescending { it.createdAt },
             onDismiss = { trashOpen = false },
             onRestore = onRestore,
-            onPermanentlyDelete = onPermanentlyDelete
+            onPermanentlyDelete = onPermanentlyDelete,
+            onRestoreMany = onRestoreMany,
+            onPermanentlyDeleteMany = onPermanentlyDeleteMany
         )
     }
 }
@@ -165,11 +169,15 @@ private fun TrashDialog(
     tasks: List<OrganizerTask>,
     onDismiss: () -> Unit,
     onRestore: (String) -> Unit,
-    onPermanentlyDelete: (String) -> Unit
+    onPermanentlyDelete: (String) -> Unit,
+    onRestoreMany: (Set<String>) -> Unit,
+    onPermanentlyDeleteMany: (Set<String>) -> Unit
 ) {
     var permanentDeleteTask by remember { mutableStateOf<OrganizerTask?>(null) }
-    var deleteAllConfirmationOpen by remember { mutableStateOf(false) }
+    var deleteSelectionConfirmation by remember { mutableStateOf<Set<String>?>(null) }
     var selectedTaskIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val currentIds = tasks.mapTo(mutableSetOf()) { it.id }
+    val effectiveSelection = selectedTaskIds.intersect(currentIds)
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = CardBlue,
@@ -179,15 +187,25 @@ private fun TrashDialog(
                 Text("Le attività nel Cestino possono essere ripristinate per 30 giorni.", color = SoftText, fontSize = 13.sp)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = { selectedTaskIds = if (selectedTaskIds.size == tasks.size) emptySet() else tasks.mapTo(mutableSetOf()) { it.id } },
+                        onClick = { selectedTaskIds = if (effectiveSelection.size == currentIds.size) emptySet() else currentIds },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text(if (selectedTaskIds.size == tasks.size) "Deseleziona" else "Seleziona tutto", color = Gold, fontSize = 12.sp) }
-                    OutlinedButton(
-                        onClick = { deleteAllConfirmationOpen = true },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text("Elimina tutto", color = Danger, fontSize = 12.sp) }
+                    ) { Text(if (effectiveSelection.size == currentIds.size && currentIds.isNotEmpty()) "Deseleziona" else "Seleziona tutto", color = Gold, fontSize = 12.sp) }
+                    if (effectiveSelection.isEmpty()) {
+                        OutlinedButton(onClick = { deleteSelectionConfirmation = currentIds }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                            Text("Elimina tutto", color = Danger, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (effectiveSelection.isNotEmpty()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { onRestoreMany(effectiveSelection); selectedTaskIds = emptySet() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                            Text("Ripristina selezionate (${effectiveSelection.size})", color = Success, fontSize = 12.sp)
+                        }
+                        OutlinedButton(onClick = { deleteSelectionConfirmation = effectiveSelection }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                            Text("Elimina selezionate (${effectiveSelection.size})", color = Danger, fontSize = 12.sp)
+                        }
+                    }
                 }
                 tasks.forEach { task ->
                     Card(
@@ -222,21 +240,21 @@ private fun TrashDialog(
             dismissButton = { TextButton(onClick = { permanentDeleteTask = null }) { Text("Annulla", color = SoftText) } }
         )
     }
-    if (deleteAllConfirmationOpen) {
+    deleteSelectionConfirmation?.let { ids ->
         AlertDialog(
-            onDismissRequest = { deleteAllConfirmationOpen = false },
+            onDismissRequest = { deleteSelectionConfirmation = null },
             containerColor = CardBlue,
-            title = { Text("Eliminare tutto il Cestino?", color = MainText) },
-            text = { Text("Le ${tasks.size} attività nel Cestino non potranno più essere recuperate.", color = SoftText) },
+            title = { Text(if (ids.size == tasks.size) "Eliminare tutto il Cestino?" else "Eliminare le attività selezionate?", color = MainText) },
+            text = { Text("Le ${ids.size} attività selezionate non potranno più essere recuperate.", color = SoftText) },
             confirmButton = {
                 TextButton(onClick = {
-                    tasks.forEach { onPermanentlyDelete(it.id) }
+                    onPermanentlyDeleteMany(ids)
                     selectedTaskIds = emptySet()
-                    deleteAllConfirmationOpen = false
-                    onDismiss()
-                }) { Text("Elimina tutto", color = Danger) }
+                    deleteSelectionConfirmation = null
+                    if (ids.size == tasks.size) onDismiss()
+                }) { Text("Elimina definitivamente", color = Danger) }
             },
-            dismissButton = { TextButton(onClick = { deleteAllConfirmationOpen = false }) { Text("Annulla", color = SoftText) } }
+            dismissButton = { TextButton(onClick = { deleteSelectionConfirmation = null }) { Text("Annulla", color = SoftText) } }
         )
     }
 }
