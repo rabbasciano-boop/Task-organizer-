@@ -1,21 +1,22 @@
 package com.example.taskorganizer
 
-import android.app.PendingIntent
 import android.app.AlarmManager
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.RemoteViews
 import java.time.DayOfWeek
@@ -29,7 +30,7 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
     protected abstract val form: WidgetForm
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        updateOnWorker(context) {
+        updateOnWorker {
             when (val result = TaskWidgetUpdater.loadArchiveResult(context)) {
                 is TaskArchiveLoadResult.Loaded -> appWidgetIds.forEach { id ->
                     TaskWidgetUpdater.update(context, appWidgetManager, id, form, result.archive)
@@ -46,7 +47,7 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetId: Int,
         newOptions: Bundle
-    ) = updateOnWorker(context) {
+    ) = updateOnWorker {
         TaskWidgetUpdater.update(context, appWidgetManager, appWidgetId, form)
     }
 
@@ -58,7 +59,7 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
             if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID && filter in setOf("all", "today", "todo", "done")) {
                 context.getSharedPreferences(WIDGET_PREFERENCES, Context.MODE_PRIVATE)
                     .edit().putString("filter_$widgetId", filter).apply()
-                updateOnWorker(context) {
+                updateOnWorker {
                     TaskWidgetUpdater.update(context, AppWidgetManager.getInstance(context), widgetId, WidgetForm.LARGE)
                 }
             }
@@ -90,7 +91,7 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
         }.start()
     }
 
-    private fun updateOnWorker(context: Context, action: () -> Unit) {
+    private fun updateOnWorker(action: () -> Unit) {
         val pendingResult = goAsync()
         Thread {
             try {
@@ -126,6 +127,17 @@ class TaskOrganizerAgendaWidgetProvider : TaskOrganizerWidgetProvider() {
 /** Refreshes date-sensitive widget content even when the main app has not been opened. */
 class WidgetRefreshReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // Verifica che l'azione ricevuta sia attesa: protegge da intent spoofing
+        val action = intent.action ?: return
+        val expected = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_DATE_CHANGED,
+            "android.intent.action.TIME_SET",
+            Intent.ACTION_TIMEZONE_CHANGED,
+            "com.example.taskorganizer.widget.MIDNIGHT_REFRESH"
+        )
+        if (action !in expected) return
         val pendingResult = goAsync()
         Thread {
             try {
@@ -379,7 +391,12 @@ object TaskWidgetUpdater {
     }
 
     private fun applyColors(views: RemoteViews, layout: Int, palette: WidgetPalette) {
-        views.setColorStateList(R.id.widget_root, "setBackgroundTintList", ColorStateList.valueOf(palette.background))
+        // setColorStateList richiede API 31; su API < 31 usiamo setInt con il colore diretto
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            views.setColorStateList(R.id.widget_root, "setBackgroundTintList", ColorStateList.valueOf(palette.background))
+        } else {
+            views.setInt(R.id.widget_root, "setBackgroundColor", palette.background)
+        }
         views.setTextColor(R.id.widget_title, palette.text)
         views.setTextColor(R.id.widget_add, palette.accent)
         views.setTextColor(R.id.widget_progress, palette.text)

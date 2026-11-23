@@ -40,7 +40,7 @@ object TaskReminderScheduler {
             if (triggerAt > System.currentTimeMillis()) {
                 val pendingIntent = reminderIntent(context, task, index, taskStartAt)
                 // A repeating reminder stays battery-friendly; its final scheduled alert is the precise alarm.
-                val useExactAlarm = task.alarmEnabled && index == triggerTimes.lastIndex && canUseExactAlarms(context, alarmManager)
+                val useExactAlarm = task.alarmEnabled && index == triggerTimes.lastIndex && canUseExactAlarms(alarmManager)
                 if (useExactAlarm) {
                     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
                 } else {
@@ -93,9 +93,9 @@ object TaskReminderScheduler {
         return permissionGranted && manager.areNotificationsEnabled()
     }
 
-    fun canUseExactAlarms(context: Context): Boolean = canUseExactAlarms(context, context.getSystemService(AlarmManager::class.java))
+    fun canUseExactAlarms(context: Context): Boolean = canUseExactAlarms(context.getSystemService(AlarmManager::class.java))
 
-    private fun canUseExactAlarms(context: Context, alarmManager: AlarmManager): Boolean =
+    private fun canUseExactAlarms(alarmManager: AlarmManager): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
 
     private fun reminderIntent(context: Context, task: OrganizerTask, index: Int, taskStartAt: Long): PendingIntent {
@@ -104,16 +104,22 @@ object TaskReminderScheduler {
             .putExtra(EXTRA_TIME, task.time)
             .putExtra(EXTRA_TASK_START, taskStartAt)
             .putExtra(EXTRA_ALARM, task.alarmEnabled)
-        return PendingIntent.getBroadcast(context, index, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        // Il request code combina l'ID della task con l'indice per evitare collisioni
+        // tra PendingIntent di task diverse con lo stesso indice di promemoria.
+        return PendingIntent.getBroadcast(context, reminderRequestCode(task.id, index), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
     private fun existingReminderIntent(context: Context, taskId: String, index: Int): PendingIntent? =
         PendingIntent.getBroadcast(
             context,
-            index,
+            reminderRequestCode(taskId, index),
             reminderBroadcastIntent(context, taskId, index),
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
+
+    /** Combina l'hash dell'ID task con l'indice per garantire unicità del request code. */
+    private fun reminderRequestCode(taskId: String, index: Int): Int =
+        (taskId.hashCode() * 31 + index) and Int.MAX_VALUE
 
     private fun reminderBroadcastIntent(context: Context, taskId: String, index: Int): Intent =
         Intent(context, TaskReminderReceiver::class.java)
@@ -185,6 +191,17 @@ class TaskReminderReceiver : BroadcastReceiver() {
 
 class ReminderBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // Verifica che l'azione ricevuta sia attesa: protegge da intent spoofing
+        val action = intent.action ?: return
+        val expected = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            "android.intent.action.TIME_SET",
+            Intent.ACTION_TIMEZONE_CHANGED,
+            // ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED è API 31+; usiamo la stringa letterale
+            "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"
+        )
+        if (action !in expected) return
         val pendingResult = goAsync()
         Thread {
             try {

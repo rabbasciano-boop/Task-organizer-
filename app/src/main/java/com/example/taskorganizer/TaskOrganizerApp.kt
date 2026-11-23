@@ -2,7 +2,6 @@ package com.example.taskorganizer
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -277,11 +276,12 @@ internal fun TaskOrganizerApp(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     store.clearAll()
-                    profile.edit().clear().commit()
+                    // apply() è non bloccante: l'operazione avviene già in Dispatchers.IO
+                    profile.edit().clear().apply()
                     context.getSharedPreferences("task_organizer_settings", android.content.Context.MODE_PRIVATE)
-                        .edit().clear().commit()
+                        .edit().clear().apply()
                     context.getSharedPreferences(TaskOrganizerWidgetProvider.WIDGET_PREFERENCES, android.content.Context.MODE_PRIVATE)
-                        .edit().clear().commit()
+                        .edit().clear().apply()
                     security.clear()
                 }
             }

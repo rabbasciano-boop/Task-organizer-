@@ -17,7 +17,6 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -278,10 +277,19 @@ open class TaskOrganizerActivity : FragmentActivity() {
                 return
             }
         }
-        startActivity(
-            android.content.Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-        )
+        // ACTION_APP_NOTIFICATION_SETTINGS e EXTRA_APP_PACKAGE richiedono API 26.
+        // Su API 24-25 apriamo i dettagli generali dell'app come fallback.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startActivity(
+                android.content.Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            )
+        } else {
+            startActivity(
+                android.content.Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(android.net.Uri.parse("package:$packageName"))
+            )
+        }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -327,7 +335,7 @@ open class TaskOrganizerActivity : FragmentActivity() {
     }
 
     companion object {
-        private const val EXTRA_OPEN_NEW_TASK = "open_new_task"
+        const val EXTRA_OPEN_NEW_TASK = "open_new_task"
         private const val NOTIFICATION_PERMISSION_REQUEST = 1
     }
 }

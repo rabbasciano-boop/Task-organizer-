@@ -6,6 +6,6 @@ package com.example.taskorganizer
  */
 class MainActivity : TaskOrganizerActivity() {
     companion object {
-        const val EXTRA_OPEN_NEW_TASK = "open_new_task"
+        const val EXTRA_OPEN_NEW_TASK = TaskOrganizerActivity.EXTRA_OPEN_NEW_TASK
     }
 }
