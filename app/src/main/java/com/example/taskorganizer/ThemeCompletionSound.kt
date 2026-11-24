@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.media.MediaPlayer
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import kotlin.math.PI
 import kotlin.math.exp
@@ -17,6 +18,10 @@ internal object ThemeCompletionSound {
     fun play(context: Context, theme: OrganizerTheme) {
         val audioManager = context.getSystemService(AudioManager::class.java) ?: return
         if (audioManager.ringerMode == AudioManager.RINGER_MODE_SILENT) return
+        if (theme == OrganizerTheme.CARTA_DORATA) {
+            playCrumpledPaper(context)
+            return
+        }
         Thread {
             val samples = samplesFor(theme)
             val track = runCatching {
@@ -49,35 +54,24 @@ internal object ThemeCompletionSound {
     }
 
     private fun samplesFor(theme: OrganizerTheme): ShortArray = when (theme) {
-        OrganizerTheme.CARTA_DORATA -> crumpledPaperSamples()
         OrganizerTheme.ORIGINAL_DARK -> windSamples()
         OrganizerTheme.AURORA_MIDNIGHT -> spaceSamples()
         OrganizerTheme.AURORA_NORDIC -> snowSamples()
         OrganizerTheme.SUNSET_GLOW, OrganizerTheme.SUNSET_GLOW_DARK -> bubbleSamples()
+        OrganizerTheme.CARTA_DORATA -> error("Carta Dorata uses its bundled paper sound")
+    }
+
+    private fun playCrumpledPaper(context: Context) {
+        val player = runCatching { MediaPlayer.create(context.applicationContext, R.raw.sound_carta_stropicciata) }.getOrNull() ?: return
+        player.setOnCompletionListener { completed -> completed.release() }
+        player.setOnErrorListener { failed, _, _ -> failed.release(); true }
+        player.start()
     }
 
     private fun bubbleSamples(): ShortArray = render(145) { t, _ ->
         val frequency = 260f + 260f * t
         val envelope = sin(PI * t).toFloat().let { it * it } * (1f - t * 0.35f)
         sin(2.0 * PI * frequency * t * 0.145).toFloat() * envelope * 0.19f
-    }
-
-    private fun crumpledPaperSamples(): ShortArray {
-        var seed = 0x41A7
-        var previousNoise = 0f
-        var softNoise = 0f
-        return render(390) { t, _ ->
-            seed = seed * 1_103_515_245 + 12_345
-            val noise = ((seed ushr 16 and 0x7FFF) / 16_383.5f) - 1f
-            softNoise = softNoise * 0.78f + noise * 0.22f
-            val crinkle = noise - previousNoise * 0.62f
-            previousNoise = noise
-            val folds = listOf(0.05f, 0.15f, 0.27f, 0.41f, 0.58f, 0.73f).sumOf { center ->
-                exp((-(t - center) * (t - center) / 0.0028f).toDouble())
-            }.toFloat()
-            val envelope = sin(PI * t).toFloat().let { it * it } * folds.coerceAtMost(1.25f)
-            (crinkle * 0.78f + softNoise * 0.28f) * envelope * 0.22f
-        }
     }
 
     private fun windSamples(): ShortArray {
