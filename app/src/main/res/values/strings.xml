@@ -44,6 +44,8 @@
     <string name="follow_phone_theme_description">Tema scuro quando il telefono è scuro e Carta Dorata quando è chiaro.</string>
     <string name="free_themes">Temi gratuiti</string>
     <string name="additional_themes">Temi aggiuntivi</string>
+    <string name="light_themes">Temi chiari</string>
+    <string name="dark_themes">Temi scuri</string>
     <string name="theme_original_dark">🌙 Originale Dark</string>
     <string name="theme_original_dark_description">Blu notte classico con accenti oro</string>
     <string name="theme_golden_paper">📜 Carta Dorata</string>

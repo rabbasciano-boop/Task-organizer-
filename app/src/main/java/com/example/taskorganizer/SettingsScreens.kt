@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -138,13 +139,13 @@ internal fun AppearanceSettingsScreen(
                 Switch(checked = followSystemTheme, onCheckedChange = onFollowSystemThemeChanged)
             }
         }
-        Text(stringResource(R.string.free_themes), color = SoftText, fontSize = 13.sp)
-        ThemeChoiceCard(OrganizerTheme.ORIGINAL_DARK, stringResource(R.string.theme_original_dark), stringResource(R.string.theme_original_dark_description), selectedTheme, onThemeChanged)
+        Text(stringResource(R.string.light_themes), color = SoftText, fontSize = 13.sp)
         ThemeChoiceCard(OrganizerTheme.CARTA_DORATA, stringResource(R.string.theme_golden_paper), stringResource(R.string.theme_golden_paper_description), selectedTheme, onThemeChanged)
-        Text(stringResource(R.string.additional_themes), color = SoftText, fontSize = 13.sp)
-        ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, stringResource(R.string.theme_aurora_midnight), stringResource(R.string.theme_aurora_midnight_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.AURORA_NORDIC, stringResource(R.string.theme_aurora_nordic), stringResource(R.string.theme_aurora_nordic_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.SUNSET_GLOW, stringResource(R.string.theme_sunset_glow), stringResource(R.string.theme_sunset_glow_description), selectedTheme, onThemeChanged)
+        Text(stringResource(R.string.dark_themes), color = SoftText, fontSize = 13.sp)
+        ThemeChoiceCard(OrganizerTheme.ORIGINAL_DARK, stringResource(R.string.theme_original_dark), stringResource(R.string.theme_original_dark_description), selectedTheme, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, stringResource(R.string.theme_aurora_midnight), stringResource(R.string.theme_aurora_midnight_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.SUNSET_GLOW_DARK, stringResource(R.string.theme_sunset_glow_dark), stringResource(R.string.theme_sunset_glow_dark_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.AGENDA_REALE, stringResource(R.string.theme_agenda_reale), stringResource(R.string.theme_agenda_reale_description), selectedTheme, onThemeChanged)
     }
@@ -205,7 +206,7 @@ private fun ThemeChoiceCard(
         OrganizerTheme.AGENDA_REALE -> Color(0xFFFF69B4)
     }
     Card(
-        modifier = Modifier.fillMaxWidth().sunsetGlow(RoundedCornerShape(20.dp), strong = selectedTheme == theme).clickable { onThemeChanged(theme) },
+        modifier = Modifier.fillMaxWidth().clickable { onThemeChanged(theme) },
         colors = CardDefaults.cardColors(containerColor = previewBackground),
         shape = RoundedCornerShape(20.dp),
         border = if (selectedTheme == theme) BorderStroke(2.dp, previewAccent) else null
@@ -217,7 +218,15 @@ private fun ThemeChoiceCard(
             }
             Switch(
                 checked = selectedTheme == theme,
-                onCheckedChange = { onThemeChanged(theme) }
+                onCheckedChange = { onThemeChanged(theme) },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = previewBackground,
+                    checkedTrackColor = previewAccent,
+                    checkedBorderColor = previewAccent,
+                    uncheckedThumbColor = previewText.copy(alpha = 0.72f),
+                    uncheckedTrackColor = previewBackground,
+                    uncheckedBorderColor = previewAccent.copy(alpha = 0.72f)
+                )
             )
         }
     }
