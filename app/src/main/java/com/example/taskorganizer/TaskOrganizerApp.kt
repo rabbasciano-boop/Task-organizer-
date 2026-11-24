@@ -482,14 +482,14 @@ internal fun TaskOrganizerApp(
                     onDeleteEntry = { entryId -> updateArchive(change = { disk -> disk.copy(workLogEntries = disk.workLogEntries.filterNot { it.id == entryId }) }) },
                     onSaveSettings = { settings -> updateArchive(change = { disk -> disk.copy(workLogSettings = settings) }) },
                     onStartTimer = { updateArchive(change = { disk -> if (disk.activeWorkTimerStartedAt == null) disk.copy(activeWorkTimerStartedAt = System.currentTimeMillis()) else disk }) },
-                    onStopTimer = { recordedEntry ->
+                    onStopTimer = { recordedEntry, onSaved ->
                         updateArchive(change = { disk ->
                             val index = disk.workLogEntries.indexOfFirst { it.id == recordedEntry.id }
                             disk.copy(
                                 workLogEntries = if (index >= 0) disk.workLogEntries.toMutableList().also { it[index] = recordedEntry } else disk.workLogEntries + recordedEntry,
                                 activeWorkTimerStartedAt = null
                             )
-                        })
+                        }) { onSaved() }
                     },
                     onExportCsv = onExportWorkCsv,
                     onBack = { navigateToTab(0) }

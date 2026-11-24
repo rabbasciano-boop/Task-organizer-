@@ -437,7 +437,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         }.orEmpty()
         val workLogEntries = archive.optJSONArray("workLogEntries")?.let { entries ->
             (0 until entries.length()).mapNotNull { index ->
-                val entry = entries.getJSONObject(index)
+                val entry = entries.optJSONObject(index) ?: return@mapNotNull null
                 val date = entry.optString("date")
                 val startTime = normalizeTime(entry.optString("startTime"))
                 val endTime = normalizeTime(entry.optString("endTime"))
@@ -460,7 +460,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                 ?.coerceIn(0L, 9_999_999_00L) ?: defaultWorkSettings.hourlyRateCents,
             presets = workLogSettingsJson?.optJSONArray("presets")?.let { presets ->
                 (0 until presets.length()).mapNotNull { index ->
-                    val preset = presets.getJSONObject(index)
+                    val preset = presets.optJSONObject(index) ?: return@mapNotNull null
                     val name = preset.optString("name").trim()
                     val startTime = normalizeTime(preset.optString("startTime"))
                     val endTime = normalizeTime(preset.optString("endTime"))

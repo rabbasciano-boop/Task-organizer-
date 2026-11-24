@@ -50,7 +50,7 @@ internal fun TimeLogScreen(
     onDeleteEntry: (String) -> Unit,
     onSaveSettings: (WorkLogSettings) -> Unit,
     onStartTimer: () -> Unit,
-    onStopTimer: (WorkLogEntry) -> Unit,
+    onStopTimer: (WorkLogEntry, () -> Unit) -> Unit,
     onExportCsv: (String, String) -> Unit,
     onBack: () -> Unit
 ) {
@@ -58,12 +58,13 @@ internal fun TimeLogScreen(
     val tab = TimeLogTab.valueOf(tabName)
     var editor by remember { mutableStateOf<WorkLogEntry?>(null) }
     var resetEditorToken by rememberSaveable { mutableIntStateOf(0) }
+    var timerSaving by remember { mutableStateOf(false) }
     val snackbars = remember { SnackbarHostState() }
-    var deletedEntry by remember { mutableStateOf<WorkLogEntry?>(null) }
-    LaunchedEffect(deletedEntry) {
-        val deleted = deletedEntry ?: return@LaunchedEffect
-        if (snackbars.showSnackbar(message = "Voce eliminata", actionLabel = "Annulla", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) onSaveEntry(deleted)
-        deletedEntry = null
+    val pendingDeletions = remember { mutableStateListOf<WorkLogEntry>() }
+    LaunchedEffect(pendingDeletions.firstOrNull()?.id) {
+        val deleted = pendingDeletions.firstOrNull() ?: return@LaunchedEffect
+        if (snackbars.showSnackbar(message = "Voce eliminata", actionLabel = "Annulla", duration = SnackbarDuration.Short) != SnackbarResult.ActionPerformed) onDeleteEntry(deleted.id)
+        pendingDeletions.removeAll { it.id == deleted.id }
     }
     fun openNewEntry() { editor = null; resetEditorToken++; tabName = TimeLogTab.INSERT.name }
     BackHandler {
@@ -100,19 +101,21 @@ internal fun TimeLogScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).organizerBackground()) {
             when (tab) {
-                TimeLogTab.DASHBOARD -> TimeLogDashboard(entries, settings.hourlyRateCents, { editor = it; tabName = TimeLogTab.INSERT.name }) { entry ->
-                    onDeleteEntry(entry.id)
-                    deletedEntry = entry
+                TimeLogTab.DASHBOARD -> TimeLogDashboard(entries.filterNot { candidate -> pendingDeletions.any { it.id == candidate.id } }, settings.hourlyRateCents, { editor = it; tabName = TimeLogTab.INSERT.name }) { entry ->
+                    if (pendingDeletions.none { it.id == entry.id }) pendingDeletions += entry
                 }
                 TimeLogTab.INSERT -> TimeLogEntryEditor(
                     existing = editor, resetToken = resetEditorToken, settings = settings,
-                    activeTimerStartedAt = activeTimerStartedAt, onStartTimer = onStartTimer,
+                    activeTimerStartedAt = activeTimerStartedAt, timerSaving = timerSaving, onStartTimer = onStartTimer,
                     onStopTimer = { startedAt ->
                         val start = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(startedAt), java.time.ZoneId.systemDefault())
                         val now = LocalDateTime.now()
                         val recorded = WorkLogEntry(date = start.toLocalDate().toString(), startTime = start.toLocalTime().format(HourFormat), endTime = now.toLocalTime().format(HourFormat))
-                        editor = recorded
-                        onStopTimer(recorded)
+                        timerSaving = true
+                        onStopTimer(recorded) {
+                            editor = recorded
+                            timerSaving = false
+                        }
                     },
                     onSave = { entry -> onSaveEntry(entry); editor = null; tabName = TimeLogTab.DASHBOARD.name },
                     onCancel = { editor = null; tabName = TimeLogTab.DASHBOARD.name }
@@ -191,7 +194,7 @@ private fun WorkEntryCard(entry: WorkLogEntry, rateCents: Long, onEdit: () -> Un
 }
 
 @Composable
-private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, onStartTimer: () -> Unit, onStopTimer: (Long) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
+private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, timerSaving: Boolean, onStartTimer: () -> Unit, onStopTimer: (Long) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
     val seed = remember(existing?.id, resetToken) { existing ?: WorkLogEntry(date = LocalDate.now().toString(), startTime = "09:00", endTime = "18:00", breakMinutes = 60) }
     var dateText by rememberSaveable(seed.id) { mutableStateOf(formatItalianDate(seed.date)) }
     var startText by rememberSaveable(seed.id) { mutableStateOf(seed.startTime) }
@@ -204,19 +207,20 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
     val start = normalizeTime(startText)
     val end = normalizeTime(endText)
     val minutes = if (start != null && end != null) workMinutes(start, end, breakText.toIntOrNull() ?: 0) else 0
-    LazyColumn(Modifier.fillMaxSize().widthIn(max = 600.dp).imePadding(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(Modifier.fillMaxSize().widthIn(max = 600.dp), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Column(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(26.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(35.dp).background(Gold.copy(alpha = .15f), CircleShape), contentAlignment = Alignment.Center) { Text("◷", color = Gold, fontSize = 18.sp) }; Column(Modifier.padding(start = 10.dp).weight(1f)) { Text("Timer dal vivo", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Timbra entrata e uscita in tempo reale", color = SoftText, fontSize = 11.sp) }; Text(if (activeTimerStartedAt == null) "In attesa" else "In corso", color = if (activeTimerStartedAt == null) SoftText else Success, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 Text(formatElapsed(elapsed), color = MainText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().background(NightBlue.copy(alpha = .25f), RoundedCornerShape(18.dp)).padding(13.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onStartTimer, enabled = activeTimerStartedAt == null, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("▶  Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let(onStopTimer) }, enabled = activeTimerStartedAt != null, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text("■  Timbra uscita", fontSize = 12.sp) } }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onStartTimer, enabled = activeTimerStartedAt == null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("▶  Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let(onStopTimer) }, enabled = activeTimerStartedAt != null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text(if (timerSaving) "Salvataggio…" else "■  Timbra uscita", fontSize = 12.sp) } }
             }
         }
         item { TimeLogSectionTitle("Turni preimpostati", "Tocca un turno per compilare gli orari") }
         item { Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { settings.presets.forEach { preset -> AssistChip(onClick = { startText = preset.startTime; endText = preset.endTime; breakText = preset.breakMinutes.toString() }, label = { Text("${preset.name} (${preset.startTime}-${preset.endTime})", maxLines = 1) }, colors = AssistChipDefaults.assistChipColors(containerColor = CardBlueLight, labelColor = MainText), border = null) } } }
         item {
             Column(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(26.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(if (existing == null) "Registra giornata" else "Modifica giornata", color = MainText, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp); if (existing != null) TextButton(onClick = onCancel) { Text("Annulla", color = Danger) } }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(if (existing == null) "Registra giornata" else "Modifica giornata", color = MainText, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp); if (existing != null) TextButton(onClick = onCancel) { Text("Chiudi", color = SoftText) } }
+                if (existing != null) Text("Voce già salvata: puoi aggiungere o modificare i dettagli.", color = SoftText, fontSize = 11.sp)
                 OutlinedTextField(value = dateText, onValueChange = { dateText = it; error = null }, label = { Text("Data lavorativa (GG-MM-AAAA)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = editorFieldColors())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedTextField(value = startText, onValueChange = { startText = it; error = null }, label = { Text("Ora inizio") }, placeholder = { Text("09:00") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()); OutlinedTextField(value = endText, onValueChange = { endText = it; error = null }, label = { Text("Ora fine") }, placeholder = { Text("18:00") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()) }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(value = breakText, onValueChange = { breakText = it.filter(Char::isDigit); error = null }, label = { Text("Pausa (min)") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()); Column(Modifier.weight(1f).background(Gold.copy(alpha = .12f), RoundedCornerShape(16.dp)).padding(10.dp), horizontalAlignment = Alignment.End) { Text("Totale netto", color = SoftText, fontSize = 10.sp); Text("${formatWorkMinutes(minutes)}${if (start != null && end != null && isOvernightWorkShift(start, end)) " · +1 giorno" else ""}", color = MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold); Text(formatCurrency(workEarningsCents(minutes, settings.hourlyRateCents)), color = MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold) } }
@@ -251,13 +255,14 @@ private fun TimeLogSummary(entries: List<WorkLogEntry>, rateCents: Long, onExpor
 
 @Composable
 private fun TimeLogSettingsPage(settings: WorkLogSettings, onSaveSettings: (WorkLogSettings) -> Unit) {
-    var rate by rememberSaveable(settings.hourlyRateCents) { mutableStateOf(formatCurrency(settings.hourlyRateCents).removePrefix("€").trim()) }
+    var rate by rememberSaveable(settings.hourlyRateCents) { mutableStateOf(formatCurrency(settings.hourlyRateCents).substringBefore('€').trim()) }
     var rateError by rememberSaveable { mutableStateOf<String?>(null) }
     var newName by rememberSaveable { mutableStateOf("") }
     var newStart by rememberSaveable { mutableStateOf("09:00") }
     var newEnd by rememberSaveable { mutableStateOf("18:00") }
     var newBreak by rememberSaveable { mutableStateOf("0") }
-    LazyColumn(Modifier.fillMaxSize().widthIn(max = 600.dp).imePadding(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    var presetPendingDelete by remember { mutableStateOf<WorkShiftPreset?>(null) }
+    LazyColumn(Modifier.fillMaxSize().widthIn(max = 600.dp), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { TimeLogSectionTitle("Tariffa oraria", "Usata per calcolare automaticamente i guadagni") }
         item {
             Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) {
@@ -279,7 +284,7 @@ private fun TimeLogSettingsPage(settings: WorkLogSettings, onSaveSettings: (Work
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { Text(preset.name, color = MainText, fontWeight = FontWeight.Bold); Text("${preset.startTime} – ${preset.endTime}${if (preset.breakMinutes > 0) " · pausa ${preset.breakMinutes} min" else ""}", color = SoftText, fontSize = 12.sp) }
-                    Text("Elimina", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSaveSettings(settings.copy(presets = settings.presets.filterNot { it.id == preset.id })) }.padding(8.dp))
+                    IconButton(onClick = { presetPendingDelete = preset }) { Icon(painterResource(R.drawable.ic_delete), contentDescription = "Elimina turno ${preset.name}", tint = Danger) }
                 }
             }
         }
@@ -295,6 +300,16 @@ private fun TimeLogSettingsPage(settings: WorkLogSettings, onSaveSettings: (Work
             }
         }
         item { Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) { Column(Modifier.fillMaxWidth().padding(16.dp)) { Text("Dati protetti", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Le registrazioni del Registro ore sono già incluse nel backup cifrato di Task Organizer.", color = SoftText, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp)) } } }
+    }
+    presetPendingDelete?.let { preset ->
+        AlertDialog(
+            onDismissRequest = { presetPendingDelete = null },
+            containerColor = CardBlue,
+            title = { Text("Eliminare ${preset.name}?", color = MainText) },
+            text = { Text("Il turno rapido non sarà più disponibile nell’inserimento delle ore.", color = SoftText) },
+            dismissButton = { TextButton(onClick = { presetPendingDelete = null }) { Text("Annulla", color = SoftText) } },
+            confirmButton = { TextButton(onClick = { onSaveSettings(settings.copy(presets = settings.presets.filterNot { it.id == preset.id })); presetPendingDelete = null }) { Text("Elimina", color = Danger) } }
+        )
     }
 }
 
