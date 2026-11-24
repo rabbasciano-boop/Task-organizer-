@@ -75,8 +75,10 @@ open class TaskOrganizerActivity : FragmentActivity() {
     private var notificationPermissionAllowed by mutableStateOf(true)
     private var pendingBackupImportUri by mutableStateOf<Uri?>(null)
     private var pendingBackupExportUri by mutableStateOf<Uri?>(null)
+    private var pendingWorkCsv by mutableStateOf<Pair<String, String>?>(null)
     private lateinit var backupImportLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var backupExportLauncher: ActivityResultLauncher<String>
+    private lateinit var workCsvExportLauncher: ActivityResultLauncher<String>
     private val uiSession by lazy(LazyThreadSafetyMode.NONE) {
         ViewModelProvider(this, UiSessionViewModelFactory(AppSecurity(this).hasPin()))[UiSessionViewModel::class.java]
     }
@@ -91,6 +93,18 @@ open class TaskOrganizerActivity : FragmentActivity() {
                 uiSession.clearBackupExportPassword()
             }
             pendingBackupExportUri = uri
+        }
+        workCsvExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+            val export = pendingWorkCsv
+            pendingWorkCsv = null
+            if (uri != null && export != null) {
+                runCatching {
+                    contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+                        writer.write('\uFEFF'.code)
+                        writer.write(export.second)
+                    } ?: error("Impossibile aprire il file")
+                }
+            }
         }
         widgetQuickAdd = intent.getBooleanExtra(EXTRA_OPEN_NEW_TASK, false)
         val initialSettings = getSharedPreferences("task_organizer_settings", MODE_PRIVATE)
@@ -211,6 +225,10 @@ open class TaskOrganizerActivity : FragmentActivity() {
                         },
                         takeBackupExportPassword = uiSession::takeBackupExportPassword,
                         onBackupExportHandled = { pendingBackupExportUri = null },
+                        onExportWorkCsv = { fileName, content ->
+                            pendingWorkCsv = fileName to content
+                            workCsvExportLauncher.launch(fileName)
+                        },
                         onSecurityChanged = {
                             updateSecureWindow()
                             if (!security.hasPin()) session.unlock()
@@ -432,6 +450,7 @@ private fun TaskOrganizerPreview() {
             onCreateBackupExport = { _, password -> password.fill('\u0000') },
             takeBackupExportPassword = { null },
             onBackupExportHandled = {},
+            onExportWorkCsv = { _, _ -> },
             onSecurityChanged = {}
         )
     }

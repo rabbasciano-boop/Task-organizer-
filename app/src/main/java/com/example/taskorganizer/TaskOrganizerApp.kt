@@ -61,6 +61,7 @@ internal fun TaskOrganizerApp(
     onCreateBackupExport: (String, CharArray) -> Unit,
     takeBackupExportPassword: () -> CharArray?,
     onBackupExportHandled: () -> Unit,
+    onExportWorkCsv: (String, String) -> Unit,
     onSecurityChanged: () -> Unit
 ) {
     val context = LocalContext.current
@@ -102,6 +103,9 @@ internal fun TaskOrganizerApp(
     val customCategoryIcons = remember(archiveLoadResult) { mutableStateMapOf<String, String>().also { it.putAll(archive.customCategoryIcons) } }
     val deletedTasks = remember(archiveLoadResult) { mutableStateListOf<OrganizerTask>().also { it.addAll(archive.deletedTasks) } }
     val listItems = remember(archiveLoadResult) { mutableStateListOf<OrganizerListItem>().also { it.addAll(archive.listItems) } }
+    val workLogEntries = remember(archiveLoadResult) { mutableStateListOf<WorkLogEntry>().also { it.addAll(archive.workLogEntries) } }
+    var workLogSettings by remember(archiveLoadResult) { mutableStateOf(archive.workLogSettings) }
+    var activeWorkTimerStartedAt by remember(archiveLoadResult) { mutableStateOf(archive.activeWorkTimerStartedAt) }
     var selectedScreenIndex by rememberSaveable { mutableIntStateOf(0) }
     var tabHistory by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     var editorTaskId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -136,6 +140,10 @@ internal fun TaskOrganizerApp(
         deletedTasks.addAll(updated.deletedTasks)
         listItems.clear()
         listItems.addAll(updated.listItems)
+        workLogEntries.clear()
+        workLogEntries.addAll(updated.workLogEntries)
+        workLogSettings = updated.workLogSettings
+        activeWorkTimerStartedAt = updated.activeWorkTimerStartedAt
     }
 
     fun refreshWidgets(archive: TaskArchive) {
@@ -297,6 +305,9 @@ internal fun TaskOrganizerApp(
                 customCategories.clear()
                 customCategoryIcons.clear()
                 listItems.clear()
+                workLogEntries.clear()
+                workLogSettings = WorkLogSettings()
+                activeWorkTimerStartedAt = null
                 onSecurityChanged()
                 refreshWidgets(TaskArchive())
             }.onFailure {
@@ -406,14 +417,16 @@ internal fun TaskOrganizerApp(
         modifier = Modifier.fillMaxSize(),
         containerColor = NightBlue,
         bottomBar = {
-            OrganizerNavigationBar(
-                selected = selectedScreen,
-                onSelected = { navigateToTab(OrganizerScreen.all.indexOf(it)) },
-                barColor = CardBlue,
-                mutedColor = SoftText,
-                selectedColor = Gold,
-                indicatorColor = CardBlueLight
-            )
+            if (selectedScreen != OrganizerScreen.TimeLog) {
+                OrganizerNavigationBar(
+                    selected = selectedScreen,
+                    onSelected = { navigateToTab(OrganizerScreen.all.indexOf(it)) },
+                    barColor = CardBlue,
+                    mutedColor = SoftText,
+                    selectedColor = Gold,
+                    indicatorColor = CardBlueLight
+                )
+            }
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().organizerBackground().padding(padding).consumeWindowInsets(padding)) {
@@ -439,6 +452,7 @@ internal fun TaskOrganizerApp(
                     onOpenActivities = { navigateToTab(1) },
                     onOpenLists = { navigateToTab(2) },
                     onOpenCalendar = { navigateToTab(3) },
+                    onOpenTimeLog = { navigateToTab(5) },
                     onManageAccount = { navigateToTab(4) },
                     onOpenPrivacy = { privacyInfoOpen = true }
                 )
@@ -455,6 +469,23 @@ internal fun TaskOrganizerApp(
                     onDelete = { item -> updateArchive(change = { disk -> disk.copy(listItems = disk.listItems.filterNot { it.id == item.id }) }) }
                 )
                 OrganizerScreen.Calendar -> CalendarScreen(tasks, openNewTask, ::toggleTaskById, openEditTask)
+                OrganizerScreen.TimeLog -> TimeLogScreen(
+                    entries = workLogEntries,
+                    settings = workLogSettings,
+                    activeTimerStartedAt = activeWorkTimerStartedAt,
+                    onSaveEntry = { entry ->
+                        updateArchive(change = { disk ->
+                            val index = disk.workLogEntries.indexOfFirst { it.id == entry.id }
+                            disk.copy(workLogEntries = if (index >= 0) disk.workLogEntries.toMutableList().also { it[index] = entry } else disk.workLogEntries + entry)
+                        })
+                    },
+                    onDeleteEntry = { entryId -> updateArchive(change = { disk -> disk.copy(workLogEntries = disk.workLogEntries.filterNot { it.id == entryId }) }) },
+                    onSaveSettings = { settings -> updateArchive(change = { disk -> disk.copy(workLogSettings = settings) }) },
+                    onStartTimer = { updateArchive(change = { disk -> if (disk.activeWorkTimerStartedAt == null) disk.copy(activeWorkTimerStartedAt = System.currentTimeMillis()) else disk }) },
+                    onStopTimer = { updateArchive(change = { disk -> disk.copy(activeWorkTimerStartedAt = null) }) },
+                    onExportCsv = onExportWorkCsv,
+                    onBack = { navigateToTab(0) }
+                )
                 OrganizerScreen.Options -> SettingsScreen(
                     selectedTheme = selectedTheme,
                     followSystemTheme = followSystemTheme,

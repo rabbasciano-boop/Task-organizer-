@@ -54,12 +54,45 @@ data class OrganizerListItem(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+/** A worked time interval. Dates and hours use the same ISO/24-hour format as activities. */
+data class WorkLogEntry(
+    val id: String = UUID.randomUUID().toString(),
+    val date: String,
+    val startTime: String,
+    val endTime: String,
+    val breakMinutes: Int = 0,
+    val notes: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+data class WorkShiftPreset(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val startTime: String,
+    val endTime: String,
+    val breakMinutes: Int = 0
+)
+
+data class WorkLogSettings(
+    /** Stored as cents so money is never rounded by a floating-point calculation. */
+    val hourlyRateCents: Long = 1_500L,
+    val presets: List<WorkShiftPreset> = listOf(
+        WorkShiftPreset(name = "Mattina", startTime = "09:00", endTime = "13:00"),
+        WorkShiftPreset(name = "Pomeriggio", startTime = "14:00", endTime = "18:00"),
+        WorkShiftPreset(name = "Giornata intera", startTime = "09:00", endTime = "18:00", breakMinutes = 60)
+    )
+)
+
 data class TaskArchive(
     val tasks: List<OrganizerTask> = emptyList(),
     val customCategories: List<String> = emptyList(),
     val customCategoryIcons: Map<String, String> = emptyMap(),
     val deletedTasks: List<OrganizerTask> = emptyList(),
-    val listItems: List<OrganizerListItem> = emptyList()
+    val listItems: List<OrganizerListItem> = emptyList(),
+    val workLogEntries: List<WorkLogEntry> = emptyList(),
+    val workLogSettings: WorkLogSettings = WorkLogSettings(),
+    /** A running timer is persisted so elapsed time is correct after leaving or reopening the app. */
+    val activeWorkTimerStartedAt: Long? = null
 )
 
 /** Keeps the newest item for each id so a malformed imported archive cannot break lazy lists. */
@@ -76,7 +109,11 @@ internal fun normalizeArchiveIds(archive: TaskArchive): TaskArchive {
         .groupBy { it.id }
         .values
         .map { duplicates -> duplicates.maxByOrNull { it.createdAt }!! }
-    return archive.copy(tasks = activeTasks, deletedTasks = deletedTasks, listItems = listItems)
+    val workLogEntries = archive.workLogEntries
+        .groupBy { it.id }
+        .values
+        .map { duplicates -> duplicates.maxByOrNull { it.createdAt }!! }
+    return archive.copy(tasks = activeTasks, deletedTasks = deletedTasks, listItems = listItems, workLogEntries = workLogEntries)
 }
 
 /** The UI must distinguish a new empty archive from an existing archive that cannot be read. */
@@ -124,7 +161,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, backupSecretKey(password, salt), GCMParameterSpec(128, iv))
         val encrypted = cipher.doFinal(
-            encode(archive.tasks, archive.customCategories, archive.customCategoryIcons, archive.deletedTasks, archive.listItems)
+            encode(archive)
         )
         ByteArrayOutputStream().use { output ->
             output.write(BACKUP_MAGIC)
@@ -247,13 +284,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         try {
             stream.write(
                 encrypt(
-                    encode(
-                        archive.tasks,
-                        archive.customCategories,
-                        archive.customCategoryIcons,
-                        archive.deletedTasks,
-                        archive.listItems
-                    )
+                    encode(archive)
                 )
             )
             stream.flush()
@@ -290,13 +321,12 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         ?.filter { it.isFile && it.name.startsWith(RECOVERY_PREFIX) && it.name.endsWith(".enc") }
         .orEmpty()
 
-    private fun encode(
-        tasks: List<OrganizerTask>,
-        customCategories: List<String>,
-        customCategoryIcons: Map<String, String>,
-        deletedTasks: List<OrganizerTask>,
-        listItems: List<OrganizerListItem>
-    ): ByteArray {
+    private fun encode(archive: TaskArchive): ByteArray {
+        val tasks = archive.tasks
+        val customCategories = archive.customCategories
+        val customCategoryIcons = archive.customCategoryIcons
+        val deletedTasks = archive.deletedTasks
+        val listItems = archive.listItems
         val items = JSONArray()
         tasks.forEach { task -> items.put(taskJson(task)) }
         val deletedItems = JSONArray()
@@ -318,7 +348,29 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         customCategories.distinct().forEach { categories.put(it) }
         val categoryIcons = JSONObject()
         customCategoryIcons.forEach { (category, icon) -> categoryIcons.put(category, icon) }
-        return JSONObject().put("version", 6).put("tasks", items).put("deletedTasks", deletedItems).put("listItems", listEntries).put("customCategories", categories).put("customCategoryIcons", categoryIcons).toString().toByteArray(Charsets.UTF_8)
+        val workLogEntries = JSONArray()
+        archive.workLogEntries.forEach { entry ->
+            workLogEntries.put(
+                JSONObject()
+                    .put("id", entry.id).put("date", entry.date)
+                    .put("startTime", entry.startTime).put("endTime", entry.endTime)
+                    .put("breakMinutes", entry.breakMinutes).put("notes", entry.notes)
+                    .put("createdAt", entry.createdAt)
+            )
+        }
+        val presets = JSONArray()
+        archive.workLogSettings.presets.forEach { preset ->
+            presets.put(
+                JSONObject()
+                    .put("id", preset.id).put("name", preset.name)
+                    .put("startTime", preset.startTime).put("endTime", preset.endTime)
+                    .put("breakMinutes", preset.breakMinutes)
+            )
+        }
+        val workLogSettings = JSONObject()
+            .put("hourlyRateCents", archive.workLogSettings.hourlyRateCents)
+            .put("presets", presets)
+        return JSONObject().put("version", 7).put("tasks", items).put("deletedTasks", deletedItems).put("listItems", listEntries).put("customCategories", categories).put("customCategoryIcons", categoryIcons).put("workLogEntries", workLogEntries).put("workLogSettings", workLogSettings).put("activeWorkTimerStartedAt", archive.activeWorkTimerStartedAt ?: 0L).toString().toByteArray(Charsets.UTF_8)
     }
 
     private fun decode(bytes: ByteArray): TaskArchive {
@@ -377,7 +429,40 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
                 }
             }
         }.orEmpty()
-        return normalizeArchiveIds(TaskArchive(tasks, customCategories, customCategoryIcons, deletedTasks, listItems))
+        val workLogEntries = archive.optJSONArray("workLogEntries")?.let { entries ->
+            List(entries.length()) { index ->
+                val entry = entries.getJSONObject(index)
+                WorkLogEntry(
+                    id = entry.optString("id").ifBlank { UUID.randomUUID().toString() },
+                    date = entry.optString("date"),
+                    startTime = entry.optString("startTime"),
+                    endTime = entry.optString("endTime"),
+                    breakMinutes = entry.optInt("breakMinutes").coerceIn(0, 480),
+                    notes = entry.optString("notes"),
+                    createdAt = entry.optLong("createdAt", System.currentTimeMillis())
+                )
+            }.filter { it.date.isNotBlank() && it.startTime.isNotBlank() && it.endTime.isNotBlank() }
+        }.orEmpty()
+        val defaultWorkSettings = WorkLogSettings()
+        val workLogSettingsJson = archive.optJSONObject("workLogSettings")
+        val workLogSettings = WorkLogSettings(
+            hourlyRateCents = workLogSettingsJson?.optLong("hourlyRateCents", defaultWorkSettings.hourlyRateCents)
+                ?.coerceIn(0L, 9_999_999_00L) ?: defaultWorkSettings.hourlyRateCents,
+            presets = workLogSettingsJson?.optJSONArray("presets")?.let { presets ->
+                List(presets.length()) { index ->
+                    val preset = presets.getJSONObject(index)
+                    WorkShiftPreset(
+                        id = preset.optString("id").ifBlank { UUID.randomUUID().toString() },
+                        name = preset.optString("name").trim(),
+                        startTime = preset.optString("startTime"),
+                        endTime = preset.optString("endTime"),
+                        breakMinutes = preset.optInt("breakMinutes").coerceIn(0, 480)
+                    )
+                }.filter { it.name.isNotBlank() && it.startTime.isNotBlank() && it.endTime.isNotBlank() }
+            } ?: defaultWorkSettings.presets
+        )
+        val activeWorkTimerStartedAt = archive.optLong("activeWorkTimerStartedAt", 0L).takeIf { it > 0L }
+        return normalizeArchiveIds(TaskArchive(tasks, customCategories, customCategoryIcons, deletedTasks, listItems, workLogEntries, workLogSettings, activeWorkTimerStartedAt))
     }
 
     private fun taskJson(task: OrganizerTask): JSONObject = JSONObject()

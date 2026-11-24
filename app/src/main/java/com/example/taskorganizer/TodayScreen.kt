@@ -50,6 +50,7 @@ internal fun TodayScreen(
     onOpenActivities: () -> Unit,
     onOpenLists: () -> Unit,
     onOpenCalendar: () -> Unit,
+    onOpenTimeLog: () -> Unit,
     onManageAccount: () -> Unit,
     onOpenPrivacy: () -> Unit
 ) {
@@ -98,6 +99,7 @@ internal fun TodayScreen(
                 onOpenActivities = { scope.launch { drawerState.close() }; onOpenActivities() },
                 onOpenLists = { scope.launch { drawerState.close() }; onOpenLists() },
                 onOpenCalendar = { scope.launch { drawerState.close() }; onOpenCalendar() },
+                onOpenTimeLog = { scope.launch { drawerState.close() }; onOpenTimeLog() },
                 onOpenSettings = { scope.launch { drawerState.close() }; onManageAccount() },
                 onOpenPrivacy = { scope.launch { drawerState.close() }; onOpenPrivacy() },
                 onClose = { scope.launch { drawerState.close() } }
@@ -224,6 +226,7 @@ private fun HomeAccountDrawer(
     onOpenActivities: () -> Unit,
     onOpenLists: () -> Unit,
     onOpenCalendar: () -> Unit,
+    onOpenTimeLog: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onClose: () -> Unit
@@ -259,6 +262,7 @@ private fun HomeAccountDrawer(
             HomeDrawerItem(R.drawable.ic_nav_activities, "Attività", onOpenActivities)
             HomeDrawerItem(R.drawable.ic_nav_lists, "Liste e spesa", onOpenLists)
             HomeDrawerItem(R.drawable.ic_nav_calendar, "Calendario", onOpenCalendar)
+            HomeDrawerItem(R.drawable.ic_nav_time_log, "Registro ore", onOpenTimeLog)
             HomeDrawerItem(R.drawable.ic_nav_settings, "Impostazioni", onOpenSettings)
             HomeDrawerItem(R.drawable.ic_nav_privacy, "Privacy e dati", onOpenPrivacy)
         }
