@@ -9,9 +9,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 
 /** Main destinations used by the app's bottom navigation. */
@@ -37,8 +40,12 @@ fun OrganizerNavigationBar(
     selectedColor: Color,
     indicatorColor: Color
 ) {
+    // The bottom bar has five destinations. Keep labels compact and on one line even
+    // when the system font is enlarged; the full destination name remains available
+    // to TalkBack through the icon content description.
+    val labelFontSize = (8.5f / LocalDensity.current.fontScale).sp
     NavigationBar(containerColor = barColor, contentColor = mutedColor) {
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(7.dp))
         OrganizerScreen.all.forEach { screen ->
             val label = stringResource(screen.labelResource)
             NavigationBarItem(
@@ -51,7 +58,15 @@ fun OrganizerNavigationBar(
                     )
                 },
                 alwaysShowLabel = false,
-                label = { Text(label) },
+                label = {
+                    Text(
+                        text = label,
+                        fontSize = labelFontSize,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip
+                    )
+                },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = selectedColor,
                     selectedTextColor = selectedColor,
@@ -61,6 +76,6 @@ fun OrganizerNavigationBar(
                 )
             )
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(7.dp))
     }
 }
