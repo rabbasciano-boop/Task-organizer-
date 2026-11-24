@@ -38,7 +38,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: () -> Unit, onDelete: () -> Unit, onEdit: () -> Unit) {
-    var dragOffset by remember(task.id) { mutableStateOf(0f) }
+    var dragOffset by remember(task.id) { mutableFloatStateOf(0f) }
     val threshold = with(LocalDensity.current) { 88.dp.toPx() }
     val action = when { dragOffset > 12f -> "complete"; dragOffset < -12f -> "delete"; else -> null }
     val titleColor = taskCardTextColor(task)

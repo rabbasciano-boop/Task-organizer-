@@ -534,7 +534,6 @@ private fun CategoryField(
     onAddCustomCategory: (String, String) -> Unit,
     onDeleteCustomCategory: (String) -> Unit
 ) {
-    var pickerOpen by remember { mutableStateOf(false) }
     var customDialogOpen by remember { mutableStateOf(false) }
     var customName by remember { mutableStateOf("") }
     var customIcon by remember { mutableStateOf(CustomCategoryIconOptions.first()) }
@@ -565,33 +564,6 @@ private fun CategoryField(
                 repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
-    }
-    if (pickerOpen) {
-        AlertDialog(
-            onDismissRequest = { pickerOpen = false },
-            containerColor = CardBlue,
-            title = { Text("Categoria", color = MainText) },
-            text = {
-                Column {
-                    categories.forEach { category ->
-                        val isCustomCategory = category in customCategories
-                        Text(
-                            categoryDisplay(category, customCategoryIcons[category]),
-                            color = if (category == value) Gold else MainText,
-                            modifier = Modifier.fillMaxWidth().combinedClickable(
-                                onClick = { onSelected(category); pickerOpen = false },
-                                onLongClick = if (isCustomCategory) {
-                                    { categoryToDelete = category; pickerOpen = false }
-                                } else null
-                            ).padding(vertical = 12.dp)
-                        )
-                    }
-                    HorizontalDivider(color = CardBlueLight)
-                    Text("Altro", color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth().clickable { pickerOpen = false; customDialogOpen = true }.padding(vertical = 14.dp))
-                }
-            },
-            confirmButton = { TextButton(onClick = { pickerOpen = false }) { Text("Chiudi", color = Gold) } }
-        )
     }
     if (customDialogOpen) {
         AlertDialog(
