@@ -146,6 +146,7 @@ internal fun AppearanceSettingsScreen(
         ThemeChoiceCard(OrganizerTheme.AURORA_NORDIC, stringResource(R.string.theme_aurora_nordic), stringResource(R.string.theme_aurora_nordic_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.SUNSET_GLOW, stringResource(R.string.theme_sunset_glow), stringResource(R.string.theme_sunset_glow_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.SUNSET_GLOW_DARK, stringResource(R.string.theme_sunset_glow_dark), stringResource(R.string.theme_sunset_glow_dark_description), selectedTheme, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.AGENDA_REALE, stringResource(R.string.theme_agenda_reale), stringResource(R.string.theme_agenda_reale_description), selectedTheme, onThemeChanged)
     }
 }
 
@@ -191,6 +192,7 @@ private fun ThemeChoiceCard(
         OrganizerTheme.AURORA_NORDIC -> Color(0xFFF0F9F8)
         OrganizerTheme.SUNSET_GLOW -> Color(0xFFFFF6EE)
         OrganizerTheme.SUNSET_GLOW_DARK -> Color(0xFF211530)
+        OrganizerTheme.AGENDA_REALE -> Color(0xFF230B2E)
     }
     val previewText = if (theme.isDark) Color(0xFFF8FAFC) else Color(0xFF14243B)
     val previewAccent = when (theme) {
@@ -200,6 +202,7 @@ private fun ThemeChoiceCard(
         OrganizerTheme.AURORA_NORDIC -> Color(0xFF08766D)
         OrganizerTheme.SUNSET_GLOW -> Color(0xFFEA6A47)
         OrganizerTheme.SUNSET_GLOW_DARK -> Color(0xFFFF7B47)
+        OrganizerTheme.AGENDA_REALE -> Color(0xFFFF69B4)
     }
     Card(
         modifier = Modifier.fillMaxWidth().sunsetGlow(RoundedCornerShape(20.dp), strong = selectedTheme == theme).clickable { onThemeChanged(theme) },

@@ -46,7 +46,7 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
     val titleColor = taskCardTextColor(task)
     val mutedColor = taskCardMutedColor(task)
     val cardShape = RoundedCornerShape(24.dp)
-    val useSunsetGradient = action == null && OrganizerPalette.sunsetGlow
+    val useSunsetGradient = action == null && OrganizerPalette.gradientTaskCards
     Card(
         colors = CardDefaults.cardColors(containerColor = when (action) { "complete" -> Success; "delete" -> Danger; else -> if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor) }),
         shape = cardShape,

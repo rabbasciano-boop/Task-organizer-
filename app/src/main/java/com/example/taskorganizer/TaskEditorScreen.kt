@@ -378,11 +378,15 @@ private fun TaskEditorPreview(
     alarmEnabled: Boolean,
     cardColor: String
 ) {
-    val useSunsetGradient = com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow
+    val useSunsetGradient = com.example.taskorganizer.ui.theme.OrganizerPalette.gradientTaskCards
     val previewShape = RoundedCornerShape(22.dp)
     val previewBackground = if (useSunsetGradient) Color.Transparent else taskCardBackground(cardColor).copy(alpha = 0.76f)
-    val previewText = if (useSunsetGradient) Color.White else if (cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
-    val previewMuted = if (useSunsetGradient) Color.White.copy(alpha = 0.86f) else if (cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
+    val previewText = if (useSunsetGradient) {
+        if (com.example.taskorganizer.ui.theme.OrganizerPalette.agendaReale) Color(0xFF240833) else Color.White
+    } else if (cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
+    val previewMuted = if (useSunsetGradient) {
+        if (com.example.taskorganizer.ui.theme.OrganizerPalette.agendaReale) Color(0xFF240833).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.86f)
+    } else if (cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
     val reminderText = when (reminderMinutesBefore) {
         0 -> "All'orario"
         60 -> "1 ora prima"

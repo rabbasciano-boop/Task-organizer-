@@ -435,6 +435,7 @@ object TaskWidgetUpdater {
             "aurora_nordic" -> WidgetPalette(Color.rgb(238, 246, 248), Color.rgb(255, 255, 255), Color.rgb(8, 118, 109), Color.rgb(15, 23, 42), Color.rgb(51, 65, 85), Color.rgb(23, 107, 77))
             "sunset_glow" -> WidgetPalette(Color.rgb(255, 246, 238), Color.rgb(255, 252, 248), Color.rgb(234, 106, 71), Color.rgb(43, 22, 32), Color.rgb(110, 71, 82), Color.rgb(24, 139, 124))
             "sunset_glow_dark" -> WidgetPalette(Color.rgb(20, 13, 28), Color.rgb(33, 21, 48), Color.rgb(255, 123, 71), Color.rgb(255, 244, 236), Color.rgb(227, 184, 180), Color.rgb(113, 212, 176))
+            "agenda_reale" -> WidgetPalette(Color.rgb(35, 11, 46), Color.rgb(70, 23, 90), Color.rgb(255, 105, 180), Color.rgb(245, 248, 252), Color.rgb(200, 211, 224), Color.rgb(94, 234, 212))
             else -> WidgetPalette(Color.rgb(13, 27, 47), Color.rgb(20, 36, 59), Color.rgb(215, 180, 106), Color.rgb(244, 246, 250), Color.rgb(174, 185, 201), Color.rgb(66, 184, 131))
         }
     }

@@ -17,7 +17,8 @@ enum class OrganizerTheme(val storageKey: String, val isDark: Boolean) {
     AURORA_MIDNIGHT("aurora_midnight", true),
     AURORA_NORDIC("aurora_nordic", false),
     SUNSET_GLOW("sunset_glow", false),
-    SUNSET_GLOW_DARK("sunset_glow_dark", true);
+    SUNSET_GLOW_DARK("sunset_glow_dark", true),
+    AGENDA_REALE("agenda_reale", true);
 
     companion object {
         fun fromStorage(value: String?, fallbackDark: Boolean): OrganizerTheme =
@@ -27,6 +28,9 @@ enum class OrganizerTheme(val storageKey: String, val isDark: Boolean) {
 
 val OrganizerTheme.isSunsetGlow: Boolean
     get() = this == OrganizerTheme.SUNSET_GLOW || this == OrganizerTheme.SUNSET_GLOW_DARK
+
+val OrganizerTheme.isAgendaReale: Boolean
+    get() = this == OrganizerTheme.AGENDA_REALE
 
 data class OrganizerColorPalette(
     val theme: OrganizerTheme,
@@ -42,6 +46,8 @@ data class OrganizerColorPalette(
 ) {
     val aurora: Boolean get() = theme == OrganizerTheme.AURORA_MIDNIGHT || theme == OrganizerTheme.AURORA_NORDIC
     val sunsetGlow: Boolean get() = theme.isSunsetGlow
+    val agendaReale: Boolean get() = theme.isAgendaReale
+    val gradientTaskCards: Boolean get() = sunsetGlow || agendaReale
 }
 
 private fun paletteFor(theme: OrganizerTheme): OrganizerColorPalette = when (theme) {
@@ -51,6 +57,7 @@ private fun paletteFor(theme: OrganizerTheme): OrganizerColorPalette = when (the
     OrganizerTheme.AURORA_NORDIC -> OrganizerColorPalette(theme, Color(0xFFEEF6F8), Color(0xE6FFFFFF), Color(0xCCFFFFFF), Color(0xFF08766D), Color(0xFF334155), Color(0xFF0F172A), Color(0xFF4F46E5), Color(0xFF176B4D), Color(0xFFB42318))
     OrganizerTheme.SUNSET_GLOW -> OrganizerColorPalette(theme, Color(0xFFFFF6EE), Color(0xFFFFFCF8), Color(0xFFFFF5EC), Color(0xFFEA6A47), Color(0xFF6E4752), Color(0xFF2B1620), Color(0xFFD94E7A), Color(0xFF188B7C), Color(0xFFD94E7A))
     OrganizerTheme.SUNSET_GLOW_DARK -> OrganizerColorPalette(theme, Color(0xFF140D1C), Color(0xFF211530), Color(0xFF28193B), Color(0xFFFF7B47), Color(0xFFE3B8B4), Color(0xFFFFF4EC), Color(0xFFE85D8A), Color(0xFF71D4B0), Color(0xFFFF91AE))
+    OrganizerTheme.AGENDA_REALE -> OrganizerColorPalette(theme, Color(0xFF230B2E), Color(0xFF46175A), Color(0xFF341143), Color(0xFFFF69B4), Color(0xFFC8D3E0), Color(0xFFF5F8FC), Color(0xFFFFD6EB), Color(0xFF5EEAD4), Color(0xFFFB7185))
 }
 
 val LocalOrganizerPalette = staticCompositionLocalOf { paletteFor(OrganizerTheme.ORIGINAL_DARK) }
@@ -70,6 +77,8 @@ object OrganizerPalette {
     val danger get() = active.danger
     val aurora get() = active.aurora
     val sunsetGlow get() = active.sunsetGlow
+    val agendaReale get() = active.agendaReale
+    val gradientTaskCards get() = active.gradientTaskCards
 
     fun apply(theme: OrganizerTheme): OrganizerColorPalette = paletteFor(theme).also { active = it }
 }

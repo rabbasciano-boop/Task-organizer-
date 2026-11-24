@@ -18,12 +18,12 @@ internal fun taskCardBackground(color: String): Color = when (color) {
 }
 
 internal fun taskCardTextColor(task: OrganizerTask): Color = when {
-    OrganizerPalette.sunsetGlow -> Color.White
+    OrganizerPalette.gradientTaskCards -> if (OrganizerPalette.agendaReale) Color(0xFF240833) else Color.White
     task.cardColor == DefaultCardColor -> MainText
     else -> Color(0xFFF7F9FC)
 }
 internal fun taskCardMutedColor(task: OrganizerTask): Color = when {
-    OrganizerPalette.sunsetGlow -> Color.White.copy(alpha = 0.88f)
+    OrganizerPalette.gradientTaskCards -> if (OrganizerPalette.agendaReale) Color(0xFF240833).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.88f)
     task.cardColor == DefaultCardColor -> SoftText
     else -> Color(0xFFD8E1EC)
 }
@@ -58,6 +58,9 @@ private fun themedBackgroundBrush(): Brush? = when (OrganizerPalette.currentThem
     OrganizerTheme.SUNSET_GLOW_DARK -> Brush.radialGradient(
         colors = listOf(Color(0xFF3B1938), Color(0xFF191024), Color(0xFF110B1A))
     )
+    OrganizerTheme.AGENDA_REALE -> Brush.verticalGradient(
+        colors = listOf(Color(0xFF3A124B), Color(0xFF290C38), Color(0xFF1D0728))
+    )
     else -> null
 }
 
@@ -78,6 +81,13 @@ internal fun Modifier.organizerBackground(): Modifier = when (OrganizerPalette.c
         )
         onDrawBehind { drawRect(brush) }
     }
+    OrganizerTheme.AGENDA_REALE -> drawWithCache {
+        val brush = Brush.verticalGradient(
+            colors = listOf(Color(0xFF3A124B), Color(0xFF290C38), Color(0xFF1D0728)),
+            endY = size.height
+        )
+        onDrawBehind { drawRect(brush) }
+    }
     else -> themedBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
 }
 
@@ -88,4 +98,5 @@ internal fun openingHaloBrush(): Brush = when (OrganizerPalette.currentTheme) {
     OrganizerTheme.AURORA_NORDIC -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.18f), AccentSecondary.copy(alpha = 0.10f), Color.Transparent))
     OrganizerTheme.SUNSET_GLOW -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.30f), AccentSecondary.copy(alpha = 0.13f), Color.Transparent))
     OrganizerTheme.SUNSET_GLOW_DARK -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.32f), AccentSecondary.copy(alpha = 0.22f), Color.Transparent))
+    OrganizerTheme.AGENDA_REALE -> Brush.radialGradient(listOf(Color(0xFFFF85C8).copy(alpha = 0.30f), Color(0xFFF5F8FC).copy(alpha = 0.12f), Color.Transparent))
 }

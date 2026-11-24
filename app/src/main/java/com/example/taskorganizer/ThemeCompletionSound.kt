@@ -9,7 +9,9 @@ import android.media.MediaPlayer
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import kotlin.math.PI
 import kotlin.math.exp
+import kotlin.math.min
 import kotlin.math.sin
+import kotlin.random.Random
 
 /** Small theme-specific confirmation sounds, generated locally with no audio files or network access. */
 internal object ThemeCompletionSound {
@@ -58,6 +60,7 @@ internal object ThemeCompletionSound {
         OrganizerTheme.AURORA_MIDNIGHT -> spaceSamples()
         OrganizerTheme.AURORA_NORDIC -> snowSamples()
         OrganizerTheme.SUNSET_GLOW, OrganizerTheme.SUNSET_GLOW_DARK -> bubbleSamples()
+        OrganizerTheme.AGENDA_REALE -> royalMagicSamples()
         OrganizerTheme.CARTA_DORATA -> error("Carta Dorata uses its bundled paper sound")
     }
 
@@ -103,6 +106,36 @@ internal object ThemeCompletionSound {
         val secondStart = (t - 0.33f).coerceAtLeast(0f)
         val second = sin(2.0 * PI * 1_560f * secondStart * 0.170).toFloat() * exp((-12f * secondStart).toDouble()).toFloat()
         (first + second * 0.75f) * 0.12f
+    }
+
+    /** Rosa e argento: arpeggio leggero, ispirato alla bacchetta magica del tema Agenda Reale. */
+    private fun royalMagicSamples(): ShortArray {
+        val durationMs = 920
+        val count = sampleRate * durationMs / 1_000
+        val mix = DoubleArray(count)
+        val notes = doubleArrayOf(1046.50, 1318.51, 1567.98, 2093.00, 2349.32, 2637.02, 3135.96, 4186.01)
+        notes.forEachIndexed { index, frequency ->
+            val start = (index * 0.042 * sampleRate).toInt()
+            val noteDuration = 0.42 + index * 0.03
+            val end = min(count, ((index * 0.042 + noteDuration) * sampleRate).toInt())
+            for (sampleIndex in start until end) {
+                val time = (sampleIndex - start).toDouble() / sampleRate
+                val envelope = min(1.0, time / 0.012) * exp(-time / (noteDuration * 0.28))
+                val sweep = frequency * (1.0 + 0.018 * (time / noteDuration))
+                mix[sampleIndex] += 0.20 * envelope * sin(2.0 * PI * sweep * time)
+                mix[sampleIndex] += 0.06 * envelope * sin(2.0 * PI * sweep * 2.004 * time)
+            }
+        }
+        val random = Random(42)
+        var previous = 0.0
+        repeat((0.35 * sampleRate).toInt()) { index ->
+            val time = index.toDouble() / sampleRate
+            val noise = random.nextDouble(-1.0, 1.0)
+            mix[index] += (noise - previous) * exp(-time / 0.09) * 0.045
+            previous = noise
+        }
+        val peak = mix.maxOfOrNull { kotlin.math.abs(it) }?.takeIf { it > 0.0 } ?: 1.0
+        return ShortArray(count) { index -> (mix[index] / peak * 0.78 * Short.MAX_VALUE).toInt().coerceIn(-Short.MAX_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort() }
     }
 
     private fun render(durationMs: Int, sample: (time: Float, index: Int) -> Float): ShortArray {
