@@ -269,3 +269,41 @@ class ArchiveIdNormalizationTest {
         assertTrue(normalized.deletedTasks.isEmpty())
     }
 }
+
+class TimeLogCalculationTest {
+    @Test
+    fun calculatesOvernightShiftsAndNeverReturnsNegativeMinutes() {
+        assertTrue(isOvernightWorkShift("22:00", "06:00"))
+        assertEquals(480, workMinutes("22:00", "06:00", 0))
+        assertEquals(0, workMinutes("09:00", "10:00", 90))
+        assertEquals(0, workMinutes("09:00", "09:00", 0))
+    }
+
+    @Test
+    fun roundsWorkEarningsToTheNearestCent() {
+        assertEquals(25L, workEarningsCents(minutes = 1, hourlyRateCents = 1_500L))
+        assertEquals(1_500L, workEarningsCents(minutes = 60, hourlyRateCents = 1_500L))
+    }
+
+    @Test
+    fun filtersOnlyValidEntriesForTheRequestedMonth() {
+        val entries = listOf(
+            WorkLogEntry(id = "in-month", date = "2026-11-12", startTime = "09:00", endTime = "10:00"),
+            WorkLogEntry(id = "other-month", date = "2026-10-12", startTime = "09:00", endTime = "10:00"),
+            WorkLogEntry(id = "bad-date", date = "2026-13-40", startTime = "09:00", endTime = "10:00")
+        )
+
+        assertEquals(listOf("in-month"), filterWorkEntries(entries, "month", LocalDate.of(2026, 11, 20)).map { it.id })
+        assertTrue(!validWorkLogEntry("2026-13-40", "09:00", "10:00"))
+    }
+
+    @Test
+    fun exportsCsvSafelyForQuotesNewlinesAndSpreadsheetFormulas() {
+        val csv = workCsv(
+            listOf(WorkLogEntry(date = "2026-11-20", startTime = "09:00", endTime = "10:00", notes = "=SUM(A1:A2) \"test\"\nriga due")),
+            rateCents = 1_500L
+        )
+
+        assertTrue(csv.contains("\"'=SUM(A1:A2) \"\"test\"\"\nriga due\""))
+    }
+}

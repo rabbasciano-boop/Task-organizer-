@@ -8,6 +8,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.time.LocalDate
 import java.security.KeyStore
 import java.security.SecureRandom
 import java.util.UUID
@@ -75,13 +76,18 @@ data class WorkShiftPreset(
 
 data class WorkLogSettings(
     /** Stored as cents so money is never rounded by a floating-point calculation. */
-    val hourlyRateCents: Long = 1_500L,
+    val hourlyRateCents: Long = 0L,
     val presets: List<WorkShiftPreset> = listOf(
         WorkShiftPreset(name = "Mattina", startTime = "09:00", endTime = "13:00"),
         WorkShiftPreset(name = "Pomeriggio", startTime = "14:00", endTime = "18:00"),
         WorkShiftPreset(name = "Giornata intera", startTime = "09:00", endTime = "18:00", breakMinutes = 60)
     )
 )
+
+/** A damaged imported entry must never make the whole encrypted archive unreadable. */
+internal fun validWorkLogEntry(date: String, startTime: String, endTime: String): Boolean =
+    runCatching { LocalDate.parse(date) }.isSuccess &&
+        normalizeTime(startTime) != null && normalizeTime(endTime) != null
 
 data class TaskArchive(
     val tasks: List<OrganizerTask> = emptyList(),
@@ -430,18 +436,22 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
             }
         }.orEmpty()
         val workLogEntries = archive.optJSONArray("workLogEntries")?.let { entries ->
-            List(entries.length()) { index ->
+            (0 until entries.length()).mapNotNull { index ->
                 val entry = entries.getJSONObject(index)
+                val date = entry.optString("date")
+                val startTime = normalizeTime(entry.optString("startTime"))
+                val endTime = normalizeTime(entry.optString("endTime"))
+                if (startTime == null || endTime == null || !validWorkLogEntry(date, startTime, endTime)) return@mapNotNull null
                 WorkLogEntry(
                     id = entry.optString("id").ifBlank { UUID.randomUUID().toString() },
-                    date = entry.optString("date"),
-                    startTime = entry.optString("startTime"),
-                    endTime = entry.optString("endTime"),
+                    date = date,
+                    startTime = startTime,
+                    endTime = endTime,
                     breakMinutes = entry.optInt("breakMinutes").coerceIn(0, 480),
                     notes = entry.optString("notes"),
                     createdAt = entry.optLong("createdAt", System.currentTimeMillis())
                 )
-            }.filter { it.date.isNotBlank() && it.startTime.isNotBlank() && it.endTime.isNotBlank() }
+            }
         }.orEmpty()
         val defaultWorkSettings = WorkLogSettings()
         val workLogSettingsJson = archive.optJSONObject("workLogSettings")
@@ -449,16 +459,20 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
             hourlyRateCents = workLogSettingsJson?.optLong("hourlyRateCents", defaultWorkSettings.hourlyRateCents)
                 ?.coerceIn(0L, 9_999_999_00L) ?: defaultWorkSettings.hourlyRateCents,
             presets = workLogSettingsJson?.optJSONArray("presets")?.let { presets ->
-                List(presets.length()) { index ->
+                (0 until presets.length()).mapNotNull { index ->
                     val preset = presets.getJSONObject(index)
+                    val name = preset.optString("name").trim()
+                    val startTime = normalizeTime(preset.optString("startTime"))
+                    val endTime = normalizeTime(preset.optString("endTime"))
+                    if (name.isBlank() || startTime == null || endTime == null) return@mapNotNull null
                     WorkShiftPreset(
                         id = preset.optString("id").ifBlank { UUID.randomUUID().toString() },
-                        name = preset.optString("name").trim(),
-                        startTime = preset.optString("startTime"),
-                        endTime = preset.optString("endTime"),
+                        name = name,
+                        startTime = startTime,
+                        endTime = endTime,
                         breakMinutes = preset.optInt("breakMinutes").coerceIn(0, 480)
                     )
-                }.filter { it.name.isNotBlank() && it.startTime.isNotBlank() && it.endTime.isNotBlank() }
+                }
             } ?: defaultWorkSettings.presets
         )
         val activeWorkTimerStartedAt = archive.optLong("activeWorkTimerStartedAt", 0L).takeIf { it > 0L }

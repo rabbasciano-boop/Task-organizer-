@@ -29,7 +29,7 @@ class OrganizerNavigationTest {
             )
         }
 
-        compose.onNodeWithText("Oggi").assertIsSelected()
-        compose.onNodeWithText("Calendario").performClick().assertIsSelected()
+        compose.onNodeWithText("Home").assertIsSelected()
+        compose.onNodeWithText("Attività").performClick().assertIsSelected()
     }
 }

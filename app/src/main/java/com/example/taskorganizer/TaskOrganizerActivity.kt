@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
@@ -97,12 +98,17 @@ open class TaskOrganizerActivity : FragmentActivity() {
         workCsvExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
             val export = pendingWorkCsv
             pendingWorkCsv = null
-            if (uri != null && export != null) {
-                runCatching {
-                    contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
-                        writer.write('\uFEFF'.code)
-                        writer.write(export.second)
-                    } ?: error("Impossibile aprire il file")
+            when {
+                uri == null -> Toast.makeText(this, "Esportazione annullata", Toast.LENGTH_SHORT).show()
+                export == null -> Toast.makeText(this, "Esportazione non riuscita: riprova dal Riepilogo.", Toast.LENGTH_LONG).show()
+                else -> {
+                    val written = runCatching {
+                        contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+                            writer.write('\uFEFF'.code)
+                            writer.write(export.second)
+                        } ?: error("Impossibile aprire il file")
+                    }.isSuccess
+                    Toast.makeText(this, if (written) "Esportazione completata" else "Esportazione non riuscita", Toast.LENGTH_LONG).show()
                 }
             }
         }
