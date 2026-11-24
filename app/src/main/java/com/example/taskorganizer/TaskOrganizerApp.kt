@@ -29,7 +29,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.taskorganizer.ui.theme.OrganizerTheme
-import com.example.taskorganizer.ui.theme.isSunsetGlow
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -217,7 +216,7 @@ internal fun TaskOrganizerApp(
                     RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
                 }
             }
-            if (!wasCompleted && selectedTheme.isSunsetGlow) BubbleCompletionSound.play(context)
+            if (!wasCompleted) ThemeCompletionSound.play(context, selectedTheme)
         }
     }
 
@@ -232,7 +231,7 @@ internal fun TaskOrganizerApp(
                     RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
                 }
             }
-            if (!wasCompleted && selectedTheme.isSunsetGlow) BubbleCompletionSound.play(context)
+            if (!wasCompleted) ThemeCompletionSound.play(context, selectedTheme)
         }
     }
 
