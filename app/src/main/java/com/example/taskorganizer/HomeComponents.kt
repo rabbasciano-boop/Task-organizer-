@@ -46,11 +46,11 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
     val titleColor = taskCardTextColor(task)
     val mutedColor = taskCardMutedColor(task)
     val cardShape = RoundedCornerShape(24.dp)
-    val useSunsetGradient = action == null && task.cardColor == DefaultCardColor && OrganizerPalette.sunsetGlow
+    val useSunsetGradient = action == null && OrganizerPalette.sunsetGlow
     Card(
         colors = CardDefaults.cardColors(containerColor = when (action) { "complete" -> Success; "delete" -> Danger; else -> if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor) }),
         shape = cardShape,
-        modifier = Modifier.fillMaxWidth().then(if (useSunsetGradient) Modifier.sunsetPrimarySurface(cardShape) else Modifier).sunsetGlow(cardShape, strong = task.cardColor == DefaultCardColor).graphicsLayer { translationX = dragOffset }.semantics {
+        modifier = Modifier.fillMaxWidth().then(if (useSunsetGradient) Modifier.sunsetPrimarySurface(cardShape) else Modifier).sunsetGlow(cardShape, strong = useSunsetGradient).graphicsLayer { translationX = dragOffset }.semantics {
             customActions = buildList {
                 add(CustomAccessibilityAction(if (task.completed) "Segna come da fare" else "Completa") { onToggle(); true })
                 add(CustomAccessibilityAction("Elimina") { onDelete(); true })

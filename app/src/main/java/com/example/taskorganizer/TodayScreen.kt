@@ -130,11 +130,14 @@ internal fun TodayScreen(
                     }
                 }
             }
-            Button(
-                onClick = onAdd,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp).height(52.dp).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button },
-                shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
-            ) { Text("+", fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("Nuova attività", Modifier.padding(start = 7.dp), fontWeight = FontWeight.ExtraBold) }
+            val addShape = RoundedCornerShape(18.dp)
+            Box(
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp).height(52.dp)
+                    .then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetPrimarySurface(addShape) else Modifier.background(Gold, addShape))
+                    .sunsetGlow(addShape, strong = com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow)
+                    .clickable(onClick = onAdd).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button }
+                    .padding(horizontal = 18.dp), contentAlignment = Alignment.Center
+            ) { Row(verticalAlignment = Alignment.CenterVertically) { Text("+", color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else NightBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("Nuova attività", Modifier.padding(start = 7.dp), color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else NightBlue, fontWeight = FontWeight.ExtraBold) } }
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 18.dp, end = 18.dp, bottom = 84.dp))
         }
     }
@@ -153,7 +156,8 @@ private fun HomeHeader(nickname: String, account: SignedInAccount?, selectedDate
             Text(buildString { append(formatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }); if (isToday) append(" • Oggi") }, color = Gold, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             Text(greetingFor(nickname), color = MainText, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Box(Modifier.size(43.dp).clip(RoundedCornerShape(16.dp)).background(CardBlue.copy(alpha = .92f)).border(1.dp, Gold.copy(alpha = .24f), RoundedCornerShape(16.dp)).clickable(onClick = onOpenCalendar).semantics { contentDescription = "Apri calendario"; role = Role.Button }, contentAlignment = Alignment.Center) {
+        val calendarShape = RoundedCornerShape(16.dp)
+        Box(Modifier.size(43.dp).clip(calendarShape).background(CardBlue.copy(alpha = .92f)).border(1.dp, Gold.copy(alpha = .24f), calendarShape).sunsetGlow(calendarShape).clickable(onClick = onOpenCalendar).semantics { contentDescription = "Apri calendario"; role = Role.Button }, contentAlignment = Alignment.Center) {
             androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_nav_calendar), null, tint = Gold)
         }
     }
@@ -178,19 +182,22 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
             val completedCount = tasks.count { it.date == date.toString() && it.completed }
             val hasPending = pendingCount > 0
             val hasCompleted = completedCount > 0
+            val dayShape = RoundedCornerShape(17.dp)
             Column(
-                Modifier.weight(1f).background(if (selected) Gold else CardBlue.copy(alpha = .88f), RoundedCornerShape(17.dp))
-                    .then(if (date == currentDate && !selected) Modifier.border(1.dp, Gold, RoundedCornerShape(17.dp)) else Modifier)
+                Modifier.weight(1f)
+                    .then(if (selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetPrimarySurface(dayShape) else Modifier.background(if (selected) Gold else CardBlue.copy(alpha = .88f), dayShape))
+                    .sunsetGlow(dayShape, strong = selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow)
+                    .then(if (date == currentDate && !selected) Modifier.border(1.dp, Gold, dayShape) else Modifier)
                     .semantics {
                         contentDescription = "${date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.ITALY)} ${date.dayOfMonth}: $pendingCount da fare, $completedCount completate"
                         role = Role.Button
                     }
                     .clickable { onSelect(date) }.padding(vertical = 9.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Text(date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (selected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text(date.dayOfMonth.toString(), color = if (selected) NightBlue else MainText, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                Text(date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else if (selected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(date.dayOfMonth.toString(), color = if (selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else if (selected) NightBlue else MainText, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (hasPending) Box(Modifier.size(4.dp).background(if (selected) NightBlue else Gold, CircleShape))
+                    if (hasPending) Box(Modifier.size(4.dp).background(if (selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else if (selected) NightBlue else Gold, CircleShape))
                     if (hasCompleted) Box(Modifier.size(4.dp).background(if (selected) NightBlue else Success, CircleShape))
                 }
             }
@@ -202,10 +209,10 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
 private fun DailySummaryCard(isToday: Boolean, completed: Int, total: Int, nextTime: String?) {
     val progress = if (total == 0) 0f else completed.toFloat() / total
     val summaryShape = RoundedCornerShape(24.dp)
-    Column(Modifier.fillMaxWidth().sunsetGlow(summaryShape).then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetPrimarySurface(summaryShape) else Modifier.background(CardBlue.copy(alpha = .92f), summaryShape)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().background(CardBlue.copy(alpha = .92f), summaryShape).sunsetGlow(summaryShape, strong = com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(if (isToday) "Oggi: $completed/$total completate" else "Completate: $completed/$total", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-            Text(nextTime?.let { "Prossima: $it" } ?: "Nessuna in programma", color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(nextTime?.let { "Prossima: $it" } ?: "Nessuna in programma", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = Gold, trackColor = CardBlueLight)
     }

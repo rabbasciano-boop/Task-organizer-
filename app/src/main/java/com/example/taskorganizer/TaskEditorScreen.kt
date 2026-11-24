@@ -378,9 +378,11 @@ private fun TaskEditorPreview(
     alarmEnabled: Boolean,
     cardColor: String
 ) {
-    val previewBackground = taskCardBackground(cardColor).copy(alpha = 0.76f)
-    val previewText = if (cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
-    val previewMuted = if (cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
+    val useSunsetGradient = com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow
+    val previewShape = RoundedCornerShape(22.dp)
+    val previewBackground = if (useSunsetGradient) Color.Transparent else taskCardBackground(cardColor).copy(alpha = 0.76f)
+    val previewText = if (useSunsetGradient) Color.White else if (cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
+    val previewMuted = if (useSunsetGradient) Color.White.copy(alpha = 0.86f) else if (cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
     val reminderText = when (reminderMinutesBefore) {
         0 -> "All'orario"
         60 -> "1 ora prima"
@@ -388,7 +390,7 @@ private fun TaskEditorPreview(
         1440 -> "1 giorno prima"
         else -> "$reminderMinutesBefore min prima"
     }
-    Card(colors = CardDefaults.cardColors(containerColor = previewBackground), shape = RoundedCornerShape(22.dp)) {
+    Card(modifier = Modifier.then(if (useSunsetGradient) Modifier.sunsetPrimarySurface(previewShape) else Modifier).sunsetGlow(previewShape, strong = useSunsetGradient), colors = CardDefaults.cardColors(containerColor = previewBackground), shape = previewShape) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("${categoryDisplay(category, categoryIcon)}", color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold)

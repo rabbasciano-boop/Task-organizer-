@@ -1,7 +1,9 @@
 package com.example.taskorganizer
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import com.example.taskorganizer.ui.theme.OrganizerPalette
@@ -16,12 +18,12 @@ internal fun taskCardBackground(color: String): Color = when (color) {
 }
 
 internal fun taskCardTextColor(task: OrganizerTask): Color = when {
-    task.cardColor == DefaultCardColor && OrganizerPalette.sunsetGlow -> Color.White
+    OrganizerPalette.sunsetGlow -> Color.White
     task.cardColor == DefaultCardColor -> MainText
     else -> Color(0xFFF7F9FC)
 }
 internal fun taskCardMutedColor(task: OrganizerTask): Color = when {
-    task.cardColor == DefaultCardColor && OrganizerPalette.sunsetGlow -> Color.White.copy(alpha = 0.88f)
+    OrganizerPalette.sunsetGlow -> Color.White.copy(alpha = 0.88f)
     task.cardColor == DefaultCardColor -> SoftText
     else -> Color(0xFFD8E1EC)
 }
@@ -59,7 +61,25 @@ private fun themedBackgroundBrush(): Brush? = when (OrganizerPalette.currentThem
     else -> null
 }
 
-internal fun Modifier.organizerBackground(): Modifier = themedBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
+internal fun Modifier.organizerBackground(): Modifier = when (OrganizerPalette.currentTheme) {
+    OrganizerTheme.SUNSET_GLOW -> drawWithCache {
+        val brush = Brush.radialGradient(
+            colors = listOf(Color(0xFFFFE4CC), Color(0xFFFFF7F0), Color(0xFFFDE8EC)),
+            center = Offset(size.width * 0.12f, 0f),
+            radius = size.height * 1.10f
+        )
+        onDrawBehind { drawRect(brush) }
+    }
+    OrganizerTheme.SUNSET_GLOW_DARK -> drawWithCache {
+        val brush = Brush.radialGradient(
+            colors = listOf(Color(0xFF3B1938), Color(0xFF191024), Color(0xFF110B1A)),
+            center = Offset(size.width * 0.15f, 0f),
+            radius = size.height * 1.10f
+        )
+        onDrawBehind { drawRect(brush) }
+    }
+    else -> themedBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
+}
 
 internal fun openingHaloBrush(): Brush = when (OrganizerPalette.currentTheme) {
     OrganizerTheme.ORIGINAL_DARK -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.20f), Color.Transparent))

@@ -50,8 +50,8 @@ fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDe
     val titleColor = taskCardTextColor(task)
     val mutedColor = taskCardMutedColor(task)
     val shape = RoundedCornerShape(20.dp)
-    val useSunsetGradient = task.cardColor == DefaultCardColor && OrganizerPalette.sunsetGlow
-    Card(modifier = Modifier.then(if (useSunsetGradient) Modifier.sunsetPrimarySurface(shape) else Modifier).sunsetGlow(shape, strong = task.cardColor == DefaultCardColor), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor)), shape = shape) {
+    val useSunsetGradient = OrganizerPalette.sunsetGlow
+    Card(modifier = Modifier.then(if (useSunsetGradient) Modifier.sunsetPrimarySurface(shape) else Modifier).sunsetGlow(shape, strong = useSunsetGradient), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor)), shape = shape) {
         Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(

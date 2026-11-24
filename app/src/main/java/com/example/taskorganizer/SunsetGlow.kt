@@ -37,12 +37,12 @@ internal fun Modifier.sunsetGlow(shape: Shape = RoundedCornerShape(20.dp), stron
     return graphicsLayer {
         this.shape = shape
         clip = false
-        shadowElevation = elevation
-        ambientShadowColor = Gold.copy(alpha = if (strong) 0.52f else 0.30f)
-        spotShadowColor = AccentSecondary.copy(alpha = if (strong) 0.48f else 0.26f)
+        shadowElevation = elevation * if (strong) 1.55f else 1.35f
+        ambientShadowColor = Gold.copy(alpha = if (strong) 0.68f else 0.44f)
+        spotShadowColor = AccentSecondary.copy(alpha = if (strong) 0.62f else 0.38f)
     }.border(
-        width = if (strong) 1.25.dp else 0.75.dp,
-        color = Gold.copy(alpha = if (strong) 0.68f else 0.38f),
+        width = if (strong) 1.5.dp else 1.dp,
+        brush = sunsetPrimaryBrush(),
         shape = shape
     )
 }
