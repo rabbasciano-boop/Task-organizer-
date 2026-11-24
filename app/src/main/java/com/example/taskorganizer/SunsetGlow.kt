@@ -23,6 +23,23 @@ internal fun sunsetPrimaryBrush(): Brush = if (OrganizerPalette.currentTheme.isD
 }
 
 @Composable
+internal fun sunsetTaskBrush(cardColor: String): Brush {
+    val colors = when (cardColor) {
+        "oceano" -> listOf(Color(0xFF155E8D), Color(0xFF147FB5), Color(0xFF4F63B8))
+        "salvia" -> listOf(Color(0xFF1E634E), Color(0xFF318368), Color(0xFF6AB692))
+        "prugna" -> listOf(Color(0xFF4A3169), Color(0xFF7250A3), Color(0xFFB06CCF))
+        "corallo" -> listOf(Color(0xFFC0444C), Color(0xFFE06464), Color(0xFFF08AB0))
+        "miele" -> listOf(Color(0xFF9B650D), Color(0xFFD68B1A), Color(0xFFF0BF57))
+        else -> if (OrganizerPalette.currentTheme.isDark) {
+            listOf(Color(0xFFFFB347), Color(0xFFFF7B47), Color(0xFFE85D8A))
+        } else {
+            listOf(Color(0xFFF59E42), Color(0xFFEA6A47), Color(0xFFD94E7A))
+        }
+    }
+    return Brush.linearGradient(colors.map { it.copy(alpha = 0.88f) })
+}
+
+@Composable
 internal fun Modifier.sunsetPrimarySurface(shape: Shape = RoundedCornerShape(20.dp)): Modifier =
     if (OrganizerPalette.sunsetGlow) {
         clip(shape).background(sunsetPrimaryBrush())
@@ -46,3 +63,11 @@ internal fun Modifier.sunsetGlow(shape: Shape = RoundedCornerShape(20.dp), stron
         shape = shape
     )
 }
+
+@Composable
+internal fun Modifier.sunsetTaskSurface(cardColor: String, shape: Shape = RoundedCornerShape(20.dp)): Modifier =
+    if (OrganizerPalette.sunsetGlow) {
+        clip(shape).background(sunsetTaskBrush(cardColor))
+    } else {
+        background(taskCardBackground(cardColor), shape)
+    }
