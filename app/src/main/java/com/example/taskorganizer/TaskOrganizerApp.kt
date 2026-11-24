@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import java.time.LocalDate
-import java.time.LocalTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -426,28 +425,14 @@ internal fun TaskOrganizerApp(
                     nickname = nickname,
                     signedInAccount = signedInAccount,
                     onAdd = openNewTask,
-                    onAddLog = { title, category, minutes, date ->
-                        if (!date.isAfter(LocalDate.now()) && minutes >= 1) {
-                            updateArchive(change = { disk ->
-                                disk.copy(
-                                    tasks = disk.tasks + OrganizerTask(
-                                        title = title,
-                                        date = date.toString(),
-                                        time = LocalTime.now().withSecond(0).withNano(0).toString(),
-                                        category = category,
-                                        note = "Durata: $minutes min",
-                                        completed = true,
-                                        reminderEnabled = false
-                                    )
-                                )
-                            })
-                        }
-                    },
                     onToggleTask = ::toggleTaskById,
                     onCompleteTask = ::completeTaskById,
                     onDeleteTask = ::deleteTaskById,
                     onRestoreTask = ::restoreTaskById,
                     onEdit = openEditTask,
+                    onOpenActivities = { navigateToTab(1) },
+                    onOpenLists = { navigateToTab(2) },
+                    onOpenCalendar = { navigateToTab(3) },
                     onManageAccount = { navigateToTab(4) },
                     onOpenPrivacy = { privacyInfoOpen = true }
                 )

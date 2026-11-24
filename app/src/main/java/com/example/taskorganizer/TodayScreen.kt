@@ -4,311 +4,230 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.time.LocalDate
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
 @Composable
 internal fun TodayScreen(
     tasks: List<OrganizerTask>,
     nickname: String,
     signedInAccount: SignedInAccount?,
     onAdd: () -> Unit,
-    onAddLog: (String, String, Int, LocalDate) -> Unit,
     onToggleTask: (String) -> Unit,
     onCompleteTask: (String) -> Unit,
     onDeleteTask: (String) -> Unit,
     onRestoreTask: (String) -> Unit,
     onEdit: (OrganizerTask) -> Unit,
+    onOpenActivities: () -> Unit,
+    onOpenLists: () -> Unit,
+    onOpenCalendar: () -> Unit,
     onManageAccount: () -> Unit,
     onOpenPrivacy: () -> Unit
 ) {
-    val deleteSnackbar = remember { SnackbarHostState() }
-    var deletedTaskId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(deletedTaskId) {
-        val taskId = deletedTaskId ?: return@LaunchedEffect
-        if (
-            deleteSnackbar.showSnackbar(
-                message = "Attività spostata nel Cestino",
-                actionLabel = "Annulla",
-                duration = SnackbarDuration.Short
-            ) == SnackbarResult.ActionPerformed
-        ) {
-            onRestoreTask(taskId)
-        }
-        deletedTaskId = null
+    val snackbar = remember { SnackbarHostState() }
+    var deletedId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(deletedId) {
+        val taskId = deletedId ?: return@LaunchedEffect
+        if (snackbar.showSnackbar(message = "Attività spostata nel Cestino", actionLabel = "Annulla", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) onRestoreTask(taskId)
+        deletedId = null
     }
     var selectedDateValue by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     var currentDate by remember { mutableStateOf(LocalDate.now()) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(60_000)
-            val today = LocalDate.now()
-            if (today != currentDate) {
-                currentDate = today
-                selectedDateValue = today.toString()
-            }
+            LocalDate.now().takeIf { it != currentDate }?.let { today -> currentDate = today; selectedDateValue = today.toString() }
         }
     }
     val selectedDate = LocalDate.parse(selectedDateValue)
-    val weekStart = selectedDate.with(DayOfWeek.MONDAY)
-    val weekDays = (0L..6L).map { weekStart.plusDays(it) }
-    var agendaFilter by rememberSaveable { mutableStateOf("all") }
-    var activeTimerTitle by rememberSaveable { mutableStateOf("Attività personale") }
-    var activeTimerCategory by rememberSaveable { mutableStateOf("Personale") }
-    var timerRunning by rememberSaveable { mutableStateOf(false) }
-    var timerStartedAtMillis by rememberSaveable { mutableStateOf(0L) }
-    var timerAccumulatedMillis by rememberSaveable { mutableStateOf(0L) }
-    var timerNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    val timerElapsedMillis = timerAccumulatedMillis + if (timerRunning && timerStartedAtMillis > 0L) {
-        (timerNowMillis - timerStartedAtMillis).coerceAtLeast(0L)
-    } else 0L
-    val timerSeconds = (timerElapsedMillis / 1_000L).toInt()
-    val canSaveLiveLog = timerSeconds >= 60 && !selectedDate.isAfter(currentDate)
-    LaunchedEffect(timerRunning, timerStartedAtMillis) {
-        while (timerRunning) {
-            timerNowMillis = System.currentTimeMillis()
-            delay(1_000)
-        }
-    }
+    val weekDays = (0L..6L).map { selectedDate.with(DayOfWeek.MONDAY).plusDays(it) }
+    var filter by rememberSaveable { mutableStateOf("all") }
     val selectedTasks = tasks.filter { it.date == selectedDateValue }.sortedBy { it.time ?: "99:99" }
-    val visibleTasks = selectedTasks.filter { task ->
-        when (agendaFilter) {
-            "scheduled" -> !task.completed
-            "logged" -> task.completed
+    val visibleTasks = selectedTasks.filter {
+        when (filter) {
+            "scheduled" -> !it.completed
+            "alarm" -> it.alarmEnabled
+            "completed" -> it.completed
             else -> true
         }
     }
-    val loggedToday = selectedTasks.count { it.completed }
+    val completedCount = selectedTasks.count { it.completed }
+    val nextTask = selectedTasks.firstOrNull { !it.completed && !it.time.isNullOrBlank() }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY) }
-    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ITALY) }
-    var profileMenuOpen by remember { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
-    Box(modifier = Modifier.fillMaxSize()) {
-    PageColumn {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Task Organizer", color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            signedInAccount?.let { account ->
-                Box(contentAlignment = Alignment.TopEnd) {
-                    AccountAvatar(
-                        photoUrl = account.photoUrl,
-                        initial = account.email.firstOrNull()?.uppercase() ?: "U",
-                        onClick = { profileMenuOpen = true }
-                    )
-                    DropdownMenu(
-                        expanded = profileMenuOpen,
-                        onDismissRequest = { profileMenuOpen = false },
-                        containerColor = CardBlue,
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
-                            Text(account.displayName, color = MainText, fontWeight = FontWeight.Bold)
-                            Text(account.email, color = SoftText, fontSize = 12.sp)
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            HomeAccountDrawer(
+                nickname, signedInAccount,
+                onOpenActivities = { scope.launch { drawerState.close() }; onOpenActivities() },
+                onOpenLists = { scope.launch { drawerState.close() }; onOpenLists() },
+                onOpenCalendar = { scope.launch { drawerState.close() }; onOpenCalendar() },
+                onOpenSettings = { scope.launch { drawerState.close() }; onManageAccount() },
+                onOpenPrivacy = { scope.launch { drawerState.close() }; onOpenPrivacy() }
+            )
+        }
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = 6.dp)) {
+                HomeHeader(nickname, signedInAccount, selectedDate, selectedDate == currentDate, { scope.launch { drawerState.open() } }, onOpenCalendar, dateFormatter)
+                HomeWeekStrip(weekDays, selectedDate, currentDate, tasks) { selectedDateValue = it.toString() }
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = 600.dp),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 104.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    item { DailySummaryCard(completedCount, selectedTasks.size, nextTask?.time) }
+                    item { HomeFilters(filter, selectedTasks, completedCount) { filter = it } }
+                    item {
+                        Column {
+                            Text(if (selectedDate == currentDate) "Attività di oggi" else dateFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = MainText, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("Scorri una card per completarla o eliminarla", color = SoftText, fontSize = 11.sp)
                         }
-                        HorizontalDivider(color = CardBlueLight)
-                        DropdownMenuItem(
-                            text = { Text("Gestisci account", color = MainText) },
-                            onClick = { profileMenuOpen = false; onManageAccount() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Privacy e dati", color = MainText) },
-                            onClick = { profileMenuOpen = false; onOpenPrivacy() }
-                        )
+                    }
+                    if (visibleTasks.isEmpty()) item { EmptyState("Nessuna attività in questa data", if (filter == "completed") "Non hai ancora completato attività." else "Puoi pianificare un nuovo impegno quando vuoi.") }
+                    else items(visibleTasks, key = { it.id }) { task ->
+                        HomeAgendaTaskCard(task, { onToggleTask(task.id) }, { onCompleteTask(task.id) }, { onDeleteTask(task.id); deletedId = task.id }, { onEdit(task) })
                     }
                 }
             }
+            Button(
+                onClick = onAdd,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp).height(52.dp).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button },
+                shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
+            ) { Text("+", fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("Nuova attività", Modifier.padding(start = 7.dp), fontWeight = FontWeight.ExtraBold) }
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 14.dp))
         }
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(monthFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                TextButton(onClick = { selectedDateValue = currentDate.toString() }) { Text("Oggi", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-            }
-            Text(greetingFor(nickname), color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Il tuo calendario e registro attività", color = SoftText, fontSize = 13.sp)
-        }
+    }
+}
 
-        var weekDragDistance by remember { mutableStateOf(0f) }
-        val weekSwipeThreshold = with(LocalDensity.current) { 80.dp.toPx() }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Scorri per cambiare settimana · tocca una data per vedere gli impegni", color = SoftText, fontSize = 12.sp)
-            Row(
-                modifier = Modifier.fillMaxWidth().pointerInput(selectedDateValue) {
-                    detectHorizontalDragGestures(
-                        onHorizontalDrag = { _, dragAmount ->
-                            weekDragDistance += dragAmount
-                        },
-                        onDragEnd = {
-                            when {
-                                weekDragDistance <= -weekSwipeThreshold -> selectedDateValue = selectedDate.plusWeeks(1).toString()
-                                weekDragDistance >= weekSwipeThreshold -> selectedDateValue = selectedDate.minusWeeks(1).toString()
-                            }
-                            weekDragDistance = 0f
-                        },
-                        onDragCancel = { weekDragDistance = 0f }
-                    )
-                },
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+@Composable
+private fun HomeHeader(nickname: String, account: SignedInAccount?, selectedDate: LocalDate, isToday: Boolean, onOpenDrawer: () -> Unit, onOpenCalendar: () -> Unit, formatter: DateTimeFormatter) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(13.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(contentAlignment = Alignment.BottomEnd) {
+            AccountAvatar(account?.photoUrl, account?.email?.firstOrNull()?.uppercase() ?: nickname.firstOrNull()?.uppercase() ?: "U", onOpenDrawer)
+            Text("☰", color = NightBlue, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.size(15.dp).background(Gold, CircleShape).border(1.dp, CardBlue, CircleShape).padding(top = 1.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(buildString { append(formatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }); if (isToday) append(" • Oggi") }, color = Gold, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+            Text(greetingFor(nickname), color = MainText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+        }
+        Box(Modifier.size(43.dp).clip(RoundedCornerShape(16.dp)).background(CardBlue.copy(alpha = .92f)).border(1.dp, Gold.copy(alpha = .24f), RoundedCornerShape(16.dp)).clickable(onClick = onOpenCalendar).semantics { contentDescription = "Apri calendario"; role = Role.Button }, contentAlignment = Alignment.Center) {
+            androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_nav_calendar), null, tint = Gold)
+        }
+    }
+}
+
+@Composable
+private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, currentDate: LocalDate, tasks: List<OrganizerTask>, onSelect: (LocalDate) -> Unit) {
+    var dragDistance by remember { mutableStateOf(0f) }
+    val threshold = with(LocalDensity.current) { 80.dp.toPx() }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).pointerInput(selectedDate) {
+            detectHorizontalDragGestures(
+                onHorizontalDrag = { _, amount -> dragDistance += amount },
+                onDragEnd = { when { dragDistance <= -threshold -> onSelect(selectedDate.plusWeeks(1)); dragDistance >= threshold -> onSelect(selectedDate.minusWeeks(1)) }; dragDistance = 0f },
+                onDragCancel = { dragDistance = 0f }
+            )
+        }, horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        weekDays.forEach { date ->
+            val selected = date == selectedDate
+            val hasPending = tasks.any { it.date == date.toString() && !it.completed }
+            val hasCompleted = tasks.any { it.date == date.toString() && it.completed }
+            Column(
+                Modifier.weight(1f).background(if (selected) Gold else CardBlue.copy(alpha = .88f), RoundedCornerShape(17.dp))
+                    .then(if (date == currentDate && !selected) Modifier.border(1.dp, Gold, RoundedCornerShape(17.dp)) else Modifier)
+                    .clickable { onSelect(date) }.padding(vertical = 9.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                weekDays.forEach { date ->
-                    val isSelected = date == selectedDate
-                    val isToday = date == currentDate
-                    val hasScheduled = tasks.any { it.date == date.toString() && !it.completed }
-                    val hasLogged = tasks.any { it.date == date.toString() && it.completed }
-                    Column(
-                        modifier = Modifier.weight(1f).background(if (isSelected) Gold else CardBlue, RoundedCornerShape(18.dp))
-                            .then(if (isToday && !isSelected) Modifier.border(1.dp, Gold, RoundedCornerShape(18.dp)) else Modifier)
-                            .clickable { selectedDateValue = date.toString() }.padding(vertical = 9.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (isSelected) NightBlue else SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(date.dayOfMonth.toString(), color = if (isSelected) NightBlue else MainText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            if (hasScheduled) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Gold, RoundedCornerShape(50)))
-                            if (hasLogged) Box(Modifier.size(5.dp).background(if (isSelected) NightBlue else Success, RoundedCornerShape(50)))
-                        }
-                    }
+                Text(date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (selected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(date.dayOfMonth.toString(), color = if (selected) NightBlue else MainText, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (hasPending) Box(Modifier.size(4.dp).background(if (selected) NightBlue else Gold, CircleShape))
+                    if (hasCompleted) Box(Modifier.size(4.dp).background(if (selected) NightBlue else Success, CircleShape))
                 }
             }
         }
-
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(22.dp)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text("Registra attività live", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text(activeTimerTitle, color = SoftText, fontSize = 12.sp)
-                    }
-                    Text(formatLiveTimer(timerSeconds), color = Gold, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(
-                        Triple("💼 Lavoro", "Lavoro", "Lavoro"),
-                        Triple("👤 Personale", "Personale", "Personale"),
-                        Triple("📚 Studio", "Studio", "Studio")
-                    ).forEach { (label, title, category) ->
-                        TextButton(onClick = { activeTimerTitle = title; activeTimerCategory = category }) { Text(label, color = SoftText, fontSize = 12.sp) }
-                    }
-                }
-                if (selectedDate.isAfter(currentDate)) {
-                    Text("Puoi registrare un'attività solo per oggi o per una data passata.", color = Danger, fontSize = 12.sp)
-                } else if (timerSeconds < 60) {
-                    Text("Registra almeno un minuto di attività.", color = SoftText, fontSize = 12.sp)
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        if (timerRunning) {
-                            timerAccumulatedMillis += (System.currentTimeMillis() - timerStartedAtMillis).coerceAtLeast(0L)
-                            timerStartedAtMillis = 0L
-                            timerRunning = false
-                        } else {
-                            timerStartedAtMillis = System.currentTimeMillis()
-                            timerNowMillis = timerStartedAtMillis
-                            timerRunning = true
-                        }
-                    }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
-                        Text(if (timerRunning) "Pausa" else "Avvia", color = Gold, fontWeight = FontWeight.Bold)
-                    }
-                    Button(
-                        onClick = {
-                            onAddLog(activeTimerTitle, activeTimerCategory, timerSeconds / 60, selectedDate)
-                            timerRunning = false
-                            timerStartedAtMillis = 0L
-                            timerAccumulatedMillis = 0L
-                            timerNowMillis = System.currentTimeMillis()
-                        },
-                        enabled = canSaveLiveLog,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
-                    ) { Text("Salva", fontWeight = FontWeight.Bold) }
-                }
-            }
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            listOf("all" to "Tutto (${selectedTasks.size})", "scheduled" to "📅 Programmate", "logged" to "✓ Completate").forEach { (key, label) ->
-                val active = agendaFilter == key
-                TextButton(
-                    onClick = { agendaFilter = key },
-                    modifier = Modifier.weight(1f).background(if (active) CardBlueLight else CardBlue, RoundedCornerShape(16.dp))
-                ) { Text(label, color = if (active) Gold else SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
-            }
-        }
-
-        Text(dateFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = MainText, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-        if (visibleTasks.isEmpty()) {
-            EmptyState("Nessuna attività in questa data", if (agendaFilter == "logged") "Non hai ancora registrato attività." else "Puoi pianificare un nuovo impegno quando vuoi.")
-        } else {
-            visibleTasks.forEach { task ->
-                key(task.id) {
-                    HomeAgendaTaskCard(
-                        task = task,
-                        onToggle = { onToggleTask(task.id) },
-                        onComplete = { onCompleteTask(task.id) },
-                        onDelete = { onDeleteTask(task.id); deletedTaskId = task.id },
-                        onEdit = { onEdit(task) }
-                    )
-                }
-            }
-        }
-        Button(
-            onClick = onAdd, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
-        ) { Text("+  Registra / Pianifica", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-    }
-        SnackbarHost(hostState = deleteSnackbar, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
     }
 }
 
-private fun formatLiveTimer(seconds: Int): String {
-    val hours = seconds / 3_600
-    val minutes = (seconds % 3_600) / 60
-    val remainingSeconds = seconds % 60
-    return "%02d:%02d:%02d".format(Locale.ROOT, hours, minutes, remainingSeconds)
+@Composable
+private fun DailySummaryCard(completed: Int, total: Int, nextTime: String?) {
+    val progress = if (total == 0) 0f else completed.toFloat() / total
+    Column(Modifier.fillMaxWidth().background(CardBlue.copy(alpha = .92f), RoundedCornerShape(24.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Oggi: $completed/$total completate", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+            Text(nextTime?.let { "Prossima: $it" } ?: "Nessuna in programma", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = Gold, trackColor = CardBlueLight)
+    }
 }
 
+@Composable
+private fun HomeFilters(filter: String, tasks: List<OrganizerTask>, completed: Int, onChange: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("all" to "Tutte (${tasks.size})", "scheduled" to "Da fare (${tasks.count { !it.completed }})", "alarm" to "Sveglie (${tasks.count { it.alarmEnabled }})", "completed" to "Completate ($completed)").forEach { (key, label) ->
+            val selected = filter == key
+            Text(label, color = if (selected) NightBlue else MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.background(if (selected) Gold else CardBlue.copy(alpha = .88f), RoundedCornerShape(50)).clickable { onChange(key) }.padding(horizontal = 14.dp, vertical = 9.dp))
+        }
+    }
+}
+
+@Composable
+private fun HomeAccountDrawer(nickname: String, account: SignedInAccount?, onOpenActivities: () -> Unit, onOpenLists: () -> Unit, onOpenCalendar: () -> Unit, onOpenSettings: () -> Unit, onOpenPrivacy: () -> Unit) {
+    ModalDrawerSheet(drawerContainerColor = CardBlue, modifier = Modifier.widthIn(max = 304.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                AccountAvatar(account?.photoUrl, account?.email?.firstOrNull()?.uppercase() ?: nickname.firstOrNull()?.uppercase() ?: "U", {})
+                Column(Modifier.weight(1f)) {
+                    Text(account?.displayName?.ifBlank { nickname } ?: nickname, color = MainText, fontWeight = FontWeight.ExtraBold)
+                    Text(if (account == null) "Modalità ospite" else "Account collegato", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            HorizontalDivider(color = CardBlueLight, modifier = Modifier.padding(vertical = 10.dp))
+            Text("Menu", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = 12.dp, bottom = 3.dp))
+            HomeDrawerItem("☰", "Attività", onOpenActivities)
+            HomeDrawerItem("☷", "Liste e spesa", onOpenLists)
+            HomeDrawerItem("▦", "Calendario", onOpenCalendar)
+            HomeDrawerItem("⚙", "Impostazioni", onOpenSettings)
+            HomeDrawerItem("ⓘ", "Privacy e dati", onOpenPrivacy)
+        }
+    }
+}
+
+@Composable
+private fun HomeDrawerItem(icon: String, label: String, onClick: () -> Unit) {
+    NavigationDrawerItem(
+        label = { Text(label, fontWeight = FontWeight.SemiBold) }, selected = false, icon = { Text(icon, fontSize = 17.sp) }, onClick = onClick, shape = RoundedCornerShape(15.dp),
+        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = CardBlue, unselectedTextColor = MainText, unselectedIconColor = Gold)
+    )
+}
