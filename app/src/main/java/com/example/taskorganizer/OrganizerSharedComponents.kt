@@ -18,7 +18,7 @@ import com.example.taskorganizer.ui.theme.OrganizerPalette
 @Composable
 fun FilterChoice(label: String, value: String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().sunsetGlow(RoundedCornerShape(14.dp)).clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = OrganizerPalette.cardLight),
         shape = RoundedCornerShape(14.dp)
     ) {
@@ -42,7 +42,7 @@ fun Stat(value: String, label: String) {
 
 @Composable
 fun EmptyState(title: String, subtitle: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = OrganizerPalette.cardLight), shape = RoundedCornerShape(20.dp)) {
+    Card(modifier = Modifier.sunsetGlow(RoundedCornerShape(20.dp)), colors = CardDefaults.cardColors(containerColor = OrganizerPalette.cardLight), shape = RoundedCornerShape(20.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("✦", color = OrganizerPalette.accent, fontSize = 28.sp)
             Spacer(Modifier.height(9.dp))
@@ -55,7 +55,7 @@ fun EmptyState(title: String, subtitle: String) {
 
 @Composable
 fun InfoCard(title: String, body: String, status: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = OrganizerPalette.card), shape = RoundedCornerShape(20.dp)) {
+    Card(modifier = Modifier.sunsetGlow(RoundedCornerShape(20.dp)), colors = CardDefaults.cardColors(containerColor = OrganizerPalette.card), shape = RoundedCornerShape(20.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
             Text(title, color = OrganizerPalette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp)); Text(body, color = OrganizerPalette.muted, fontSize = 14.sp)

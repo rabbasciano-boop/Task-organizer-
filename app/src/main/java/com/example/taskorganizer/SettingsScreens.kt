@@ -76,7 +76,7 @@ internal fun SettingsHubScreen(signedInAccount: SignedInAccount?, onOpen: (Strin
 @Composable
 private fun SettingsNavigationCard(icon: String, title: String, subtitle: String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().sunsetGlow(RoundedCornerShape(20.dp)).clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = CardBlue),
         shape = RoundedCornerShape(20.dp)
     ) {
@@ -202,7 +202,7 @@ private fun ThemeChoiceCard(
         OrganizerTheme.SUNSET_GLOW_DARK -> Color(0xFFFF7B47)
     }
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onThemeChanged(theme) },
+        modifier = Modifier.fillMaxWidth().sunsetGlow(RoundedCornerShape(20.dp), strong = selectedTheme == theme).clickable { onThemeChanged(theme) },
         colors = CardDefaults.cardColors(containerColor = previewBackground),
         shape = RoundedCornerShape(20.dp),
         border = if (selectedTheme == theme) BorderStroke(2.dp, previewAccent) else null

@@ -12,6 +12,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -19,9 +20,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.taskorganizer.ui.theme.OrganizerPalette
 @Composable
 fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(18.dp)) {
+    val shape = RoundedCornerShape(18.dp)
+    val useSunsetGradient = OrganizerPalette.sunsetGlow
+    Card(modifier = Modifier.then(if (useSunsetGradient) Modifier.sunsetPrimarySurface(shape) else Modifier).sunsetGlow(shape), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else CardBlueLight), shape = shape) {
         Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier.size(48.dp).clickable(onClick = onToggle).semantics {
@@ -45,7 +49,9 @@ fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Uni
 fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     val titleColor = taskCardTextColor(task)
     val mutedColor = taskCardMutedColor(task)
-    Card(colors = CardDefaults.cardColors(containerColor = taskCardBackground(task.cardColor)), shape = RoundedCornerShape(20.dp)) {
+    val shape = RoundedCornerShape(20.dp)
+    val useSunsetGradient = task.cardColor == DefaultCardColor && OrganizerPalette.sunsetGlow
+    Card(modifier = Modifier.then(if (useSunsetGradient) Modifier.sunsetPrimarySurface(shape) else Modifier).sunsetGlow(shape, strong = task.cardColor == DefaultCardColor), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor)), shape = shape) {
         Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(

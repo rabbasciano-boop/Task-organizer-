@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -200,10 +201,11 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
 @Composable
 private fun DailySummaryCard(isToday: Boolean, completed: Int, total: Int, nextTime: String?) {
     val progress = if (total == 0) 0f else completed.toFloat() / total
-    Column(Modifier.fillMaxWidth().background(CardBlue.copy(alpha = .92f), RoundedCornerShape(24.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val summaryShape = RoundedCornerShape(24.dp)
+    Column(Modifier.fillMaxWidth().sunsetGlow(summaryShape).then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetPrimarySurface(summaryShape) else Modifier.background(CardBlue.copy(alpha = .92f), summaryShape)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(if (isToday) "Oggi: $completed/$total completate" else "Completate: $completed/$total", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-            Text(nextTime?.let { "Prossima: $it" } ?: "Nessuna in programma", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(nextTime?.let { "Prossima: $it" } ?: "Nessuna in programma", color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = Gold, trackColor = CardBlueLight)
     }
@@ -214,7 +216,8 @@ private fun HomeFilters(filter: String, tasks: List<OrganizerTask>, completed: I
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("all" to "Tutte (${tasks.size})", "scheduled" to "Da fare (${tasks.count { !it.completed }})", "alarm" to "Sveglie (${tasks.count { it.alarmEnabled }})", "completed" to "Completate ($completed)").forEach { (key, label) ->
             val selected = filter == key
-            Text(label, color = if (selected) NightBlue else MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.background(if (selected) Gold else CardBlue.copy(alpha = .88f), RoundedCornerShape(50)).clickable { onChange(key) }.padding(horizontal = 14.dp, vertical = 9.dp))
+            val shape = RoundedCornerShape(50)
+            Text(label, color = if (selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else if (selected) NightBlue else MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, modifier = (if (selected) Modifier.sunsetPrimarySurface(shape).sunsetGlow(shape, strong = true) else Modifier.background(CardBlue.copy(alpha = .88f), shape).sunsetGlow(shape)).clickable { onChange(key) }.padding(horizontal = 14.dp, vertical = 9.dp))
         }
     }
 }

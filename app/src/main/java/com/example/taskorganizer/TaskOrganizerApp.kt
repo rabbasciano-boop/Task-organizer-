@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.taskorganizer.ui.theme.OrganizerTheme
+import com.example.taskorganizer.ui.theme.isSunsetGlow
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -207,6 +208,7 @@ internal fun TaskOrganizerApp(
     }
 
     fun toggleTaskById(taskId: String) {
+        val wasCompleted = tasks.firstOrNull { it.id == taskId }?.completed ?: return
         updateArchive(change = { disk ->
             RecurrenceTiming.toggleTask(disk, taskId)
         }) { updated ->
@@ -215,10 +217,12 @@ internal fun TaskOrganizerApp(
                     RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
                 }
             }
+            if (!wasCompleted && selectedTheme.isSunsetGlow) BubbleCompletionSound.play(context)
         }
     }
 
     fun completeTaskById(taskId: String) {
+        val wasCompleted = tasks.firstOrNull { it.id == taskId }?.completed ?: return
         updateArchive(change = { disk ->
             val current = disk.tasks.firstOrNull { it.id == taskId } ?: return@updateArchive disk
             if (current.completed) disk else RecurrenceTiming.updateTask(disk, current.copy(completed = true))
@@ -228,6 +232,7 @@ internal fun TaskOrganizerApp(
                     RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
                 }
             }
+            if (!wasCompleted && selectedTheme.isSunsetGlow) BubbleCompletionSound.play(context)
         }
     }
 

@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.taskorganizer.ui.theme.OrganizerPalette
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.util.Locale
@@ -43,10 +45,12 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
     val action = when { dragOffset > 12f -> "complete"; dragOffset < -12f -> "delete"; else -> null }
     val titleColor = taskCardTextColor(task)
     val mutedColor = taskCardMutedColor(task)
+    val cardShape = RoundedCornerShape(24.dp)
+    val useSunsetGradient = action == null && task.cardColor == DefaultCardColor && OrganizerPalette.sunsetGlow
     Card(
-        colors = CardDefaults.cardColors(containerColor = when (action) { "complete" -> Success; "delete" -> Danger; else -> taskCardBackground(task.cardColor) }),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth().graphicsLayer { translationX = dragOffset }.semantics {
+        colors = CardDefaults.cardColors(containerColor = when (action) { "complete" -> Success; "delete" -> Danger; else -> if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor) }),
+        shape = cardShape,
+        modifier = Modifier.fillMaxWidth().then(if (useSunsetGradient) Modifier.sunsetPrimarySurface(cardShape) else Modifier).sunsetGlow(cardShape, strong = task.cardColor == DefaultCardColor).graphicsLayer { translationX = dragOffset }.semantics {
             customActions = buildList {
                 add(CustomAccessibilityAction(if (task.completed) "Segna come da fare" else "Completa") { onToggle(); true })
                 add(CustomAccessibilityAction("Elimina") { onDelete(); true })

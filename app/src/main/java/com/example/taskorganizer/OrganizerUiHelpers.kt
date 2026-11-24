@@ -15,8 +15,16 @@ internal fun taskCardBackground(color: String): Color = when (color) {
     else -> CardBlue
 }
 
-internal fun taskCardTextColor(task: OrganizerTask): Color = if (task.cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
-internal fun taskCardMutedColor(task: OrganizerTask): Color = if (task.cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
+internal fun taskCardTextColor(task: OrganizerTask): Color = when {
+    task.cardColor == DefaultCardColor && OrganizerPalette.sunsetGlow -> Color.White
+    task.cardColor == DefaultCardColor -> MainText
+    else -> Color(0xFFF7F9FC)
+}
+internal fun taskCardMutedColor(task: OrganizerTask): Color = when {
+    task.cardColor == DefaultCardColor && OrganizerPalette.sunsetGlow -> Color.White.copy(alpha = 0.88f)
+    task.cardColor == DefaultCardColor -> SoftText
+    else -> Color(0xFFD8E1EC)
+}
 internal fun taskCompletionColor(task: OrganizerTask): Color = when {
     task.cardColor == DefaultCardColor && task.completed -> Success
     task.cardColor == DefaultCardColor -> Gold

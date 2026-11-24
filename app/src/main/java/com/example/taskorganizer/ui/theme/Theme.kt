@@ -25,6 +25,9 @@ enum class OrganizerTheme(val storageKey: String, val isDark: Boolean) {
     }
 }
 
+val OrganizerTheme.isSunsetGlow: Boolean
+    get() = this == OrganizerTheme.SUNSET_GLOW || this == OrganizerTheme.SUNSET_GLOW_DARK
+
 data class OrganizerColorPalette(
     val theme: OrganizerTheme,
     val background: Color,
@@ -38,6 +41,7 @@ data class OrganizerColorPalette(
     val danger: Color
 ) {
     val aurora: Boolean get() = theme == OrganizerTheme.AURORA_MIDNIGHT || theme == OrganizerTheme.AURORA_NORDIC
+    val sunsetGlow: Boolean get() = theme.isSunsetGlow
 }
 
 private fun paletteFor(theme: OrganizerTheme): OrganizerColorPalette = when (theme) {
@@ -65,6 +69,7 @@ object OrganizerPalette {
     val success get() = active.success
     val danger get() = active.danger
     val aurora get() = active.aurora
+    val sunsetGlow get() = active.sunsetGlow
 
     fun apply(theme: OrganizerTheme): OrganizerColorPalette = paletteFor(theme).also { active = it }
 }
