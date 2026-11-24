@@ -142,15 +142,16 @@ internal fun TaskOrganizerApp(
         appScope.launch(Dispatchers.IO) { TaskWidgetUpdater.updateAll(context, archive) }
     }
 
-    fun updateArchive(change: (TaskArchive) -> TaskArchive, afterSaved: (TaskArchive) -> Unit = {}) {
+    fun updateArchive(change: (TaskArchive) -> TaskArchive, afterSaved: suspend (TaskArchive) -> Unit = {}) {
         appScope.launch {
             archiveUpdateMutex.withLock {
                 val result = withContext(Dispatchers.IO) { runCatching { store.update(change) } }
-                result.onSuccess { savedArchive ->
+                val savedArchive = result.getOrNull()
+                if (savedArchive != null) {
                     applyArchive(savedArchive)
                     refreshWidgets(savedArchive)
                     afterSaved(savedArchive)
-                }.onFailure {
+                } else {
                     storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
                 }
             }
@@ -187,8 +188,10 @@ internal fun TaskOrganizerApp(
         updateArchive(change = { disk ->
             val index = disk.tasks.indexOfFirst { it.id == task.id }
             disk.copy(tasks = if (index >= 0) disk.tasks.toMutableList().also { it[index] = task } else disk.tasks + task)
-        }) {
-            appScope.launch(Dispatchers.IO) { TaskReminderScheduler.schedule(context, task) }
+        }) { saved ->
+            withContext(Dispatchers.IO) {
+                saved.tasks.firstOrNull { it.id == task.id }?.let { TaskReminderScheduler.schedule(context, it) }
+            }
             editorOpen = false
             editorTaskId = null
             navigateToTab(1)
@@ -200,7 +203,7 @@ internal fun TaskOrganizerApp(
             RecurrenceTiming.toggleTask(disk, taskId)
         }) { updated ->
             if (updated.tasks.any { it.id == taskId }) {
-                appScope.launch(Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
                 }
             }
@@ -213,7 +216,7 @@ internal fun TaskOrganizerApp(
             if (current.completed) disk else RecurrenceTiming.updateTask(disk, current.copy(completed = true))
         }) { updated ->
             if (updated.tasks.any { it.id == taskId }) {
-                appScope.launch(Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
                 }
             }
@@ -228,7 +231,7 @@ internal fun TaskOrganizerApp(
                 deletedTasks = disk.deletedTasks.filterNot { it.id == taskId } + current.copy(deletedAt = System.currentTimeMillis())
             )
         }) {
-            TaskReminderScheduler.cancel(context, taskId)
+            withContext(Dispatchers.IO) { TaskReminderScheduler.cancel(context, taskId) }
         }
     }
 
@@ -241,7 +244,7 @@ internal fun TaskOrganizerApp(
             )
         }) { updated ->
             updated.tasks.firstOrNull { it.id == taskId }?.let { task ->
-                appScope.launch(Dispatchers.IO) { TaskReminderScheduler.schedule(context, task) }
+                withContext(Dispatchers.IO) { TaskReminderScheduler.schedule(context, task) }
             }
         }
     }
@@ -258,7 +261,7 @@ internal fun TaskOrganizerApp(
             val restored = disk.deletedTasks.filter { it.id in taskIds }.map { it.copy(deletedAt = 0L) }
             disk.copy(tasks = disk.tasks.filterNot { it.id in taskIds } + restored, deletedTasks = disk.deletedTasks.filterNot { it.id in taskIds })
         }) { updated ->
-            appScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.IO) {
                 updated.tasks.filter { it.id in taskIds }.forEach { TaskReminderScheduler.schedule(context, it) }
             }
         }
@@ -275,13 +278,16 @@ internal fun TaskOrganizerApp(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     store.clearAll()
-                    // apply() è non bloccante: l'operazione avviene già in Dispatchers.IO
-                    profile.edit().clear().apply()
-                    context.getSharedPreferences("task_organizer_settings", android.content.Context.MODE_PRIVATE)
-                        .edit().clear().apply()
-                    context.getSharedPreferences(TaskOrganizerWidgetProvider.WIDGET_PREFERENCES, android.content.Context.MODE_PRIVATE)
-                        .edit().clear().apply()
-                    security.clear()
+                    check(profile.edit().clear().commit()) { "Profilo locale non cancellato" }
+                    check(
+                        context.getSharedPreferences("task_organizer_settings", android.content.Context.MODE_PRIVATE)
+                            .edit().clear().commit()
+                    ) { "Impostazioni locali non cancellate" }
+                    check(
+                        context.getSharedPreferences(TaskOrganizerWidgetProvider.WIDGET_PREFERENCES, android.content.Context.MODE_PRIVATE)
+                            .edit().clear().commit()
+                    ) { "Preferenze widget non cancellate" }
+                    check(security.clear()) { "Blocco app non cancellato" }
                 }
             }
             result.onSuccess {

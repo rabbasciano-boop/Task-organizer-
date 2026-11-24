@@ -22,13 +22,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 @Composable
-internal fun PageColumn(safeBottom: Boolean = false, safeTop: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+internal fun PageColumn(
+    safeBottom: Boolean = false,
+    safeTop: Boolean = false,
+    keyboardPadding: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             modifier = Modifier.fillMaxWidth().widthIn(max = 600.dp)
                 .then(if (safeTop) Modifier.statusBarsPadding() else Modifier)
                 .then(if (safeBottom) Modifier.navigationBarsPadding() else Modifier)
-                .imePadding()
+                .then(if (keyboardPadding) Modifier.imePadding() else Modifier)
                 .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content

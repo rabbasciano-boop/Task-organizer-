@@ -32,7 +32,9 @@ internal object RecurrenceTiming {
         val activeFutureOccurrences = if (nextDate != null) archive.tasks.filter { candidate ->
             candidate.id != previous.id && candidate.seriesId == seriesId && candidate.date == nextDate
         } else emptyList()
-        val retainedActiveOccurrence = activeFutureOccurrences.firstOrNull()?.copy(completed = false, deletedAt = 0L)
+        // An occurrence completed in advance must remain completed: reopening an earlier item
+        // must never turn a future completion back into something to do.
+        val retainedActiveOccurrence = activeFutureOccurrences.firstOrNull()
         val duplicateActiveOccurrences = activeFutureOccurrences.drop(1)
         val restoredOccurrence = if (nextDate != null && retainedActiveOccurrence == null) {
             archive.deletedTasks.firstOrNull { candidate ->
@@ -50,22 +52,25 @@ internal object RecurrenceTiming {
                 recurrenceAnchorDate = anchorDate
             )
         } else null
-        val generatedOccurrence = if (reopensRecurrence && archive.tasks.none { candidate ->
+        val generatedOccurrence = if (
+            reopensRecurrence &&
+            previous.seriesId != null &&
+            archive.tasks.none { candidate ->
                 candidate.id != previous.id && candidate.seriesId == previous.seriesId && candidate.completed && candidate.date > previous.date
-            }) {
-            val expectedDate = firstFutureDate(
-                previous.date,
-                previous.recurrenceAnchorDate ?: previous.date,
-                previous.recurrence,
-                today
-            )
-            archive.tasks.firstOrNull { candidate ->
-                candidate.id != previous.id &&
-                    candidate.seriesId == previous.seriesId &&
-                    candidate.date == expectedDate &&
-                    !candidate.completed &&
-                    candidate.deletedAt == 0L
             }
+        ) {
+            // Remove the actual first open future occurrence of this series. Do not derive a
+            // date from today: undoing tomorrow must still find the occurrence made yesterday.
+            archive.tasks
+                .asSequence()
+                .filter { candidate ->
+                    candidate.id != previous.id &&
+                        candidate.seriesId == previous.seriesId &&
+                        !candidate.completed &&
+                        candidate.deletedAt == 0L &&
+                        candidate.date > previous.date
+                }
+                .minByOrNull { it.date }
         } else null
         val duplicateIds = duplicateActiveOccurrences.mapTo(mutableSetOf()) { it.id }
         val activeTasks = archive.tasks.toMutableList().also { it[index] = updatedTask }

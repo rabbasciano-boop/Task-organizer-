@@ -41,6 +41,32 @@ class PinAttemptPolicyTest {
         assertEquals(15 * 60_000L, PinAttemptPolicy.delayFor(6))
         assertEquals(15 * 60_000L, PinAttemptPolicy.delayFor(20))
     }
+
+    @Test
+    fun changingTheClockForwardDoesNotClearAnActiveMonotonicLock() {
+        val timing = resolvePinLockTiming(
+            lockDuration = 30_000L,
+            wallClockRemaining = 0L,
+            monotonicRemaining = 18_000L,
+            bootChanged = false
+        )
+
+        assertEquals(18_000L, timing.remainingMillis)
+        assertTrue(!timing.shouldClearExpiredLock)
+    }
+
+    @Test
+    fun rebootAfterClockChangeRebasesTheSavedLockInsteadOfClearingIt() {
+        val timing = resolvePinLockTiming(
+            lockDuration = 30_000L,
+            wallClockRemaining = 0L,
+            monotonicRemaining = 0L,
+            bootChanged = true
+        )
+
+        assertEquals(30_000L, timing.remainingMillis)
+        assertTrue(timing.shouldRebaseAfterBoot)
+    }
 }
 
 class RecurrenceTimingTest {
@@ -62,7 +88,40 @@ class RecurrenceTimingTest {
     }
 
     @Test
-    fun reactivationKeepsOnlyOneOpenFutureOccurrence() {
+    fun reopeningTheNextDayStillRemovesTheOccurrenceCreatedEarlier() {
+        val original = OrganizerTask(id = "daily", title = "Acqua", date = "2026-11-01", recurrence = "daily")
+        val completed = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(original)), original.id, LocalDate.of(2026, 11, 1))
+
+        val reopened = RecurrenceTiming.toggleTask(completed, original.id, LocalDate.of(2026, 11, 2))
+
+        assertEquals(listOf("2026-11-01"), reopened.tasks.map { it.date })
+        assertEquals(listOf("2026-11-02"), reopened.deletedTasks.map { it.date })
+    }
+
+    @Test
+    fun reopeningLegacyRecurrenceDoesNotTrashAnUnrelatedTaskWithoutSeriesId() {
+        val legacy = OrganizerTask(id = "legacy", title = "Vecchia", date = "2026-11-01", recurrence = "daily", completed = true)
+        val unrelated = OrganizerTask(id = "plain", title = "Normale", date = "2026-11-02")
+
+        val reopened = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(legacy, unrelated)), legacy.id, LocalDate.of(2026, 11, 2))
+
+        assertTrue(reopened.tasks.any { it.id == "plain" })
+        assertTrue(reopened.deletedTasks.none { it.id == "plain" })
+    }
+
+    @Test
+    fun reopeningAnEarlierTaskDoesNotReopenAnAlreadyCompletedFutureOccurrence() {
+        val november = OrganizerTask(id = "nov", title = "Affitto", date = "2026-11-01", recurrence = "monthly", completed = true, seriesId = "rent", recurrenceAnchorDate = "2026-11-01")
+        val december = november.copy(id = "dec", date = "2026-12-01", completed = true)
+
+        val reopened = RecurrenceTiming.toggleTask(TaskArchive(tasks = listOf(november, december)), november.id, LocalDate.of(2026, 11, 20))
+        val completedAgain = RecurrenceTiming.toggleTask(reopened, november.id, LocalDate.of(2026, 11, 20))
+
+        assertTrue(completedAgain.tasks.any { it.id == "dec" && it.completed })
+    }
+
+    @Test
+    fun completionKeepsAnAlreadyCompletedFutureOccurrenceCompleted() {
         val today = LocalDate.of(2026, 11, 1)
         val original = OrganizerTask(id = "daily", title = "Acqua", date = "2026-11-01", recurrence = "daily", seriesId = "daily")
         val activeDuplicate = original.copy(id = "tomorrow-active", date = "2026-11-02", completed = true)
@@ -76,7 +135,7 @@ class RecurrenceTimingTest {
 
         val tomorrow = result.tasks.filter { it.date == "2026-11-02" }
         assertEquals(1, tomorrow.size)
-        assertTrue(!tomorrow.single().completed)
+        assertTrue(tomorrow.single().completed)
     }
 
     @Test

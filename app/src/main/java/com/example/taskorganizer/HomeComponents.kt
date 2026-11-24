@@ -51,7 +51,7 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
                 add(CustomAccessibilityAction(if (task.completed) "Segna come da fare" else "Completa") { onToggle(); true })
                 add(CustomAccessibilityAction("Elimina") { onDelete(); true })
             }
-            contentDescription = "${task.title}, ${formatTimeRange(task) ?: "senza orario"}, ${task.category}"
+            contentDescription = "${task.title}, ${formatTimeRange(task) ?: "senza orario"}, ${task.category}, ${if (task.completed) "completata" else "da fare"}"
             role = Role.Button
         }.pointerInput(task.id, task.completed) {
             detectHorizontalDragGestures(
@@ -66,7 +66,11 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
     ) {
         if (action != null) {
             Row(Modifier.fillMaxWidth().padding(17.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                Text(if (action == "complete") "✓" else "🗑", color = if (action == "complete") NightBlue else MainText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                if (action == "complete") {
+                    Text("✓", color = NightBlue, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                } else {
+                    androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_delete), contentDescription = null, tint = MainText, modifier = Modifier.size(20.dp))
+                }
                 Text(if (action == "complete") "Completata" else "Elimina", color = if (action == "complete") NightBlue else MainText, modifier = Modifier.padding(start = 8.dp), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
             }
         } else {
@@ -76,8 +80,10 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
                     Text(task.title, color = if (task.completed) mutedColor else titleColor, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, textDecoration = if (task.completed) TextDecoration.LineThrough else TextDecoration.None)
                     Text(listOfNotNull(formatTimeRange(task), task.category).joinToString(" • ").ifBlank { "Senza orario" }, color = mutedColor, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 }
-                Box(Modifier.size(28.dp).background(if (task.completed) Success else CardBlueLight.copy(alpha = .82f), RoundedCornerShape(50)).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
-                    Text(if (task.completed) "✓" else "", color = NightBlue, fontWeight = FontWeight.ExtraBold)
+                Box(Modifier.size(48.dp).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(28.dp).background(if (task.completed) Success else CardBlueLight.copy(alpha = .82f), RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
+                        Text(if (task.completed) "✓" else "", color = NightBlue, fontWeight = FontWeight.ExtraBold)
+                    }
                 }
             }
         }

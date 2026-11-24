@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,31 +39,28 @@ fun OrganizerNavigationBar(
     selectedColor: Color,
     indicatorColor: Color
 ) {
-    // The bottom bar has five destinations. Keep labels compact and on one line even
-    // when the system font is enlarged; the full destination name remains available
-    // to TalkBack through the icon content description.
-    val labelFontSize = (8.5f / LocalDensity.current.fontScale).sp
     NavigationBar(containerColor = barColor, contentColor = mutedColor) {
         Spacer(Modifier.width(7.dp))
         OrganizerScreen.all.forEach { screen ->
             val label = stringResource(screen.labelResource)
+            val isSelected = selected == screen
             NavigationBarItem(
-                selected = selected == screen,
+                selected = isSelected,
                 onClick = { onSelected(screen) },
                 icon = {
                     Icon(
                         painter = painterResource(screen.icon),
-                        contentDescription = label
+                        contentDescription = if (isSelected) null else label
                     )
                 },
                 alwaysShowLabel = false,
                 label = {
                     Text(
                         text = label,
-                        fontSize = labelFontSize,
+                        fontSize = 11.sp,
                         maxLines = 1,
                         softWrap = false,
-                        overflow = TextOverflow.Clip
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(

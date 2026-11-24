@@ -4,7 +4,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
 import androidx.compose.ui.graphics.Color
 
 enum class OrganizerTheme(val storageKey: String, val isDark: Boolean) {
@@ -72,11 +71,11 @@ fun TaskOrganizerTheme(theme: OrganizerTheme = OrganizerTheme.ORIGINAL_DARK, con
             onBackground = OrganizerPalette.text, surface = OrganizerPalette.card, onSurface = OrganizerPalette.text
         )
     }
-    key(theme) {
-        MaterialTheme(
-            colorScheme = colors,
-            typography = Typography,
-            content = content
-        )
-    }
+    // Do not key the entire composition by theme: changing appearance must preserve the
+    // current tab, an open editor and any draft already being typed.
+    MaterialTheme(
+        colorScheme = colors,
+        typography = Typography,
+        content = content
+    )
 }

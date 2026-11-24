@@ -8,7 +8,6 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -16,7 +15,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.widget.RemoteViews
 import java.time.DayOfWeek
@@ -391,12 +389,9 @@ object TaskWidgetUpdater {
     }
 
     private fun applyColors(views: RemoteViews, layout: Int, palette: WidgetPalette) {
-        // setColorStateList richiede API 31; su API < 31 usiamo setInt con il colore diretto
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            views.setColorStateList(R.id.widget_root, "setBackgroundTintList", ColorStateList.valueOf(palette.background))
-        } else {
-            views.setInt(R.id.widget_root, "setBackgroundColor", palette.background)
-        }
+        // Tint the dedicated rounded surface rather than the root view. This preserves
+        // the 24dp corners on Android 7–11 as well as on modern Android releases.
+        views.setInt(R.id.widget_background, "setColorFilter", palette.background)
         views.setTextColor(R.id.widget_title, palette.text)
         views.setTextColor(R.id.widget_add, palette.accent)
         views.setTextColor(R.id.widget_progress, palette.text)

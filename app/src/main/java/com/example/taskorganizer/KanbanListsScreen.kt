@@ -61,7 +61,9 @@ fun KanbanListsScreen(
     val active = KanbanColumns.first { it.id == activeColumn }
     val visibleItems = items.filter { kanbanStageOf(it) == activeColumn }.sortedByDescending { it.createdAt }
 
-    PageColumn {
+    // The window already resizes for the IME here. Avoid adding a second bottom inset,
+    // which previously left an unnecessary empty area above the keyboard.
+    PageColumn(keyboardPadding = false) {
         Text("Liste e spesa", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

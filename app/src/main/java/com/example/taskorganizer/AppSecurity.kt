@@ -67,7 +67,20 @@ class AppSecurity(context: Context) {
         val currentBootCount = bootCount()
         val lockDuration = preferences.getLong(LOCK_DURATION, 0L)
         val wallClockRemaining = (preferences.getLong(LOCKED_UNTIL, 0L) - now).coerceAtLeast(0L)
-        if (lockDuration > 0L && wallClockRemaining > 0L && savedBootCount >= 0 && currentBootCount >= 0 && savedBootCount != currentBootCount) {
+        val startedElapsed = preferences.getLong(LOCK_STARTED_ELAPSED, -1L)
+        val elapsedLockUntil = preferences.getLong(LOCKED_UNTIL_ELAPSED, 0L)
+        val monotonicRemaining = if (startedElapsed >= 0L && elapsedNow >= startedElapsed) {
+            (elapsedLockUntil - elapsedNow).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        val timing = resolvePinLockTiming(
+            lockDuration = lockDuration,
+            wallClockRemaining = wallClockRemaining,
+            monotonicRemaining = monotonicRemaining,
+            bootChanged = savedBootCount >= 0 && currentBootCount >= 0 && savedBootCount != currentBootCount
+        )
+        if (timing.shouldRebaseAfterBoot) {
             // elapsedRealtime resets after a reboot. Rebase the lock once, so a reboot followed by
             // a manual clock change cannot immediately bypass the attempt limit.
             preferences.edit()
@@ -76,21 +89,12 @@ class AppSecurity(context: Context) {
                 .putLong(LOCK_STARTED_ELAPSED, elapsedNow)
                 .putLong(LOCKED_UNTIL_ELAPSED, elapsedNow + lockDuration)
                 .apply()
-            return lockDuration
+            return timing.remainingMillis
         }
-        if (lockDuration > 0L && wallClockRemaining == 0L) {
+        if (timing.shouldClearExpiredLock) {
             preferences.edit().putInt(LOCK_BOOT_COUNT, currentBootCount).remove(LOCK_DURATION).apply()
         }
-        val startedElapsed = preferences.getLong(LOCK_STARTED_ELAPSED, -1L)
-        val elapsedLockUntil = preferences.getLong(LOCKED_UNTIL_ELAPSED, 0L)
-        // elapsedRealtime cannot be changed from the date/time settings. After a reboot it starts
-        // again, so the wall-clock value remains the safe fallback for the original lock duration.
-        val monotonicRemaining = if (startedElapsed >= 0L && elapsedNow >= startedElapsed) {
-            (elapsedLockUntil - elapsedNow).coerceAtLeast(0L)
-        } else {
-            0L
-        }
-        return maxOf(wallClockRemaining, monotonicRemaining)
+        return timing.remainingMillis
     }
 
     fun isBiometricEnabled(): Boolean = preferences.getBoolean(BIOMETRIC_ENABLED, false)
@@ -99,8 +103,7 @@ class AppSecurity(context: Context) {
         preferences.edit().putBoolean(BIOMETRIC_ENABLED, enabled).apply()
     }
 
-    fun clear() {
-        preferences.edit()
+    fun clear(): Boolean = preferences.edit()
             .remove(PIN_HASH)
             .remove(PIN_SALT)
             .remove(BIOMETRIC_ENABLED)
@@ -110,8 +113,7 @@ class AppSecurity(context: Context) {
             .remove(LOCK_STARTED_ELAPSED)
             .remove(LOCK_BOOT_COUNT)
             .remove(LOCK_DURATION)
-            .apply()
-    }
+            .commit()
 
     private fun bootCount(): Int = runCatching {
         Settings.Global.getInt(appContext.contentResolver, Settings.Global.BOOT_COUNT, -1)
@@ -141,6 +143,27 @@ class AppSecurity(context: Context) {
         const val ITERATIONS = 210_000
         const val HASH_BITS = 256
     }
+}
+
+/** Pure timing decision so clock-change protection can be tested without a device. */
+internal data class PinLockTiming(
+    val remainingMillis: Long,
+    val shouldRebaseAfterBoot: Boolean,
+    val shouldClearExpiredLock: Boolean
+)
+
+internal fun resolvePinLockTiming(
+    lockDuration: Long,
+    wallClockRemaining: Long,
+    monotonicRemaining: Long,
+    bootChanged: Boolean
+): PinLockTiming {
+    if (lockDuration <= 0L) return PinLockTiming(0L, shouldRebaseAfterBoot = false, shouldClearExpiredLock = false)
+    // A reboot resets elapsedRealtime. If the device clock was moved ahead before rebooting,
+    // the wall-clock value is no longer trustworthy, so reapply the saved lock duration.
+    if (bootChanged) return PinLockTiming(lockDuration, shouldRebaseAfterBoot = true, shouldClearExpiredLock = false)
+    val remaining = maxOf(wallClockRemaining, monotonicRemaining)
+    return PinLockTiming(remaining, shouldRebaseAfterBoot = false, shouldClearExpiredLock = remaining == 0L)
 }
 
 internal object PinAttemptPolicy {

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -79,13 +80,17 @@ internal fun TodayScreen(
         }
     }
     val completedCount = selectedTasks.count { it.completed }
-    val nextTask = selectedTasks.firstOrNull { !it.completed && !it.time.isNullOrBlank() }
+    val isToday = selectedDate == currentDate
+    val nextTask = selectedTasks.firstOrNull { task ->
+        !task.completed && !task.time.isNullOrBlank() && (!isToday || task.time >= LocalTime.now().withSecond(0).withNano(0).toString())
+    }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = false,
         drawerContent = {
             HomeAccountDrawer(
                 nickname, signedInAccount,
@@ -99,14 +104,14 @@ internal fun TodayScreen(
     ) {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = 6.dp)) {
-                HomeHeader(nickname, signedInAccount, selectedDate, selectedDate == currentDate, { scope.launch { drawerState.open() } }, onOpenCalendar, dateFormatter)
+                HomeHeader(nickname, signedInAccount, selectedDate, isToday, { scope.launch { drawerState.open() } }, onOpenCalendar, dateFormatter)
                 HomeWeekStrip(weekDays, selectedDate, currentDate, tasks) { selectedDateValue = it.toString() }
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = 600.dp),
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 104.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    item { DailySummaryCard(completedCount, selectedTasks.size, nextTask?.time) }
+                    item { DailySummaryCard(isToday, completedCount, selectedTasks.size, nextTask?.time) }
                     item { HomeFilters(filter, selectedTasks, completedCount) { filter = it } }
                     item {
                         Column {
@@ -125,7 +130,7 @@ internal fun TodayScreen(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp).height(52.dp).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button },
                 shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
             ) { Text("+", fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("Nuova attività", Modifier.padding(start = 7.dp), fontWeight = FontWeight.ExtraBold) }
-            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 14.dp))
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 18.dp, end = 18.dp, bottom = 84.dp))
         }
     }
 }
@@ -135,7 +140,9 @@ private fun HomeHeader(nickname: String, account: SignedInAccount?, selectedDate
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.BottomEnd) {
             AccountAvatar(account?.photoUrl, account?.email?.firstOrNull()?.uppercase() ?: nickname.firstOrNull()?.uppercase() ?: "U", onOpenDrawer)
-            Text("☰", color = NightBlue, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.size(15.dp).background(Gold, CircleShape).border(1.dp, CardBlue, CircleShape).padding(top = 1.dp))
+            Box(Modifier.size(15.dp).background(Gold, CircleShape).border(1.dp, CardBlue, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_nav_menu), contentDescription = null, tint = NightBlue, modifier = Modifier.size(10.dp))
+            }
         }
         Column(Modifier.weight(1f)) {
             Text(buildString { append(formatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }); if (isToday) append(" • Oggi") }, color = Gold, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
@@ -162,11 +169,17 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
     ) {
         weekDays.forEach { date ->
             val selected = date == selectedDate
-            val hasPending = tasks.any { it.date == date.toString() && !it.completed }
-            val hasCompleted = tasks.any { it.date == date.toString() && it.completed }
+            val pendingCount = tasks.count { it.date == date.toString() && !it.completed }
+            val completedCount = tasks.count { it.date == date.toString() && it.completed }
+            val hasPending = pendingCount > 0
+            val hasCompleted = completedCount > 0
             Column(
                 Modifier.weight(1f).background(if (selected) Gold else CardBlue.copy(alpha = .88f), RoundedCornerShape(17.dp))
                     .then(if (date == currentDate && !selected) Modifier.border(1.dp, Gold, RoundedCornerShape(17.dp)) else Modifier)
+                    .semantics {
+                        contentDescription = "${date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.ITALY)} ${date.dayOfMonth}: $pendingCount da fare, $completedCount completate"
+                        role = Role.Button
+                    }
                     .clickable { onSelect(date) }.padding(vertical = 9.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.ITALY) }, color = if (selected) NightBlue else SoftText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -181,11 +194,11 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
 }
 
 @Composable
-private fun DailySummaryCard(completed: Int, total: Int, nextTime: String?) {
+private fun DailySummaryCard(isToday: Boolean, completed: Int, total: Int, nextTime: String?) {
     val progress = if (total == 0) 0f else completed.toFloat() / total
     Column(Modifier.fillMaxWidth().background(CardBlue.copy(alpha = .92f), RoundedCornerShape(24.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Oggi: $completed/$total completate", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+            Text(if (isToday) "Oggi: $completed/$total completate" else "Completate: $completed/$total", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             Text(nextTime?.let { "Prossima: $it" } ?: "Nessuna in programma", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = Gold, trackColor = CardBlueLight)
@@ -215,19 +228,20 @@ private fun HomeAccountDrawer(nickname: String, account: SignedInAccount?, onOpe
             }
             HorizontalDivider(color = CardBlueLight, modifier = Modifier.padding(vertical = 10.dp))
             Text("Menu", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = 12.dp, bottom = 3.dp))
-            HomeDrawerItem("☰", "Attività", onOpenActivities)
-            HomeDrawerItem("☷", "Liste e spesa", onOpenLists)
-            HomeDrawerItem("▦", "Calendario", onOpenCalendar)
-            HomeDrawerItem("⚙", "Impostazioni", onOpenSettings)
-            HomeDrawerItem("ⓘ", "Privacy e dati", onOpenPrivacy)
+            HomeDrawerItem(R.drawable.ic_nav_activities, "Attività", onOpenActivities)
+            HomeDrawerItem(R.drawable.ic_nav_lists, "Liste e spesa", onOpenLists)
+            HomeDrawerItem(R.drawable.ic_nav_calendar, "Calendario", onOpenCalendar)
+            HomeDrawerItem(R.drawable.ic_nav_settings, "Impostazioni", onOpenSettings)
+            HomeDrawerItem(R.drawable.ic_nav_privacy, "Privacy e dati", onOpenPrivacy)
         }
     }
 }
 
 @Composable
-private fun HomeDrawerItem(icon: String, label: String, onClick: () -> Unit) {
+private fun HomeDrawerItem(icon: Int, label: String, onClick: () -> Unit) {
     NavigationDrawerItem(
-        label = { Text(label, fontWeight = FontWeight.SemiBold) }, selected = false, icon = { Text(icon, fontSize = 17.sp) }, onClick = onClick, shape = RoundedCornerShape(15.dp),
+        label = { Text(label, fontWeight = FontWeight.SemiBold) }, selected = false,
+        icon = { Icon(androidx.compose.ui.res.painterResource(icon), contentDescription = null, tint = Gold) }, onClick = onClick, shape = RoundedCornerShape(15.dp),
         colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = CardBlue, unselectedTextColor = MainText, unselectedIconColor = Gold)
     )
 }
