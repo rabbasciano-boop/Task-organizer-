@@ -4,7 +4,7 @@
     <string name="nav_activities">Attività</string>
     <string name="nav_lists">Liste</string>
     <string name="nav_calendar">Calendario</string>
-    <string name="nav_options">Impostazioni</string>
+    <string name="nav_options">Settings</string>
     <string name="open_calendar">Apri calendario</string>
     <string name="previous_month">Mese precedente</string>
     <string name="next_month">Mese successivo</string>
