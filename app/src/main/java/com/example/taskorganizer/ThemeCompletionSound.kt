@@ -64,23 +64,35 @@ internal object ThemeCompletionSound {
 
     private fun crumpledPaperSamples(): ShortArray {
         var seed = 0x41A7
-        return render(130) { t, _ ->
+        var previousNoise = 0f
+        var softNoise = 0f
+        return render(390) { t, _ ->
             seed = seed * 1_103_515_245 + 12_345
             val noise = ((seed ushr 16 and 0x7FFF) / 16_383.5f) - 1f
-            val envelope = exp((-5.6f * t).toDouble()).toFloat() * (0.72f + 0.28f * sin(t * 32f))
-            noise * envelope * 0.12f
+            softNoise = softNoise * 0.78f + noise * 0.22f
+            val crinkle = noise - previousNoise * 0.62f
+            previousNoise = noise
+            val folds = listOf(0.05f, 0.15f, 0.27f, 0.41f, 0.58f, 0.73f).sumOf { center ->
+                exp((-(t - center) * (t - center) / 0.0028f).toDouble())
+            }.toFloat()
+            val envelope = sin(PI * t).toFloat().let { it * it } * folds.coerceAtMost(1.25f)
+            (crinkle * 0.78f + softNoise * 0.28f) * envelope * 0.22f
         }
     }
 
     private fun windSamples(): ShortArray {
         var seed = 0x2569
-        var smooth = 0f
-        return render(245) { t, _ ->
+        var air = 0f
+        var gust = 0f
+        return render(620) { t, _ ->
             seed = seed * 1_664_525 + 1_013_904_223
             val noise = ((seed ushr 16 and 0x7FFF) / 16_383.5f) - 1f
-            smooth = smooth * 0.91f + noise * 0.09f
-            val envelope = sin(PI * t).toFloat().let { it * it }
-            smooth * envelope * 0.16f
+            air = air * 0.84f + noise * 0.16f
+            gust = gust * 0.975f + noise * 0.025f
+            val swell = 0.62f + 0.38f * sin(PI * (t * 1.18f - 0.11f)).toFloat().coerceAtLeast(0f)
+            val envelope = sin(PI * t).toFloat().let { it * it } * swell
+            val airyWhistle = sin(2.0 * PI * (125f + 36f * sin(t * PI)) * t * 0.620).toFloat() * 0.045f
+            (air * 0.72f + gust * 0.50f + airyWhistle) * envelope * 0.24f
         }
     }
 
