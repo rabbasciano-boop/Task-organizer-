@@ -24,7 +24,13 @@ sealed interface OrganizerScreen {
     data object Calendar : OrganizerScreen { override val labelResource = R.string.nav_calendar; override val icon = R.drawable.ic_nav_calendar }
     data object Options : OrganizerScreen { override val labelResource = R.string.nav_options; override val icon = R.drawable.ic_nav_settings }
 
-    companion object { val all = listOf(Today, Activities, Lists, Calendar, Options) }
+    companion object {
+        /** Every app destination, including the calendar reached from Home and the drawer. */
+        val all = listOf(Today, Activities, Lists, Calendar, Options)
+
+        /** Persistent destinations kept in the bottom bar. */
+        val bottomNavigation = listOf(Today, Activities, Lists, Options)
+    }
 }
 
 @Composable
@@ -37,7 +43,7 @@ fun OrganizerNavigationBar(
     indicatorColor: Color
 ) {
     NavigationBar(containerColor = barColor, contentColor = mutedColor) {
-        OrganizerScreen.all.forEach { screen ->
+        OrganizerScreen.bottomNavigation.forEach { screen ->
             val label = stringResource(screen.labelResource)
             val isSelected = selected == screen
             NavigationBarItem(

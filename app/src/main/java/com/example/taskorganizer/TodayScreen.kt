@@ -99,7 +99,8 @@ internal fun TodayScreen(
                 onOpenLists = { scope.launch { drawerState.close() }; onOpenLists() },
                 onOpenCalendar = { scope.launch { drawerState.close() }; onOpenCalendar() },
                 onOpenSettings = { scope.launch { drawerState.close() }; onManageAccount() },
-                onOpenPrivacy = { scope.launch { drawerState.close() }; onOpenPrivacy() }
+                onOpenPrivacy = { scope.launch { drawerState.close() }; onOpenPrivacy() },
+                onClose = { scope.launch { drawerState.close() } }
             )
         }
     ) {
@@ -217,15 +218,41 @@ private fun HomeFilters(filter: String, tasks: List<OrganizerTask>, completed: I
 }
 
 @Composable
-private fun HomeAccountDrawer(nickname: String, account: SignedInAccount?, onOpenActivities: () -> Unit, onOpenLists: () -> Unit, onOpenCalendar: () -> Unit, onOpenSettings: () -> Unit, onOpenPrivacy: () -> Unit) {
-    ModalDrawerSheet(drawerContainerColor = CardBlue, modifier = Modifier.widthIn(max = 304.dp)) {
+private fun HomeAccountDrawer(
+    nickname: String,
+    account: SignedInAccount?,
+    onOpenActivities: () -> Unit,
+    onOpenLists: () -> Unit,
+    onOpenCalendar: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onClose: () -> Unit
+) {
+    var closeDragDistance by remember { mutableStateOf(0f) }
+    val closeThreshold = with(LocalDensity.current) { 80.dp.toPx() }
+    ModalDrawerSheet(
+        drawerContainerColor = CardBlue,
+        modifier = Modifier
+            .widthIn(max = 304.dp)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, amount -> closeDragDistance += amount },
+                    onDragEnd = {
+                        if (closeDragDistance <= -closeThreshold) onClose()
+                        closeDragDistance = 0f
+                    },
+                    onDragCancel = { closeDragDistance = 0f }
+                )
+            }
+    ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AccountAvatar(account?.photoUrl, account?.email?.firstOrNull()?.uppercase() ?: nickname.firstOrNull()?.uppercase() ?: "U", {})
                 Column(Modifier.weight(1f)) {
                     Text(account?.displayName?.ifBlank { nickname } ?: nickname, color = MainText, fontWeight = FontWeight.ExtraBold)
                     Text(if (account == null) "Modalità ospite" else "Account collegato", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
+                TextButton(onClick = onClose) { Text("Chiudi", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
             }
             HorizontalDivider(color = CardBlueLight, modifier = Modifier.padding(vertical = 10.dp))
             Text("Menu", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = 12.dp, bottom = 3.dp))
