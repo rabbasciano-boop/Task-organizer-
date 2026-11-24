@@ -2,14 +2,9 @@ package com.example.taskorganizer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -50,25 +45,4 @@ internal fun Modifier.sunsetGlow(shape: Shape = RoundedCornerShape(20.dp), stron
         brush = sunsetPrimaryBrush(),
         shape = shape
     )
-}
-
-/** A real blurred light layer, used where the Sunset theme needs a visible neon halo. */
-@Composable
-internal fun SunsetGlowContainer(
-    modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(20.dp),
-    enabled: Boolean = OrganizerPalette.sunsetGlow,
-    strong: Boolean = false,
-    content: @Composable BoxScope.() -> Unit
-) {
-    Box(modifier.padding(if (enabled) if (strong) 11.dp else 7.dp else 0.dp)) {
-        if (enabled) {
-            Box(
-                Modifier.matchParentSize()
-                    .background(sunsetPrimaryBrush(), shape)
-                    .blur(if (strong) 18.dp else 11.dp, BlurredEdgeTreatment.Unbounded)
-            )
-        }
-        content()
-    }
 }
