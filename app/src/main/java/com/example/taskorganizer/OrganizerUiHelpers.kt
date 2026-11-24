@@ -35,21 +35,29 @@ internal fun categoryIcon(category: String, iconOverride: String? = null): Strin
 
 internal fun categoryDisplay(category: String, iconOverride: String? = null): String = "${categoryIcon(category, iconOverride)}  $category"
 
-private fun auroraBackgroundBrush(): Brush? = when (OrganizerPalette.currentTheme) {
+private fun themedBackgroundBrush(): Brush? = when (OrganizerPalette.currentTheme) {
     OrganizerTheme.AURORA_MIDNIGHT -> Brush.linearGradient(
         colors = listOf(Color(0xFF4C1D95), Color(0xFF241344), Color(0xFF123842), Color(0xFF0F766E))
     )
     OrganizerTheme.AURORA_NORDIC -> Brush.linearGradient(
         colors = listOf(Color(0xFFDDF5F0), Color(0xFFDCE8FF), Color(0xFFF4E4F5), Color(0xFFE1F6F1))
     )
+    OrganizerTheme.SUNSET_GLOW -> Brush.radialGradient(
+        colors = listOf(Color(0xFFFFE4CC), Color(0xFFFFF7F0), Color(0xFFFDE8EC))
+    )
+    OrganizerTheme.SUNSET_GLOW_DARK -> Brush.radialGradient(
+        colors = listOf(Color(0xFF3B1938), Color(0xFF191024), Color(0xFF110B1A))
+    )
     else -> null
 }
 
-internal fun Modifier.organizerBackground(): Modifier = auroraBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
+internal fun Modifier.organizerBackground(): Modifier = themedBackgroundBrush()?.let { background(it) } ?: background(NightBlue)
 
 internal fun openingHaloBrush(): Brush = when (OrganizerPalette.currentTheme) {
     OrganizerTheme.ORIGINAL_DARK -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.20f), Color.Transparent))
     OrganizerTheme.CARTA_DORATA -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.24f), Color.Transparent))
     OrganizerTheme.AURORA_MIDNIGHT -> Brush.radialGradient(listOf(AccentSecondary.copy(alpha = 0.28f), Gold.copy(alpha = 0.10f), Color.Transparent))
     OrganizerTheme.AURORA_NORDIC -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.18f), AccentSecondary.copy(alpha = 0.10f), Color.Transparent))
+    OrganizerTheme.SUNSET_GLOW -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.30f), AccentSecondary.copy(alpha = 0.13f), Color.Transparent))
+    OrganizerTheme.SUNSET_GLOW_DARK -> Brush.radialGradient(listOf(Gold.copy(alpha = 0.32f), AccentSecondary.copy(alpha = 0.22f), Color.Transparent))
 }

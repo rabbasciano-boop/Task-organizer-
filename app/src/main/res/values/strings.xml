@@ -52,6 +52,10 @@
     <string name="theme_aurora_midnight_description">Vetro scuro con bagliori ciano e viola</string>
     <string name="theme_aurora_nordic">❄️ Aurora Nordic</string>
     <string name="theme_aurora_nordic_description">Vetro chiaro iridescente, menta e cielo</string>
+    <string name="theme_sunset_glow">🌅 Sunset Glow</string>
+    <string name="theme_sunset_glow_description">Chiaro caldo, crema, corallo e ambra</string>
+    <string name="theme_sunset_glow_dark">🌙 Sunset Glow Dark</string>
+    <string name="theme_sunset_glow_dark_description">Scuro avvolgente, prugna, arancio e magenta</string>
     <string name="home_settings_subtitle">Widget e contenuti mostrati all\'apertura.</string>
     <string name="widget_home_title">Widget per la schermata Home</string>
     <string name="widget_home_description">Tieni premuto uno spazio libero nella schermata Home, tocca Widget e cerca Task Organizer. Puoi scegliere Progresso, Riepilogo o Agenda.</string>

@@ -144,6 +144,8 @@ internal fun AppearanceSettingsScreen(
         Text(stringResource(R.string.additional_themes), color = SoftText, fontSize = 13.sp)
         ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, stringResource(R.string.theme_aurora_midnight), stringResource(R.string.theme_aurora_midnight_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.AURORA_NORDIC, stringResource(R.string.theme_aurora_nordic), stringResource(R.string.theme_aurora_nordic_description), selectedTheme, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.SUNSET_GLOW, stringResource(R.string.theme_sunset_glow), stringResource(R.string.theme_sunset_glow_description), selectedTheme, onThemeChanged)
+        ThemeChoiceCard(OrganizerTheme.SUNSET_GLOW_DARK, stringResource(R.string.theme_sunset_glow_dark), stringResource(R.string.theme_sunset_glow_dark_description), selectedTheme, onThemeChanged)
     }
 }
 
@@ -187,6 +189,8 @@ private fun ThemeChoiceCard(
         OrganizerTheme.CARTA_DORATA -> Color(0xFFFFFDF8)
         OrganizerTheme.AURORA_MIDNIGHT -> Color(0xFF171E3A)
         OrganizerTheme.AURORA_NORDIC -> Color(0xFFF0F9F8)
+        OrganizerTheme.SUNSET_GLOW -> Color(0xFFFFF6EE)
+        OrganizerTheme.SUNSET_GLOW_DARK -> Color(0xFF211530)
     }
     val previewText = if (theme.isDark) Color(0xFFF8FAFC) else Color(0xFF14243B)
     val previewAccent = when (theme) {
@@ -194,6 +198,8 @@ private fun ThemeChoiceCard(
         OrganizerTheme.CARTA_DORATA -> Color(0xFF805C1D)
         OrganizerTheme.AURORA_MIDNIGHT -> Color(0xFF38BDF8)
         OrganizerTheme.AURORA_NORDIC -> Color(0xFF08766D)
+        OrganizerTheme.SUNSET_GLOW -> Color(0xFFEA6A47)
+        OrganizerTheme.SUNSET_GLOW_DARK -> Color(0xFFFF7B47)
     }
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onThemeChanged(theme) },

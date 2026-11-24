@@ -272,6 +272,8 @@ open class TaskOrganizerActivity : FragmentActivity() {
         OrganizerTheme.CARTA_DORATA -> AndroidColor.rgb(246, 240, 229)
         OrganizerTheme.AURORA_MIDNIGHT -> AndroidColor.rgb(7, 10, 24)
         OrganizerTheme.AURORA_NORDIC -> AndroidColor.rgb(238, 246, 248)
+        OrganizerTheme.SUNSET_GLOW -> AndroidColor.rgb(255, 246, 238)
+        OrganizerTheme.SUNSET_GLOW_DARK -> AndroidColor.rgb(20, 13, 28)
     }
 
     override fun onStop() {
