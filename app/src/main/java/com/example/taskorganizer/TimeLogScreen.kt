@@ -11,6 +11,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -37,7 +41,7 @@ private enum class TimeLogTab(val label: String, val icon: Int) {
     DASHBOARD("Dashboard", R.drawable.ic_time_dashboard),
     INSERT("Inserisci", R.drawable.ic_time_add),
     SUMMARY("Riepilogo", R.drawable.ic_time_summary),
-    SETTINGS("Tariffa e turni", R.drawable.ic_nav_settings)
+    SETTINGS("Tariffa e turni", R.drawable.ic_time_rate)
 }
 
 /** Independent work-hours area. It deliberately keeps its own bottom navigation, like the supplied TimeLog Pro design. */
@@ -77,7 +81,15 @@ internal fun TimeLogScreen(
     Scaffold(
         containerColor = NightBlue,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { TimeLogHeader(settings.hourlyRateCents, activeTimerStartedAt, onBack, { tabName = TimeLogTab.INSERT.name }) },
+        topBar = {
+            TimeLogHeader(
+                hourlyRateCents = settings.hourlyRateCents,
+                activeTimerStartedAt = activeTimerStartedAt,
+                onBack = onBack,
+                onOpenTimer = { tabName = TimeLogTab.INSERT.name },
+                onSaveRate = { cents -> onSaveSettings(settings.copy(hourlyRateCents = cents)) }
+            )
+        },
         bottomBar = {
             NavigationBar(containerColor = CardBlue) {
                 TimeLogTab.entries.forEach { item ->
@@ -141,8 +153,9 @@ internal fun TimeLogScreen(
 }
 
 @Composable
-private fun TimeLogHeader(hourlyRateCents: Long, activeTimerStartedAt: Long?, onBack: () -> Unit, onOpenTimer: () -> Unit) {
+private fun TimeLogHeader(hourlyRateCents: Long, activeTimerStartedAt: Long?, onBack: () -> Unit, onOpenTimer: () -> Unit, onSaveRate: (Long) -> Unit) {
     val elapsed = rememberElapsed(activeTimerStartedAt)
+    var editRate by remember { mutableStateOf(false) }
     Surface(color = CardBlue.copy(alpha = .97f), shadowElevation = 2.dp) {
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 13.dp),
@@ -151,26 +164,43 @@ private fun TimeLogHeader(hourlyRateCents: Long, activeTimerStartedAt: Long?, on
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp).semantics { contentDescription = "Indietro" }) { Icon(painterResource(R.drawable.ic_arrow_left), contentDescription = null, tint = MainText) }
             Box(Modifier.size(38.dp).background(Gold, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.ic_nav_time_log), contentDescription = null, tint = NightBlue) }
             Column(Modifier.weight(1f)) {
-                Text("TimeLog Pro", color = MainText, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Registro ore", color = MainText, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                 Text("Gestione ore e paga", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             }
             if (activeTimerStartedAt != null) TextButton(onClick = onOpenTimer, colors = ButtonDefaults.textButtonColors(contentColor = Danger)) { Text("● ${formatElapsed(elapsed)}", fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) }
-            else Text(formatHourlyRate(hourlyRateCents), color = Gold, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.background(CardBlueLight, RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 7.dp))
+            else Text(
+                formatHourlyRate(hourlyRateCents), color = Gold, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.background(CardBlueLight, RoundedCornerShape(50)).clickable { editRate = true }.semantics { contentDescription = "Modifica tariffa oraria" }.padding(horizontal = 10.dp, vertical = 7.dp)
+            )
         }
+    }
+    if (editRate) TimeLogRateDialog(hourlyRateCents, onDismiss = { editRate = false }) { cents ->
+        onSaveRate(cents)
+        editRate = false
     }
 }
 
 @Composable
 private fun TimeLogDashboard(entries: List<WorkLogEntry>, rateCents: Long, onEdit: (WorkLogEntry) -> Unit, onDelete: (WorkLogEntry) -> Unit) {
     var period by rememberSaveable { mutableStateOf("week") }
-    val filtered = remember(entries, period) { filterWorkEntries(entries, period).sortedWith(compareByDescending<WorkLogEntry> { it.date }.thenByDescending { it.startTime }) }
+    var selectedDateText by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedDate = selectedDateText?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    val filtered = remember(entries, period, selectedDateText) {
+        (if (selectedDate == null) filterWorkEntries(entries, period) else entries.filter { it.date == selectedDate.toString() })
+            .sortedWith(compareByDescending<WorkLogEntry> { it.date }.thenByDescending { it.startTime })
+    }
     val minutes = filtered.sumOf(::workMinutes)
     val days = filtered.map { it.date }.distinct().size
     LazyColumn(
         Modifier.fillMaxSize().widthIn(max = 600.dp), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item { TimeLogPeriodTabs(period, listOf("week" to "Settimana corrente", "month" to "Mese corrente")) { period = it } }
-        item { WorkOverviewCard(if (period == "week") "Settimana in corso" else "Mese in corso", days, minutes, rateCents) }
+        item {
+            TimeLogCalendar(entries = entries, selectedDate = selectedDate) { date ->
+                selectedDateText = if (date == selectedDate) null else date.toString()
+            }
+        }
+        item { WorkOverviewCard(selectedDate?.format(DateTimeFormatter.ofPattern("d MMMM", Locale.ITALY))?.replaceFirstChar { it.titlecase(Locale.ITALY) } ?: if (period == "week") "Settimana in corso" else "Mese in corso", days, minutes, rateCents) }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Registrazioni recenti", color = MainText, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp); Text("Tocca per modificare", color = SoftText, fontSize = 11.sp) } }
         if (filtered.isEmpty()) item { EmptyState("Nessun orario registrato", "Tocca + per aggiungere la tua prima giornata lavorativa.") }
         else items(filtered, key = { it.id }) { entry -> WorkEntryCard(entry, rateCents, { onEdit(entry) }, { onDelete(entry) }) }
@@ -236,7 +266,10 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(if (existing == null) "Registra giornata" else "Modifica giornata", color = MainText, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp); if (existing != null) TextButton(onClick = onCancel) { Text("Chiudi", color = SoftText) } }
                 if (existing != null) Text("Voce già salvata: puoi aggiungere o modificare i dettagli.", color = SoftText, fontSize = 11.sp)
                 OutlinedTextField(value = dateText, onValueChange = { dateText = it; error = null }, label = { Text("Data lavorativa (GG-MM-AAAA)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = editorFieldColors())
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedTextField(value = startText, onValueChange = { startText = it; error = null }, label = { Text("Ora inizio") }, placeholder = { Text("09:00") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()); OutlinedTextField(value = endText, onValueChange = { endText = it; error = null }, label = { Text("Ora fine") }, placeholder = { Text("18:00") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TimeLogTimeField(value = startText, label = "Ora inizio", onValueChange = { startText = it; error = null }, modifier = Modifier.weight(1f))
+                    TimeLogTimeField(value = endText, label = "Ora fine", onValueChange = { endText = it; error = null }, modifier = Modifier.weight(1f))
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(value = breakText, onValueChange = { breakText = it.filter(Char::isDigit); error = null }, label = { Text("Pausa (min)") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()); Column(Modifier.weight(1f).background(Gold.copy(alpha = .12f), RoundedCornerShape(16.dp)).padding(10.dp), horizontalAlignment = Alignment.End) { Text("Totale netto", color = SoftText, fontSize = 10.sp); Text("${formatWorkMinutes(minutes)}${if (start != null && end != null && isOvernightWorkShift(start, end)) " · +1 giorno" else ""}", color = MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold); Text(formatCurrency(workEarningsCents(minutes, settings.hourlyRateCents)), color = MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold) } }
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Note attività svolta") }, placeholder = { Text("Es. riunione, progetto, consegna…") }, modifier = Modifier.fillMaxWidth().heightIn(min = 112.dp), colors = editorFieldColors())
                 error?.let { Text(it, color = Danger, fontSize = 12.sp) }
@@ -247,6 +280,126 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
                 }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)) { Text(if (existing == null) "✓  Salva registrazione" else "✓  Aggiorna registrazione", fontWeight = FontWeight.ExtraBold) }
             }
         }
+    }
+}
+
+@Composable
+private fun TimeLogRateDialog(hourlyRateCents: Long, onDismiss: () -> Unit, onSave: (Long) -> Unit) {
+    var value by remember(hourlyRateCents) { mutableStateOf(formatCurrency(hourlyRateCents).substringBefore('€').trim()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardBlue,
+        title = { Text("Tariffa oraria", color = MainText, fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Inserisci solo il valore in euro, ad esempio 15,00.", color = SoftText, fontSize = 12.sp)
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it; error = null },
+                    label = { Text("€ / ora") },
+                    singleLine = true,
+                    isError = error != null,
+                    colors = editorFieldColors()
+                )
+                error?.let { Text(it, color = Danger, fontSize = 12.sp) }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annulla", color = SoftText) } },
+        confirmButton = {
+            TextButton(onClick = {
+                val cents = parseAmountCents(value)
+                if (cents == null) error = "Inserisci una tariffa valida, per esempio 15,00."
+                else onSave(cents)
+            }) { Text("Salva", color = Gold, fontWeight = FontWeight.ExtraBold) }
+        }
+    )
+}
+
+@Composable
+private fun TimeLogCalendar(entries: List<WorkLogEntry>, selectedDate: LocalDate?, onSelected: (LocalDate) -> Unit) {
+    var shownMonthText by rememberSaveable { mutableStateOf(YearMonth.from(selectedDate ?: LocalDate.now()).toString()) }
+    val shownMonth = runCatching { YearMonth.parse(shownMonthText) }.getOrDefault(YearMonth.now())
+    val entriesByDate = remember(entries, shownMonth) {
+        entries.mapNotNull { entry -> runCatching { LocalDate.parse(entry.date) }.getOrNull() }
+            .filter { YearMonth.from(it) == shownMonth }
+            .groupingBy { it }
+            .eachCount()
+    }
+    val firstOffset = shownMonth.atDay(1).dayOfWeek.value - 1
+    val totalSlots = ((firstOffset + shownMonth.lengthOfMonth() + 6) / 7) * 7
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Calendario", color = MainText, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { shownMonthText = shownMonth.minusMonths(1).toString() }) { Text("‹", color = Gold, fontSize = 24.sp) }
+                Text(
+                    shownMonth.month.getDisplayName(TextStyle.FULL, Locale.ITALY).replaceFirstChar { it.titlecase(Locale.ITALY) } + " ${shownMonth.year}",
+                    color = MainText, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                )
+                TextButton(onClick = { shownMonthText = shownMonth.plusMonths(1).toString() }) { Text("›", color = Gold, fontSize = 24.sp) }
+            }
+            Row(Modifier.fillMaxWidth()) {
+                listOf("L", "M", "M", "G", "V", "S", "D").forEach { day ->
+                    Text(day, color = SoftText, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                }
+            }
+            repeat(totalSlots / 7) { row ->
+                Row(Modifier.fillMaxWidth()) {
+                    repeat(7) { column ->
+                        val day = row * 7 + column - firstOffset + 1
+                        if (day !in 1..shownMonth.lengthOfMonth()) Spacer(Modifier.weight(1f).height(38.dp))
+                        else {
+                            val date = shownMonth.atDay(day)
+                            val count = entriesByDate[date] ?: 0
+                            val isSelected = date == selectedDate
+                            Column(
+                                modifier = Modifier.weight(1f).height(38.dp).padding(horizontal = 2.dp)
+                                    .background(if (isSelected) Gold else if (count > 0) CardBlueLight else CardBlue, RoundedCornerShape(10.dp))
+                                    .clickable { onSelected(date) },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(day.toString(), color = if (isSelected) NightBlue else MainText, fontWeight = if (isSelected || count > 0) FontWeight.ExtraBold else FontWeight.Normal, fontSize = 11.sp)
+                                if (count > 0) Text("•".repeat(count.coerceAtMost(3)), color = if (isSelected) NightBlue else Gold, fontSize = 9.sp, lineHeight = 8.sp)
+                            }
+                        }
+                    }
+                }
+            }
+            Text(if (selectedDate == null) "Tocca un giorno per vedere le registrazioni." else "Tocca di nuovo il giorno selezionato per tornare al periodo.", color = SoftText, fontSize = 10.sp)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeLogTimeField(value: String, label: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    var pickerOpen by remember { mutableStateOf(false) }
+    val normalized = normalizeTime(value)
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = { Text("00:00") },
+        trailingIcon = { TextButton(onClick = { pickerOpen = true }) { Text("Scegli", color = Gold, fontSize = 10.sp) } },
+        modifier = modifier,
+        singleLine = true,
+        colors = compactEditorFieldColors()
+    )
+    if (pickerOpen) {
+        val now = LocalTime.now()
+        val initialHour = normalized?.substringBefore(':')?.toIntOrNull() ?: now.hour
+        val initialMinute = normalized?.substringAfter(':')?.toIntOrNull() ?: now.minute
+        val pickerState = rememberTimePickerState(initialHour = initialHour, initialMinute = initialMinute, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { pickerOpen = false },
+            containerColor = CardBlue,
+            title = { Text("Scegli l'orario", color = MainText) },
+            text = { TimePicker(state = pickerState) },
+            dismissButton = { TextButton(onClick = { pickerOpen = false }) { Text("Annulla", color = SoftText) } },
+            confirmButton = { TextButton(onClick = { onValueChange(String.format(Locale.ITALY, "%02d:%02d", pickerState.hour, pickerState.minute)); pickerOpen = false }) { Text("Conferma", color = Gold) } }
+        )
     }
 }
 
@@ -307,7 +460,10 @@ private fun TimeLogSettingsPage(settings: WorkLogSettings, onSaveSettings: (Work
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Aggiungi nuovo turno rapido", color = MainText, fontWeight = FontWeight.ExtraBold)
                     OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text("Nome turno") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = compactEditorFieldColors())
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(value = newStart, onValueChange = { newStart = it }, label = { Text("Inizio") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()); OutlinedTextField(value = newEnd, onValueChange = { newEnd = it }, label = { Text("Fine") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TimeLogTimeField(value = newStart, label = "Inizio", onValueChange = { newStart = it }, modifier = Modifier.weight(1f))
+                        TimeLogTimeField(value = newEnd, label = "Fine", onValueChange = { newEnd = it }, modifier = Modifier.weight(1f))
+                    }
                     OutlinedTextField(value = newBreak, onValueChange = { newBreak = it.filter(Char::isDigit) }, label = { Text("Pausa (minuti)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = compactEditorFieldColors())
                     Button(onClick = { val start = normalizeTime(newStart); val end = normalizeTime(newEnd); if (newName.isNotBlank() && start != null && end != null) { onSaveSettings(settings.copy(presets = settings.presets + WorkShiftPreset(name = newName.trim(), startTime = start, endTime = end, breakMinutes = (newBreak.toIntOrNull() ?: 0).coerceIn(0, 480)))); newName = "" } }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)) { Text("+ Aggiungi turno") }
                 }
