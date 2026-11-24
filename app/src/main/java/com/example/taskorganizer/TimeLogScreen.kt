@@ -59,14 +59,18 @@ internal fun TimeLogScreen(
     var editor by remember { mutableStateOf<WorkLogEntry?>(null) }
     var resetEditorToken by rememberSaveable { mutableIntStateOf(0) }
     var timerSaving by remember { mutableStateOf(false) }
-    val snackbars = remember { SnackbarHostState() }
+    var timerSaved by remember { mutableStateOf(false) }
     val pendingDeletions = remember { mutableStateListOf<WorkLogEntry>() }
-    LaunchedEffect(pendingDeletions.firstOrNull()?.id) {
-        val deleted = pendingDeletions.firstOrNull() ?: return@LaunchedEffect
-        if (snackbars.showSnackbar(message = "Voce eliminata", actionLabel = "Annulla", duration = SnackbarDuration.Short) != SnackbarResult.ActionPerformed) onDeleteEntry(deleted.id)
-        pendingDeletions.removeAll { it.id == deleted.id }
+    pendingDeletions.forEach { deleted ->
+        LaunchedEffect(deleted.id) {
+            delay(6_000)
+            if (pendingDeletions.any { it.id == deleted.id }) {
+                onDeleteEntry(deleted.id)
+                pendingDeletions.removeAll { it.id == deleted.id }
+            }
+        }
     }
-    fun openNewEntry() { editor = null; resetEditorToken++; tabName = TimeLogTab.INSERT.name }
+    fun openNewEntry() { editor = null; timerSaved = false; resetEditorToken++; tabName = TimeLogTab.INSERT.name }
     BackHandler {
         if (tab != TimeLogTab.DASHBOARD) tabName = TimeLogTab.DASHBOARD.name else onBack()
     }
@@ -97,7 +101,6 @@ internal fun TimeLogScreen(
                 shape = CircleShape, modifier = Modifier.semantics { contentDescription = "Aggiungi orario" }
             ) { Text("+", fontSize = 28.sp, fontWeight = FontWeight.Bold) }
         },
-        snackbarHost = { SnackbarHost(snackbars, Modifier.navigationBarsPadding().padding(horizontal = 16.dp)) }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).organizerBackground()) {
             when (tab) {
@@ -106,7 +109,8 @@ internal fun TimeLogScreen(
                 }
                 TimeLogTab.INSERT -> TimeLogEntryEditor(
                     existing = editor, resetToken = resetEditorToken, settings = settings,
-                    activeTimerStartedAt = activeTimerStartedAt, timerSaving = timerSaving, onStartTimer = onStartTimer,
+                    activeTimerStartedAt = activeTimerStartedAt, timerSaving = timerSaving, timerSaved = timerSaved,
+                    onStartTimer = { timerSaved = false; onStartTimer() },
                     onStopTimer = { startedAt ->
                         val start = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(startedAt), java.time.ZoneId.systemDefault())
                         val now = LocalDateTime.now()
@@ -115,6 +119,7 @@ internal fun TimeLogScreen(
                         onStopTimer(recorded) {
                             editor = recorded
                             timerSaving = false
+                            timerSaved = true
                         }
                     },
                     onSave = { entry -> onSaveEntry(entry); editor = null; tabName = TimeLogTab.DASHBOARD.name },
@@ -122,6 +127,14 @@ internal fun TimeLogScreen(
                 )
                 TimeLogTab.SUMMARY -> TimeLogSummary(entries, settings.hourlyRateCents, onExportCsv)
                 TimeLogTab.SETTINGS -> TimeLogSettingsPage(settings, onSaveSettings)
+            }
+            Column(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                pendingDeletions.forEach { deleted ->
+                    TimeLogUndoCard(onUndo = { pendingDeletions.removeAll { it.id == deleted.id } })
+                }
             }
         }
     }
@@ -194,7 +207,7 @@ private fun WorkEntryCard(entry: WorkLogEntry, rateCents: Long, onEdit: () -> Un
 }
 
 @Composable
-private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, timerSaving: Boolean, onStartTimer: () -> Unit, onStopTimer: (Long) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
+private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, timerSaving: Boolean, timerSaved: Boolean, onStartTimer: () -> Unit, onStopTimer: (Long) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
     val seed = remember(existing?.id, resetToken) { existing ?: WorkLogEntry(date = LocalDate.now().toString(), startTime = "09:00", endTime = "18:00", breakMinutes = 60) }
     var dateText by rememberSaveable(seed.id) { mutableStateOf(formatItalianDate(seed.date)) }
     var startText by rememberSaveable(seed.id) { mutableStateOf(seed.startTime) }
@@ -213,6 +226,7 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
                 Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(35.dp).background(Gold.copy(alpha = .15f), CircleShape), contentAlignment = Alignment.Center) { Text("◷", color = Gold, fontSize = 18.sp) }; Column(Modifier.padding(start = 10.dp).weight(1f)) { Text("Timer dal vivo", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Timbra entrata e uscita in tempo reale", color = SoftText, fontSize = 11.sp) }; Text(if (activeTimerStartedAt == null) "In attesa" else "In corso", color = if (activeTimerStartedAt == null) SoftText else Success, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 Text(formatElapsed(elapsed), color = MainText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().background(NightBlue.copy(alpha = .25f), RoundedCornerShape(18.dp)).padding(13.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onStartTimer, enabled = activeTimerStartedAt == null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("▶  Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let(onStopTimer) }, enabled = activeTimerStartedAt != null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text(if (timerSaving) "Salvataggio…" else "■  Timbra uscita", fontSize = 12.sp) } }
+                if (timerSaved) Text("✓ Registrazione salvata. Puoi aggiungere note e dettagli qui sotto.", color = Success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
         item { TimeLogSectionTitle("Turni preimpostati", "Tocca un turno per compilare gli orari") }
@@ -316,6 +330,7 @@ private fun TimeLogSettingsPage(settings: WorkLogSettings, onSaveSettings: (Work
 @Composable private fun TimeLogPeriodTabs(selected: String, choices: List<Pair<String, String>>, onSelected: (String) -> Unit) = Row(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(18.dp)).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) { choices.forEach { (key, label) -> Text(label, color = if (selected == key) NightBlue else SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f).background(if (selected == key) Gold else CardBlue, RoundedCornerShape(14.dp)).clickable { onSelected(key) }.padding(vertical = 10.dp)) } }
 @Composable private fun TimeLogStat(symbol: String, label: String, value: String, modifier: Modifier) = Card(modifier, shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) { Column(Modifier.padding(15.dp)) { Text(symbol, color = Gold, fontSize = 18.sp); Text(label, color = SoftText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)); Text(value, color = MainText, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
 @Composable private fun TimeLogSectionTitle(title: String, subtitle: String) = Column { Text(title, color = MainText, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp); Text(subtitle, color = SoftText, fontSize = 11.sp) }
+@Composable private fun TimeLogUndoCard(onUndo: () -> Unit) = Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) { Text("Voce eliminata", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); TextButton(onClick = onUndo) { Text("Annulla", color = Gold, fontWeight = FontWeight.ExtraBold) } } }
 
 private val HourFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 internal fun workMinutes(entry: WorkLogEntry): Int = workMinutes(entry.startTime, entry.endTime, entry.breakMinutes)
