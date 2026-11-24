@@ -183,8 +183,14 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
             val hasPending = pendingCount > 0
             val hasCompleted = completedCount > 0
             val dayShape = RoundedCornerShape(17.dp)
+            SunsetGlowContainer(
+                modifier = Modifier.weight(1f),
+                shape = dayShape,
+                enabled = com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow,
+                strong = selected
+            ) {
             Column(
-                Modifier.weight(1f)
+                Modifier.fillMaxWidth()
                     .then(if (selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetPrimarySurface(dayShape) else Modifier.background(if (selected) Gold else CardBlue.copy(alpha = .88f), dayShape))
                     .sunsetGlow(dayShape, strong = selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow)
                     .then(if (date == currentDate && !selected) Modifier.border(1.dp, Gold, dayShape) else Modifier)
@@ -201,6 +207,7 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
                     if (hasCompleted) Box(Modifier.size(4.dp).background(if (selected) NightBlue else Success, CircleShape))
                 }
             }
+            }
         }
     }
 }
@@ -209,12 +216,14 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
 private fun DailySummaryCard(isToday: Boolean, completed: Int, total: Int, nextTime: String?) {
     val progress = if (total == 0) 0f else completed.toFloat() / total
     val summaryShape = RoundedCornerShape(24.dp)
+    SunsetGlowContainer(Modifier.fillMaxWidth(), summaryShape, com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow, strong = true) {
     Column(Modifier.fillMaxWidth().background(CardBlue.copy(alpha = .92f), summaryShape).sunsetGlow(summaryShape, strong = com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(if (isToday) "Oggi: $completed/$total completate" else "Completate: $completed/$total", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             Text(nextTime?.let { "Prossima: $it" } ?: "Nessuna in programma", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = Gold, trackColor = CardBlueLight)
+    }
     }
 }
 
