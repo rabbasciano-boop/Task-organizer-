@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.taskorganizer.ui.theme.OrganizerPalette
+import com.example.taskorganizer.ui.theme.OrganizerTheme
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.util.Locale
@@ -85,7 +87,9 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
                     Text(listOfNotNull(formatTimeRange(task), task.category).joinToString(" • ").ifBlank { "Senza orario" }, color = mutedColor, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 }
                 Box(Modifier.size(48.dp).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
-                    Box(Modifier.size(28.dp).background(if (task.completed) Success else CardBlueLight.copy(alpha = .82f), RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
+                    val nordic = OrganizerPalette.currentTheme == OrganizerTheme.AURORA_NORDIC
+                    val circleShape = RoundedCornerShape(50)
+                    Box(Modifier.size(28.dp).background(if (task.completed) Success else CardBlueLight.copy(alpha = .82f), circleShape).then(if (nordic && !task.completed) Modifier.border(2.dp, Color(0xFF08766D), circleShape) else Modifier), contentAlignment = Alignment.Center) {
                         Text(if (task.completed) "✓" else "", color = NightBlue, fontWeight = FontWeight.ExtraBold)
                     }
                 }

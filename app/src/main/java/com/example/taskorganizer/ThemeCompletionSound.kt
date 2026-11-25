@@ -8,6 +8,7 @@ import android.media.AudioTrack
 import android.media.MediaPlayer
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.min
 import kotlin.math.sin
@@ -57,9 +58,9 @@ internal object ThemeCompletionSound {
 
     private fun samplesFor(theme: OrganizerTheme): ShortArray = when (theme) {
         OrganizerTheme.ORIGINAL_DARK -> windSamples()
-        OrganizerTheme.AURORA_MIDNIGHT -> spaceSamples()
-        OrganizerTheme.AURORA_NORDIC -> snowSamples()
-        OrganizerTheme.SUNSET_GLOW, OrganizerTheme.SUNSET_GLOW_DARK -> bubbleSamples()
+        OrganizerTheme.AURORA_MIDNIGHT -> increaseVolume(spaceSamples())
+        OrganizerTheme.AURORA_NORDIC -> increaseVolume(snowSamples())
+        OrganizerTheme.SUNSET_GLOW, OrganizerTheme.SUNSET_GLOW_DARK -> increaseVolume(bubbleSamples())
         OrganizerTheme.AGENDA_REALE -> royalMagicSamples()
         OrganizerTheme.CARTA_DORATA -> error("Carta Dorata uses its bundled paper sound")
     }
@@ -78,18 +79,29 @@ internal object ThemeCompletionSound {
     }
 
     private fun windSamples(): ShortArray {
-        var seed = 0x2569
-        var air = 0f
-        var gust = 0f
-        return render(620) { t, _ ->
+        var seed = 0x7169
+        var lowAir = 0f
+        var midAir = 0f
+        val sound = render(950) { t, _ ->
             seed = seed * 1_664_525 + 1_013_904_223
             val noise = ((seed ushr 16 and 0x7FFF) / 16_383.5f) - 1f
-            air = air * 0.84f + noise * 0.16f
-            gust = gust * 0.975f + noise * 0.025f
-            val swell = 0.62f + 0.38f * sin(PI * (t * 1.18f - 0.11f)).toFloat().coerceAtLeast(0f)
-            val envelope = sin(PI * t).toFloat().let { it * it } * swell
-            val airyWhistle = sin(2.0 * PI * (125f + 36f * sin(t * PI)) * t * 0.620).toFloat() * 0.045f
-            (air * 0.72f + gust * 0.50f + airyWhistle) * envelope * 0.24f
+            lowAir = lowAir * 0.965f + noise * 0.035f
+            midAir = midAir * 0.72f + noise * 0.28f
+            val wind = (midAir - lowAir) * 0.8f + lowAir * 0.5f
+            val swell = 0.55f + 0.45f * sin(PI * t).toFloat()
+            val fade = min(1f, t * 8f) * min(1f, (1f - t) * 5f)
+            wind * swell * fade
+        }
+        return increaseVolume(sound)
+    }
+
+    /** Increase audibility without clipping or changing the device's volume settings. */
+    private fun increaseVolume(samples: ShortArray): ShortArray {
+        val peak = samples.maxOfOrNull { abs(it.toInt()) } ?: return samples
+        if (peak == 0) return samples
+        val gain = (Short.MAX_VALUE * 0.78f) / peak
+        return ShortArray(samples.size) { index ->
+            (samples[index] * gain).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
     }
 
