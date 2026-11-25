@@ -57,7 +57,7 @@ internal object ThemeCompletionSound {
     }
 
     private fun samplesFor(theme: OrganizerTheme): ShortArray = when (theme) {
-        OrganizerTheme.ORIGINAL_DARK -> windSamples()
+        OrganizerTheme.ORIGINAL_DARK -> harpSamples()
         OrganizerTheme.AURORA_MIDNIGHT -> increaseVolume(spaceSamples())
         OrganizerTheme.AURORA_NORDIC -> increaseVolume(snowSamples())
         OrganizerTheme.SUNSET_GLOW, OrganizerTheme.SUNSET_GLOW_DARK -> increaseVolume(bubbleSamples())
@@ -78,21 +78,32 @@ internal object ThemeCompletionSound {
         sin(2.0 * PI * frequency * t * 0.145).toFloat() * envelope * 0.19f
     }
 
-    private fun windSamples(): ShortArray {
-        var seed = 0x7169
-        var lowAir = 0f
-        var midAir = 0f
-        val sound = render(950) { t, _ ->
-            seed = seed * 1_664_525 + 1_013_904_223
-            val noise = ((seed ushr 16 and 0x7FFF) / 16_383.5f) - 1f
-            lowAir = lowAir * 0.965f + noise * 0.035f
-            midAir = midAir * 0.72f + noise * 0.28f
-            val wind = (midAir - lowAir) * 0.8f + lowAir * 0.5f
-            val swell = 0.55f + 0.45f * sin(PI * t).toFloat()
-            val fade = min(1f, t * 8f) * min(1f, (1f - t) * 5f)
-            wind * swell * fade
+    /** A short ascending arpeggio made with gently damped plucked strings. */
+    private fun harpSamples(): ShortArray {
+        val count = sampleRate * 1100 / 1000
+        val mix = DoubleArray(count)
+        val random = Random(71)
+        val notes = doubleArrayOf(329.63, 392.00, 493.88, 659.25)
+        notes.forEachIndexed { noteIndex, frequency ->
+            val start = noteIndex * sampleRate * 65 / 1000
+            val stringLength = (sampleRate / frequency).toInt().coerceAtLeast(2)
+            val string = DoubleArray(stringLength) { random.nextDouble(-1.0, 1.0) }
+            var position = 0
+            for (index in start until count) {
+                val next = (position + 1) % stringLength
+                val value = string[position]
+                string[position] = (value + string[next]) * 0.498
+                val elapsed = (index - start).toDouble() / sampleRate
+                val fadeOut = min(1.0, (count - index).toDouble() / (sampleRate * 0.12))
+                mix[index] += value * exp(-elapsed * 1.8) * fadeOut * 0.5
+                position = next
+            }
         }
-        return increaseVolume(sound)
+        val peak = mix.maxOfOrNull { abs(it) }?.takeIf { it > 0.0 } ?: 1.0
+        return ShortArray(count) { index ->
+            (mix[index] / peak * 0.72 * Short.MAX_VALUE).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+        }
     }
 
     /** Increase audibility without clipping or changing the device's volume settings. */
