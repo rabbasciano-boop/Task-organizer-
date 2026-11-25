@@ -182,7 +182,7 @@ internal fun TaskEditorScreen(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
+        Card(modifier = Modifier.editorSunsetGlow(), colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("TITOLO ATTIVITÀ", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         OutlinedTextField(value = title, onValueChange = { title = it }, placeholder = { Text("Es. Ripasso capitolo 3") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(18.dp), colors = compactEditorFieldColors())
@@ -191,7 +191,7 @@ internal fun TaskEditorScreen(
                 TaskColorPicker(selectedColor = cardColor, onSelected = { cardColor = it })
             }
         }
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
+        Card(modifier = Modifier.editorSunsetGlow(), colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("DATA E FASCIA ORARIA", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -243,7 +243,7 @@ internal fun TaskEditorScreen(
                 }
             }
         }
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
+        Card(modifier = Modifier.editorSunsetGlow(), colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Promemoria e sveglia", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -303,7 +303,7 @@ internal fun TaskEditorScreen(
         }
             }
         }
-        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
+        Card(modifier = Modifier.editorSunsetGlow(), colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Organizzazione", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         CategoryField(
@@ -339,7 +339,7 @@ internal fun TaskEditorScreen(
         if (error.isNotBlank()) Text(error, color = Danger, fontSize = 13.sp)
         Button(
             onClick = ::attemptSave,
-            modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().height(54.dp).editorSunsetGlow(RoundedCornerShape(16.dp), strong = true), shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
         ) { Text("Salva attività", fontWeight = FontWeight.Bold) }
         TextButton(onClick = ::requestClose, modifier = Modifier.fillMaxWidth()) { Text("Annulla", color = SoftText) }
@@ -362,6 +362,10 @@ internal fun TaskEditorScreen(
         )
     }
 }
+
+@Composable
+private fun Modifier.editorSunsetGlow(shape: RoundedCornerShape = RoundedCornerShape(22.dp), strong: Boolean = false): Modifier =
+    if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) sunsetGlow(shape, strong) else this
 
 @Composable
 private fun TaskEditorPreview(

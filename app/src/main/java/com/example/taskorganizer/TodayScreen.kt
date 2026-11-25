@@ -133,8 +133,7 @@ internal fun TodayScreen(
             val addShape = RoundedCornerShape(18.dp)
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp).height(52.dp)
-                    .then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetPrimarySurface(addShape) else Modifier.background(Gold, addShape))
-                    .sunsetGlow(addShape, strong = com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow)
+                    .then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(addShape, strong = true).sunsetPrimarySurface(addShape) else Modifier.background(Gold, addShape).sunsetGlow(addShape))
                     .clickable(onClick = onAdd).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button }
                     .padding(horizontal = 18.dp), contentAlignment = Alignment.Center
             ) { Row(verticalAlignment = Alignment.CenterVertically) { Text("+", color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else NightBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("Nuova attività", Modifier.padding(start = 7.dp), color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else NightBlue, fontWeight = FontWeight.ExtraBold) } }

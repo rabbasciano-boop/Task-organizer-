@@ -4,10 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.clip
@@ -21,37 +17,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawOutline
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.taskorganizer.ui.theme.OrganizerPalette
 
-internal object SunsetGlowPreference {
-    var intensity by mutableFloatStateOf(1f)
-        private set
-    private var initialized = false
-
-    fun load(context: android.content.Context) {
-        if (!initialized) {
-            intensity = context.getSharedPreferences("task_organizer_settings", android.content.Context.MODE_PRIVATE)
-                .getFloat("sunset_glow_intensity", 1f).coerceIn(.3f, 1.6f)
-            initialized = true
-        }
-    }
-
-    fun update(context: android.content.Context, value: Float) {
-        intensity = value.coerceIn(.3f, 1.6f)
-        context.getSharedPreferences("task_organizer_settings", android.content.Context.MODE_PRIVATE)
-            .edit().putFloat("sunset_glow_intensity", intensity).apply()
-    }
-}
-
-@Composable
-internal fun rememberSunsetGlowIntensity(): Float {
-    val context = LocalContext.current
-    remember(context) { SunsetGlowPreference.load(context.applicationContext) }
-    return SunsetGlowPreference.intensity
-}
+private const val SUNSET_GLOW_INTENSITY = 0.65f
 
 /** Accent treatment shared by the gradient themes. */
 @Composable
@@ -96,7 +66,7 @@ internal fun Modifier.sunsetPrimarySurface(shape: Shape = RoundedCornerShape(20.
 @Composable
 internal fun Modifier.sunsetGlow(shape: Shape = RoundedCornerShape(20.dp), strong: Boolean = false): Modifier {
     if (!OrganizerPalette.gradientTaskCards) return this
-    val intensity = if (OrganizerPalette.sunsetGlow) rememberSunsetGlowIntensity() else 1f
+    val intensity = if (OrganizerPalette.sunsetGlow) SUNSET_GLOW_INTENSITY else 1f
     val elevation = with(LocalDensity.current) { (if (strong) 14.dp else 8.dp).toPx() } * intensity
     val silver = Color(0xFFF5F8FC)
     val glowColor = if (OrganizerPalette.currentTheme.isDark) Color(0xFFFF7B47) else Color(0xFFEA6A47)
