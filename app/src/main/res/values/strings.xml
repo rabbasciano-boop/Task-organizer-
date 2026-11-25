@@ -58,6 +58,8 @@
     <string name="theme_sunset_glow_description">Chiaro caldo, crema, corallo e ambra</string>
     <string name="theme_sunset_glow_dark">🌙 Sunset Glow Dark</string>
     <string name="theme_sunset_glow_dark_description">Scuro avvolgente, prugna, arancio e magenta</string>
+    <string name="sunset_neon_intensity">Intensità neon</string>
+    <string name="sunset_neon_description">Regola il bagliore per entrambi i temi Sunset Glow.</string>
     <string name="theme_agenda_reale">👑 Agenda Reale</string>
     <string name="theme_agenda_reale_description">Notte prugna, rosa confetto e argento specchiato</string>
     <string name="home_settings_subtitle">Widget e contenuti mostrati all\'apertura.</string>

@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -148,6 +149,25 @@ internal fun AppearanceSettingsScreen(
         ThemeChoiceCard(OrganizerTheme.AURORA_MIDNIGHT, stringResource(R.string.theme_aurora_midnight), stringResource(R.string.theme_aurora_midnight_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.SUNSET_GLOW_DARK, stringResource(R.string.theme_sunset_glow_dark), stringResource(R.string.theme_sunset_glow_dark_description), selectedTheme, onThemeChanged)
         ThemeChoiceCard(OrganizerTheme.AGENDA_REALE, stringResource(R.string.theme_agenda_reale), stringResource(R.string.theme_agenda_reale_description), selectedTheme, onThemeChanged)
+        if (selectedTheme == OrganizerTheme.SUNSET_GLOW || selectedTheme == OrganizerTheme.SUNSET_GLOW_DARK) {
+            SunsetGlowIntensityCard()
+        }
+    }
+}
+
+@Composable
+private fun SunsetGlowIntensityCard() {
+    val context = LocalContext.current
+    val intensity = rememberSunsetGlowIntensity()
+    Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(stringResource(R.string.sunset_neon_intensity), color = MainText, fontWeight = FontWeight.Bold)
+                Text("${(intensity * 100).toInt()}%", color = Gold, fontWeight = FontWeight.Bold)
+            }
+            Text(stringResource(R.string.sunset_neon_description), color = SoftText, fontSize = 13.sp)
+            Slider(value = intensity, onValueChange = { SunsetGlowPreference.update(context.applicationContext, it) }, valueRange = .3f..1.6f)
+        }
     }
 }
 
