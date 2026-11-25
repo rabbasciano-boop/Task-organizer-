@@ -133,7 +133,7 @@ internal fun TodayScreen(
             val addShape = RoundedCornerShape(18.dp)
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp).height(52.dp)
-                    .then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(addShape, strong = true).sunsetPrimarySurface(addShape) else Modifier.background(Gold, addShape).sunsetGlow(addShape))
+                    .then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.gradientTaskCards) Modifier.sunsetGlow(addShape, strong = true).sunsetPrimarySurface(addShape) else Modifier.background(Gold, addShape).sunsetGlow(addShape))
                     .clickable(onClick = onAdd).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button }
                     .padding(horizontal = 18.dp), contentAlignment = Alignment.Center
             ) { Row(verticalAlignment = Alignment.CenterVertically) { Text("+", color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else NightBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("Nuova attività", Modifier.padding(start = 7.dp), color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else NightBlue, fontWeight = FontWeight.ExtraBold) } }
@@ -185,7 +185,7 @@ private fun HomeWeekStrip(weekDays: List<LocalDate>, selectedDate: LocalDate, cu
             Column(
                 Modifier.weight(1f)
                     .then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(dayShape, strong = selected) else Modifier)
-                    .then(if (selected && com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetPrimarySurface(dayShape) else Modifier.background(if (selected) Gold else CardBlue.copy(alpha = .88f), dayShape))
+                    .then(if (selected && com.example.taskorganizer.ui.theme.OrganizerPalette.gradientTaskCards) Modifier.sunsetPrimarySurface(dayShape) else Modifier.background(if (selected) Gold else CardBlue.copy(alpha = .88f), dayShape))
                     .then(
                         if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.border(1.25.dp, sunsetPrimaryBrush(), dayShape)
                         else if (date == currentDate && !selected) Modifier.border(1.dp, Gold, dayShape)
