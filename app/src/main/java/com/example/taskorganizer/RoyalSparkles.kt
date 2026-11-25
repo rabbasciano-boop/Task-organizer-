@@ -47,17 +47,26 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
     var frame by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
-    LaunchedEffect(enabled, size, lifecycle) {
-        particles.clear()
-        if (!enabled || size.width <= 0 || size.height <= 0) return@LaunchedEffect
-        repeat(28) {
-            particles.add(RoyalParticle(
+    // Opening the keyboard changes the available height; keep existing sparkles
+    // alive instead of restarting the animation on every resize.
+    LaunchedEffect(enabled, size) {
+        if (!enabled) {
+            particles.clear()
+            return@LaunchedEffect
+        }
+        if (size.width <= 0 || size.height <= 0 || particles.any { it.ambient }) return@LaunchedEffect
+        particles.addAll(List(28) {
+            RoyalParticle(
                 Random.nextFloat() * size.width, Random.nextFloat() * size.height,
                 (Random.nextFloat() - .5f) * .45f, -(Random.nextFloat() * .55f + .2f),
                 Random.nextFloat() * 3.2f + 1.5f, Random.nextFloat() * .6f + .2f,
                 0f, royalSparkleColors.random(), Random.nextFloat() > .35f, true
-            ))
-        }
+            )
+        })
+    }
+
+    LaunchedEffect(enabled, lifecycle) {
+        if (!enabled) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             var previousFrame = 0L
             while (true) {
@@ -90,6 +99,23 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
             while (true) {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 val start = down.position
+                while (particles.count { !it.ambient } > 100) {
+                    val index = particles.indexOfFirst { !it.ambient }
+                    if (index < 0) break
+                    particles.removeAt(index)
+                }
+                val burst = List(34) {
+                    val angle = Random.nextFloat() * (2f * PI.toFloat())
+                    val speed = Random.nextFloat() * 7.5f + 2f
+                    RoyalParticle(
+                        start.x + Random.nextFloat() * 24f - 12f, start.y + Random.nextFloat() * 18f - 9f,
+                        cos(angle) * speed, sin(angle) * speed - 2.5f,
+                        Random.nextFloat() * 4.5f + 2.2f, 1f, Random.nextFloat() * .022f + .014f,
+                        royalSparkleColors.random(), Random.nextFloat() > .25f, false
+                    )
+                }
+                // Begin before the target handles the touch, including during screen transitions.
+                particles.addAll(burst)
                 var moved = false
                 var released = false
                 while (!released) {
@@ -99,23 +125,7 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
                     if (event.changes.count { it.pressed } > 1) moved = true
                     released = !pointer.pressed
                 }
-                if (released && !moved) {
-                    while (particles.count { !it.ambient } > 100) {
-                        val index = particles.indexOfFirst { !it.ambient }
-                        if (index < 0) break
-                        particles.removeAt(index)
-                    }
-                    repeat(34) {
-                        val angle = Random.nextFloat() * (2f * PI.toFloat())
-                        val speed = Random.nextFloat() * 7.5f + 2f
-                        particles.add(RoyalParticle(
-                            start.x + Random.nextFloat() * 24f - 12f, start.y + Random.nextFloat() * 18f - 9f,
-                            cos(angle) * speed, sin(angle) * speed - 2.5f,
-                            Random.nextFloat() * 4.5f + 2.2f, 1f, Random.nextFloat() * .022f + .014f,
-                            royalSparkleColors.random(), Random.nextFloat() > .25f, false
-                        ))
-                    }
-                }
+                if (!released || moved) particles.removeAll(burst.toSet())
             }
         }
     } else Modifier
