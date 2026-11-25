@@ -163,7 +163,7 @@ open class TaskOrganizerActivity : FragmentActivity() {
                         privacyAcknowledged = true
                     })
                 } else {
-                    androidx.compose.foundation.layout.Box {
+                    RoyalSparklesContainer(enabled = effectiveTheme == OrganizerTheme.AGENDA_REALE && session.isUnlocked) {
                         TaskOrganizerApp(
                         selectedTheme = effectiveTheme,
                         followSystemTheme = followSystemTheme,
