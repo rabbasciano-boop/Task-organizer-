@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.taskorganizer.ui.theme.OrganizerPalette
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -115,14 +116,18 @@ fun CalendarScreen(
 
 @Composable
 private fun RowScope.CalendarDayCell(date: LocalDate?, hasTasks: Boolean, isSelected: Boolean, onSelected: (LocalDate) -> Unit) {
+    val shape = RoundedCornerShape(10.dp)
     Box(
-        modifier = Modifier.weight(1f).height(48.dp).background(
-            color = when {
-                isSelected -> Gold
-                date == LocalDate.now() -> CardBlueLight
-                else -> Color.Transparent
-            },
-            shape = RoundedCornerShape(10.dp)
+        modifier = Modifier.weight(1f).height(48.dp).then(
+            if (isSelected && OrganizerPalette.agendaReale) Modifier.sunsetPrimarySurface(shape)
+            else Modifier.background(
+                color = when {
+                    isSelected -> Gold
+                    date == LocalDate.now() -> CardBlueLight
+                    else -> Color.Transparent
+                },
+                shape = shape
+            )
         ).then(if (date != null) Modifier.clickable { onSelected(date) } else Modifier),
         contentAlignment = Alignment.Center
     ) {
