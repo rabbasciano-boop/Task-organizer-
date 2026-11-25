@@ -25,7 +25,7 @@ import com.example.taskorganizer.ui.theme.OrganizerPalette
 fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit) {
     val shape = RoundedCornerShape(18.dp)
     val useSunsetGradient = OrganizerPalette.gradientTaskCards
-    Card(modifier = Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(task.cardColor, shape) else Modifier).sunsetGlow(shape), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else CardBlueLight), shape = shape) {
+    Card(modifier = if (OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(shape).sunsetTaskSurface(task.cardColor, shape) else Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(task.cardColor, shape) else Modifier).sunsetGlow(shape), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else CardBlueLight), shape = shape) {
         Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier.size(48.dp).clickable(onClick = onToggle).semantics {
@@ -51,7 +51,7 @@ fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDe
     val mutedColor = taskCardMutedColor(task)
     val shape = RoundedCornerShape(20.dp)
     val useSunsetGradient = OrganizerPalette.gradientTaskCards
-    Card(modifier = Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(task.cardColor, shape) else Modifier).sunsetGlow(shape, strong = useSunsetGradient), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor)), shape = shape) {
+    Card(modifier = if (OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(shape, strong = true).sunsetTaskSurface(task.cardColor, shape) else Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(task.cardColor, shape) else Modifier).sunsetGlow(shape, strong = useSunsetGradient), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor)), shape = shape) {
         Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(

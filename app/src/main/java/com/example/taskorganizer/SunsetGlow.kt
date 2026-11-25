@@ -14,8 +14,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -95,6 +99,8 @@ internal fun Modifier.sunsetGlow(shape: Shape = RoundedCornerShape(20.dp), stron
     val intensity = if (OrganizerPalette.sunsetGlow) rememberSunsetGlowIntensity() else 1f
     val elevation = with(LocalDensity.current) { (if (strong) 14.dp else 8.dp).toPx() } * intensity
     val silver = Color(0xFFF5F8FC)
+    val glowColor = if (OrganizerPalette.currentTheme.isDark) Color(0xFFFF7B47) else Color(0xFFEA6A47)
+    val glowSecondary = if (OrganizerPalette.currentTheme.isDark) Color(0xFFE85D8A) else Color(0xFFF59E42)
     return graphicsLayer {
         this.shape = shape
         clip = false
@@ -104,7 +110,28 @@ internal fun Modifier.sunsetGlow(shape: Shape = RoundedCornerShape(20.dp), stron
     }.then(if (OrganizerPalette.sunsetGlow) Modifier.drawWithCache {
         val strokeWidth = (if (strong) 4.dp else 3.dp).toPx() * intensity
         val rounded = shape.createOutline(size, layoutDirection, this)
+        val outlinePath = Path().apply {
+            when (rounded) {
+                is Outline.Rectangle -> addRect(rounded.rect)
+                is Outline.Rounded -> addRoundRect(rounded.roundRect)
+                is Outline.Generic -> addPath(rounded.path)
+            }
+        }
+        val glowRadius = (if (strong) 24.dp else 16.dp).toPx() * intensity
         onDrawWithContent {
+            // Layered translucent outlines make a visible halo, with the centre
+            // excluded so no unwanted shapes appear inside transparent cards.
+            clipPath(outlinePath, clipOp = ClipOp.Difference) {
+                for (layer in 8 downTo 1) {
+                    val fraction = layer / 8f
+                    drawOutline(
+                        rounded,
+                        color = (if (layer % 2 == 0) glowSecondary else glowColor)
+                            .copy(alpha = ((if (strong) .105f else .075f) * intensity * (1f - fraction * .65f)).coerceIn(0f, 1f)),
+                        style = Stroke(width = glowRadius * fraction * 2f)
+                    )
+                }
+            }
             drawContent()
             // A subtle inner highlight follows the existing outline and never paints a rectangle.
             drawOutline(rounded, color = Color.White.copy(alpha = (.10f * intensity).coerceAtMost(.2f)), style = Stroke(width = strokeWidth))

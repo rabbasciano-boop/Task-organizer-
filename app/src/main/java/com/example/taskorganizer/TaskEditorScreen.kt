@@ -394,7 +394,7 @@ private fun TaskEditorPreview(
         1440 -> "1 giorno prima"
         else -> "$reminderMinutesBefore min prima"
     }
-    Card(modifier = Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(cardColor, previewShape) else Modifier).sunsetGlow(previewShape, strong = useSunsetGradient), colors = CardDefaults.cardColors(containerColor = previewBackground), shape = previewShape) {
+    Card(modifier = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(previewShape, strong = true).sunsetTaskSurface(cardColor, previewShape) else Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(cardColor, previewShape) else Modifier).sunsetGlow(previewShape, strong = useSunsetGradient), colors = CardDefaults.cardColors(containerColor = previewBackground), shape = previewShape) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("${categoryDisplay(category, categoryIcon)}", color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
