@@ -89,7 +89,7 @@ internal fun Modifier.sunsetPrimarySurface(shape: Shape = RoundedCornerShape(20.
 @Composable
 internal fun Modifier.sunsetGlow(shape: Shape = RoundedCornerShape(20.dp), strong: Boolean = false): Modifier {
     if (!OrganizerPalette.gradientTaskCards) return this
-    val intensity = if (OrganizerPalette.sunsetGlow) SUNSET_GLOW_INTENSITY else 1f
+    val intensity = if (OrganizerPalette.sunsetGlow) SUNSET_GLOW_INTENSITY * if (OrganizerPalette.currentTheme.isDark) .85f else 1f else 1f
     val elevation = with(LocalDensity.current) { (if (strong) 14.dp else 8.dp).toPx() } * intensity
     val silver = Color(0xFFF5F8FC)
     val glowColor = if (OrganizerPalette.currentTheme.isDark) Color(0xFFFF7B47) else Color(0xFFEA6A47)

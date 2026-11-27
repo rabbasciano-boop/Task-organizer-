@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -77,10 +78,18 @@ internal fun TimeLogScreen(
     val undoState = remember(activity) { ViewModelProvider(activity)[TimeLogUndoViewModel::class.java] }
     val pendingDeletions = undoState.pendingDeletions
     val pendingRestores = undoState.pendingRestores
+    LaunchedEffect(undoState) {
+        // A configuration change can consume the whole undo window while the UI is rebuilding.
+        val minimumExpiry = SystemClock.elapsedRealtime() + 6_000L
+        pendingDeletions.indices.forEach { index ->
+            val pending = pendingDeletions[index]
+            if (pending.expiresAtElapsed < minimumExpiry) pendingDeletions[index] = pending.copy(expiresAtElapsed = minimumExpiry)
+        }
+    }
     pendingDeletions.forEach { deleted ->
         key(deleted.entry.id) {
             val restoring = deleted.entry.id in pendingRestores
-            LaunchedEffect(deleted.entry.id, restoring) {
+            LaunchedEffect(deleted.entry.id, deleted.expiresAtElapsed, restoring) {
                 if (restoring) return@LaunchedEffect
                 delay((deleted.expiresAtElapsed - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
                 pendingDeletions.removeAll { it.entry.id == deleted.entry.id }
@@ -280,6 +289,21 @@ private fun WorkOverviewCard(label: String, days: Int, minutes: Int, rateCents: 
 private fun WorkEntryCard(entry: WorkLogEntry, rateCents: Long, onEdit: () -> Unit, onDelete: () -> Unit) {
     var deleteArmed by remember(entry.id) { mutableStateOf(false) }
     val date = remember(entry.date) { runCatching { LocalDate.parse(entry.date) }.getOrNull() }
+    if (LocalDensity.current.fontScale > 1.3f) {
+        Card(Modifier.fillMaxWidth().clickable(onClick = onEdit), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(date?.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY))?.replaceFirstChar { it.titlecase(Locale.ITALY) } ?: entry.date, color = MainText, fontWeight = FontWeight.ExtraBold)
+                Text("${entry.startTime} – ${entry.endTime}${if (isOvernightWorkShift(entry.startTime, entry.endTime)) " (+1 giorno)" else ""}", color = SoftText, fontSize = 12.sp)
+                Text(entry.notes.ifBlank { "Nessuna nota aggiunta" }, color = if (entry.notes.isBlank()) SoftText else MainText, fontSize = 12.sp)
+                if (entry.breakMinutes > 0) Text("Pausa: ${entry.breakMinutes} min", color = SoftText, fontSize = 11.sp)
+                Text(formatWorkMinutes(workMinutes(entry)), color = MainText, fontWeight = FontWeight.ExtraBold)
+                Text(formatCurrency(workEarningsCents(workMinutes(entry), rateCents)), color = Success, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onEdit) { Text("Modifica", color = Gold) }
+                TextButton(onClick = { if (deleteArmed) onDelete() else deleteArmed = true }) { Text(if (deleteArmed) "Conferma?" else "Elimina", color = Danger) }
+            }
+        }
+        return
+    }
     Card(Modifier.fillMaxWidth().clickable(onClick = onEdit), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.width(4.dp).height(92.dp).background(Success, CircleShape))

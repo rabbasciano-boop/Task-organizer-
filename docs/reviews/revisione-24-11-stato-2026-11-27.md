@@ -38,3 +38,10 @@ Usare dati di prova e un backup aggiornato. Verificare eliminazione e annullamen
 - Il thread audio si arresta dopo l'inattività; in caso di filtro Non disturbare sconosciuto resta applicata la politica audio Android. La provenienza e la licenza del suono di Carta Dorata restano da verificare prima di pubblicare.
 - Aggiornata la bozza dell'informativa con Registro ore e CSV; contatto e pubblicazione restano da completare.
 - Compilazione debug e test unitari riusciti; le prove manuali su dispositivo restano necessarie.
+
+## Riscontri del collaudo sul telefono
+
+- L'utente conferma la leggibilità delle card Agenda Reale, TalkBack, l'avviso del timer breve, i suoni in modalità normale/silenzioso/vibrazione e la fluidità dello scorrimento.
+- Da verificare dopo la correzione: rispetto di Rimuovi animazioni e immediatezza delle scintille; leggibilità delle registrazioni con caratteri molto grandi; messaggi e salvataggio dal pulsante superiore in Sunset; Annulla dopo rotazione; intensità neon di Sunset scuro.
+- L'app aggiornata è stata installata sul telefono; compilazione e test unitari riusciti. Un test Compose isolato sul telefono ha verificato che il pulsante superiore inoltra la modifica valida in Sunset; rimane la prova del caso concreto dell'utente.
+- Timer oltre 24 ore rimandato su richiesta dell'utente. Il test di Non disturbare non è ancora confermato.

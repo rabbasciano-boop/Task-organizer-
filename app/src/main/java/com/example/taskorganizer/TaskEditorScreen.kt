@@ -158,6 +158,9 @@ internal fun TaskEditorScreen(
             Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             TextButton(onClick = ::attemptSave) { Text("Salva", color = Gold, fontWeight = FontWeight.Bold) }
         }
+        if (error.isNotBlank()) {
+            Text(error, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), color = Danger, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        }
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("ANTEPRIMA CARD LIVE", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)

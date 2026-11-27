@@ -29,6 +29,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
@@ -57,7 +58,8 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val context = LocalContext.current
     fun animationsEnabled(): Boolean = try {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f &&
+        listOf(Settings.Global.ANIMATOR_DURATION_SCALE, Settings.Global.TRANSITION_ANIMATION_SCALE, Settings.Global.WINDOW_ANIMATION_SCALE)
+            .all { Settings.Global.getFloat(context.contentResolver, it, 1f) > 0f } &&
             (Build.VERSION.SDK_INT < 26 || ValueAnimator.areAnimatorsEnabled())
     } catch (_: SecurityException) { true }
     var systemAnimationsEnabled by remember { androidx.compose.runtime.mutableStateOf(animationsEnabled()) }
@@ -65,8 +67,17 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) { systemAnimationsEnabled = animationsEnabled() }
         }
-        context.contentResolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer)
-        onDispose { context.contentResolver.unregisterContentObserver(observer) }
+        listOf(Settings.Global.ANIMATOR_DURATION_SCALE, Settings.Global.TRANSITION_ANIMATION_SCALE, Settings.Global.WINDOW_ANIMATION_SCALE).forEach {
+            context.contentResolver.registerContentObserver(Settings.Global.getUriFor(it), false, observer)
+        }
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) systemAnimationsEnabled = animationsEnabled()
+        }
+        lifecycle.addObserver(lifecycleObserver)
+        onDispose {
+            lifecycle.removeObserver(lifecycleObserver)
+            context.contentResolver.unregisterContentObserver(observer)
+        }
     }
     val effectsEnabled = enabled && systemAnimationsEnabled
 
@@ -140,6 +151,7 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
                 }
                 // Begin before the target handles the touch, including during screen transitions.
                 particles.addAll(burst)
+                frame++
                 var moved = false
                 var released = false
                 while (!released) {
