@@ -5,6 +5,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.unit.sp
 import com.example.taskorganizer.R
 
@@ -21,13 +22,13 @@ val CartaBodyFont = FontFamily(
 
 val CartaTypography: Typography = Typography().let { base ->
     base.copy(
-        displayLarge = base.displayLarge.copy(fontFamily = CartaHeadingFont),
-        displayMedium = base.displayMedium.copy(fontFamily = CartaHeadingFont),
-        displaySmall = base.displaySmall.copy(fontFamily = CartaHeadingFont),
-        headlineLarge = base.headlineLarge.copy(fontFamily = CartaHeadingFont),
-        headlineMedium = base.headlineMedium.copy(fontFamily = CartaHeadingFont),
-        headlineSmall = base.headlineSmall.copy(fontFamily = CartaHeadingFont),
-        titleLarge = base.titleLarge.copy(fontFamily = CartaHeadingFont),
+        displayLarge = base.displayLarge.copy(fontFamily = CartaHeadingFont, fontSynthesis = FontSynthesis.None),
+        displayMedium = base.displayMedium.copy(fontFamily = CartaHeadingFont, fontSynthesis = FontSynthesis.None),
+        displaySmall = base.displaySmall.copy(fontFamily = CartaHeadingFont, fontSynthesis = FontSynthesis.None),
+        headlineLarge = base.headlineLarge.copy(fontFamily = CartaHeadingFont, fontSynthesis = FontSynthesis.None),
+        headlineMedium = base.headlineMedium.copy(fontFamily = CartaHeadingFont, fontSynthesis = FontSynthesis.None),
+        headlineSmall = base.headlineSmall.copy(fontFamily = CartaHeadingFont, fontSynthesis = FontSynthesis.None),
+        titleLarge = base.titleLarge.copy(fontFamily = CartaHeadingFont, fontSynthesis = FontSynthesis.None),
         titleMedium = base.titleMedium.copy(fontFamily = CartaBodyFont),
         titleSmall = base.titleSmall.copy(fontFamily = CartaBodyFont),
         bodyLarge = base.bodyLarge.copy(fontFamily = CartaBodyFont),
