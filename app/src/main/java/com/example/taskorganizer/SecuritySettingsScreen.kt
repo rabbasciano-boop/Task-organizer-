@@ -183,6 +183,5 @@ fun InformationSettingsScreen(onBack: () -> Unit) {
         Text(stringResource(R.string.information_subtitle), color = SoftText)
         InfoCard(stringResource(R.string.information_version), stringResource(R.string.information_version_value, versionName), stringResource(R.string.information_installed))
         InfoCard(stringResource(R.string.information_compatibility), stringResource(R.string.information_compatibility_description), stringResource(R.string.information_android_version))
-        InfoCard(stringResource(R.string.information_support), stringResource(R.string.information_support_description), stringResource(R.string.information_preparing))
     }
 }

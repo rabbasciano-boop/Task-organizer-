@@ -13,7 +13,7 @@ class SettingsNotificationsRemovalTest {
     @Test fun notificationSectionIsNotInSettings() {
         compose.setContent {
             TaskOrganizerTheme(OrganizerTheme.CARTA_DORATA) {
-                SettingsHubScreen(signedInAccount = null, onOpen = {})
+                SettingsHubScreen(signedInAccount = null, onOpen = {}, onOpenPrivacy = {})
             }
         }
         compose.onNodeWithText("Notifiche").assertDoesNotExist()

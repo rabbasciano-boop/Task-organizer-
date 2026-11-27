@@ -21,7 +21,6 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     nickname: String,
     onNicknameChanged: (String) -> Unit,
-    onOpenPrivacy: () -> Unit,
     signedInAccount: SignedInAccount?,
     accountWorking: Boolean,
     accountMessage: String?,
@@ -43,13 +42,16 @@ fun SettingsScreen(
     }
     BackHandler(enabled = section != "root") { goBack() }
     when (section) {
-        "root" -> SettingsHubScreen(signedInAccount = signedInAccount, onOpen = ::openSection)
+        "root" -> SettingsHubScreen(signedInAccount = signedInAccount, onOpen = ::openSection, onOpenPrivacy = { openSection("privacy") })
         "account" -> AccountHubScreen(
             signedInAccount = signedInAccount,
             onBack = ::goBack,
             onOpenProfile = { openSection("accountProfile") },
             onOpenBackup = onOpenBackup,
-            onOpenPrivacy = onOpenPrivacy
+            onOpenPrivacy = { openSection("privacy") },
+            accountWorking = accountWorking,
+            onSignOut = onSignOut,
+            onDeleteAccount = onDeleteAccount
         )
         "accountProfile" -> AccountProfileScreen(
             nickname = nickname,
@@ -58,8 +60,6 @@ fun SettingsScreen(
             accountWorking = accountWorking,
             accountMessage = accountMessage,
             onGoogleSignIn = onGoogleSignIn,
-            onSignOut = onSignOut,
-            onDeleteAccount = onDeleteAccount,
             onBack = ::goBack
         )
         "appearance" -> AppearanceSettingsScreen(
@@ -78,6 +78,9 @@ fun SettingsScreen(
             onBack = ::goBack
         )
         "information" -> InformationSettingsScreen(onBack = ::goBack)
-        else -> SettingsHubScreen(signedInAccount = signedInAccount, onOpen = ::openSection)
+        "terms" -> SettingsPlaceholderScreen(title = androidx.compose.ui.res.stringResource(R.string.settings_terms_title), onBack = ::goBack)
+        "support" -> SettingsPlaceholderScreen(title = androidx.compose.ui.res.stringResource(R.string.settings_support_title), onBack = ::goBack)
+        "privacy" -> PrivacyInfoScreen(onBack = ::goBack)
+        else -> SettingsHubScreen(signedInAccount = signedInAccount, onOpen = ::openSection, onOpenPrivacy = { openSection("privacy") })
     }
 }

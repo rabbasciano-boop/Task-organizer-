@@ -50,7 +50,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-internal fun SettingsHubScreen(signedInAccount: SignedInAccount?, onOpen: (String) -> Unit) {
+internal fun SettingsHubScreen(signedInAccount: SignedInAccount?, onOpen: (String) -> Unit, onOpenPrivacy: () -> Unit) {
     PageColumn {
         Text(stringResource(R.string.settings_title), color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.settings_subtitle), color = SoftText)
@@ -71,6 +71,10 @@ internal fun SettingsHubScreen(signedInAccount: SignedInAccount?, onOpen: (Strin
         SettingsNavigationCard("⌂", stringResource(R.string.settings_home_title), stringResource(R.string.settings_home_subtitle)) { onOpen("home") }
         SettingsNavigationCard("🔒", stringResource(R.string.settings_security_title), stringResource(R.string.settings_security_subtitle)) { onOpen("security") }
         SettingsNavigationCard("ⓘ", stringResource(R.string.settings_information_title), stringResource(R.string.settings_information_subtitle)) { onOpen("information") }
+        Text(stringResource(R.string.settings_help_section), color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        SettingsNavigationCard("▤", stringResource(R.string.settings_terms_title), stringResource(R.string.settings_content_preparing)) { onOpen("terms") }
+        SettingsNavigationCard("▣", stringResource(R.string.settings_privacy_title), stringResource(R.string.settings_privacy_description), onOpenPrivacy)
+        SettingsNavigationCard("?", stringResource(R.string.settings_support_title), stringResource(R.string.settings_content_preparing)) { onOpen("support") }
     }
 }
 
@@ -100,7 +104,10 @@ internal fun AccountHubScreen(
     onBack: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenBackup: () -> Unit,
-    onOpenPrivacy: () -> Unit
+    onOpenPrivacy: () -> Unit,
+    accountWorking: Boolean,
+    onSignOut: (Boolean) -> Unit,
+    onDeleteAccount: (Boolean) -> Unit
 ) {
     BackHandler(onBack = onBack)
     PageColumn {
@@ -114,6 +121,9 @@ internal fun AccountHubScreen(
         SettingsNavigationCard("👤", stringResource(R.string.account_profile_title), stringResource(R.string.account_profile_subtitle), onOpenProfile)
         SettingsNavigationCard("◈", stringResource(R.string.account_backup_title), stringResource(R.string.account_backup_subtitle), onOpenBackup)
         SettingsNavigationCard("▣", stringResource(R.string.account_privacy_title), stringResource(R.string.account_privacy_subtitle), onOpenPrivacy)
+        if (signedInAccount != null) {
+            AccountManagementActions(working = accountWorking, onSignOut = onSignOut, onDeleteAccount = onDeleteAccount)
+        }
     }
 }
 

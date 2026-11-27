@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -20,14 +21,10 @@ fun AccountProfileScreen(
     accountWorking: Boolean,
     accountMessage: String?,
     onGoogleSignIn: () -> Unit,
-    onSignOut: (deleteLocalData: Boolean) -> Unit,
-    onDeleteAccount: (deleteLocalData: Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     var nicknameDialogOpen by remember { mutableStateOf(false) }
     var nicknameDraft by remember(nickname) { mutableStateOf(nickname) }
-    var signOutDialogOpen by remember { mutableStateOf(false) }
-    var deleteAccountDialogOpen by remember { mutableStateOf(false) }
     BackHandler(onBack = onBack)
     PageColumn {
         TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna ad Account", color = Gold) }
@@ -48,15 +45,6 @@ fun AccountProfileScreen(
             }
         } else {
             InfoCard("Connessa come ${signedInAccount.displayName}", signedInAccount.email, "Google · Account facoltativo")
-            OutlinedButton(
-                onClick = { signOutDialogOpen = true },
-                enabled = !accountWorking,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) { Text("Esci dall'account", color = Gold, fontWeight = FontWeight.Bold) }
-            TextButton(onClick = { deleteAccountDialogOpen = true }, enabled = !accountWorking, modifier = Modifier.fillMaxWidth()) {
-                Text("Elimina account", color = Danger, fontWeight = FontWeight.SemiBold)
-            }
         }
         accountMessage?.let { InfoCard("Accesso", it, "Puoi riprovare") }
         Text("PROFILO", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -67,26 +55,6 @@ fun AccountProfileScreen(
                 Text(if (nickname.isBlank()) "Tocca qui per sceglierlo" else nickname, color = Gold, fontSize = 15.sp)
             }
         }
-    }
-    if (signOutDialogOpen) {
-        AlertDialog(
-            onDismissRequest = { signOutDialogOpen = false },
-            containerColor = CardBlue,
-            title = { Text("Uscire dall'account?", color = MainText) },
-            text = { Text("Puoi conservare i dati cifrati di questo profilo oppure eliminarli dal telefono. Gli eventuali backup salvati altrove rimangono dove li hai messi.", color = SoftText) },
-            confirmButton = { TextButton(onClick = { signOutDialogOpen = false; onSignOut(false) }) { Text("Mantieni i dati", color = Gold) } },
-            dismissButton = { TextButton(onClick = { signOutDialogOpen = false; onSignOut(true) }) { Text("Cancella dati del profilo", color = Danger) } }
-        )
-    }
-    if (deleteAccountDialogOpen) {
-        AlertDialog(
-            onDismissRequest = { deleteAccountDialogOpen = false },
-            containerColor = CardBlue,
-            title = { Text("Eliminare l'account?", color = MainText) },
-            text = { Text("Google chiederà una nuova conferma. Sarà eliminato l'account di Task Organizer, non il tuo account Google. Puoi mantenere o eliminare anche i dati di questo profilo sul telefono; i backup salvati altrove non vengono eliminati.", color = SoftText) },
-            confirmButton = { TextButton(onClick = { deleteAccountDialogOpen = false; onDeleteAccount(false) }) { Text("Mantieni dati locali", color = Gold) } },
-            dismissButton = { TextButton(onClick = { deleteAccountDialogOpen = false; onDeleteAccount(true) }) { Text("Elimina anche i dati", color = Danger) } }
-        )
     }
     if (nicknameDialogOpen) {
         AlertDialog(
@@ -104,14 +72,15 @@ fun PrivacyInfoScreen(onBack: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
         PageColumn(safeBottom = true, safeTop = true) {
             Text("Privacy e dati", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.settings_privacy_preparing), color = SoftText)
             Text("Informazioni sempre disponibili e comprensibili.", color = SoftText)
             InfoCard("Dati sul telefono", "Attività, note, liste e categorie restano in archivi cifrati distinti per ogni account e per l'ospite. Non vengono inviati agli sviluppatori.", "Locale e cifrato")
             InfoCard("Account facoltativo", "L'accesso Google serve solo a riconoscere il tuo profilo nell'app. Non carica automaticamente le attività, non attiva backup e non dà accesso ai tuoi file.", "A tua scelta")
-            InfoCard("Backup sotto il tuo controllo", "Puoi creare un file cifrato con password da Opzioni. L'app non lo invia da sola su Drive, OneDrive o su server propri: scegli tu dove conservarlo.", "Manuale e cifrato")
+            InfoCard("Backup sotto il tuo controllo", "Puoi creare un file cifrato con password dalle Impostazioni. L'app non lo invia da sola su Drive, OneDrive o su server propri: scegli tu dove conservarlo.", "Manuale e cifrato")
             InfoCard("Niente tracciamento", "Non vendiamo dati, non mostriamo pubblicità e non analizziamo le tue attività.", "Nessuna pubblicità")
             InfoCard("Il tuo controllo", "Quando uscirai dall'account potrai scegliere se mantenere o cancellare i dati locali. L'eliminazione dell'account sarà una procedura separata e protetta.", "Decidi tu")
             OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
-                Text("Torna all'account", color = Gold, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.settings_back), color = Gold, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -517,7 +517,6 @@ internal fun TaskOrganizerApp(
                         nickname = newNickname.ifBlank { "Utente" }
                         profile.edit().putString("nickname", nickname).apply()
                     },
-                    onOpenPrivacy = { privacyInfoOpen = true },
                     signedInAccount = signedInAccount,
                     accountWorking = accountWorking,
                     accountMessage = accountMessage,
