@@ -14,6 +14,9 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawOutline
@@ -28,11 +31,21 @@ private const val SUNSET_GLOW_INTENSITY = 0.65f
 internal fun sunsetPrimaryBrush(): Brush = when {
     OrganizerPalette.agendaReale -> Brush.linearGradient(listOf(Color(0xFFF5F8FC), Color(0xFFFFD6EB), Color(0xFFFF85C8), Color(0xFFFF69B4)))
     OrganizerPalette.currentTheme.isDark -> {
-    Brush.linearGradient(listOf(Color(0xFFFFB347), Color(0xFFFF7B47), Color(0xFFE85D8A)))
+    Brush.linearGradient(listOf(Color(0xFFFFB347), Color(0xFFFF7B47), Color(0xFFE85D8A)).map { readableSunsetColor(it, 1f) })
     }
     else -> {
-    Brush.linearGradient(listOf(Color(0xFFF59E42), Color(0xFFEA6A47), Color(0xFFD94E7A)))
+    Brush.linearGradient(listOf(Color(0xFFF59E42), Color(0xFFEA6A47), Color(0xFFD94E7A)).map { readableSunsetColor(it, 1f) })
     }
+}
+
+/** Keep white labels legible even over a translucent card on a light surface. */
+internal fun readableSunsetColor(color: Color, alpha: Float): Color {
+    var shade = color
+    repeat(20) {
+        if (shade.copy(alpha = alpha).compositeOver(Color.White).luminance() <= .10f) return shade.copy(alpha = alpha)
+        shade = lerp(shade, Color.Black, .12f)
+    }
+    return shade.copy(alpha = alpha)
 }
 
 @Composable
@@ -52,7 +65,7 @@ internal fun sunsetTaskBrush(cardColor: String): Brush {
             listOf(Color(0xFFF59E42), Color(0xFFEA6A47), Color(0xFFD94E7A))
         }
     }
-    return Brush.linearGradient(colors.map { it.copy(alpha = 0.88f) })
+    return Brush.linearGradient(colors.map { if (OrganizerPalette.sunsetGlow) readableSunsetColor(it, .88f) else it.copy(alpha = .88f) })
 }
 
 @Composable

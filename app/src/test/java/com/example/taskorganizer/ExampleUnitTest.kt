@@ -4,6 +4,29 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
+
+class SunsetContrastTest {
+    @Test
+    fun whiteTextRemainsReadableOnEverySunsetGradientOverLightBackground() {
+        val gradientStops = listOf(
+            Color(0xFFF59E42), Color(0xFFEA6A47), Color(0xFFD94E7A),
+            Color(0xFFFFB347), Color(0xFFFF7B47), Color(0xFFE85D8A),
+            Color(0xFF155E8D), Color(0xFF147FB5), Color(0xFF4F63B8),
+            Color(0xFF1E634E), Color(0xFF318368), Color(0xFF6AB692),
+            Color(0xFF4A3169), Color(0xFF7250A3), Color(0xFFB06CCF),
+            Color(0xFFC0444C), Color(0xFFE06464), Color(0xFFF08AB0),
+            Color(0xFF9B650D), Color(0xFFD68B1A), Color(0xFFF0BF57)
+        )
+        gradientStops.forEach { color ->
+            val background = readableSunsetColor(color, .88f).compositeOver(Color.White)
+            val contrast = 1.05f / (background.luminance() + .05f)
+            assertTrue("White contrast $contrast is insufficient for $color", contrast >= 4.5f)
+        }
+    }
+}
 
 class ReminderTimingTest {
     @Test
@@ -271,6 +294,16 @@ class ArchiveIdNormalizationTest {
 }
 
 class TimeLogCalculationTest {
+    @Test
+    fun warnsAtAndBeyondTheTwentyFourHourLimit() {
+        val start = 1_000L
+        val day = 24L * 60 * 60 * 1_000
+        assertTrue(!workTimerExceedsOneDay(start, start + day - 1))
+        assertTrue(workTimerExceedsOneDay(start, start + day))
+        assertTrue(workTimerExceedsOneDay(start, start + 30L * 60 * 60 * 1_000))
+        assertTrue(!workTimerExceedsOneDay(start, start - 1))
+    }
+
     @Test
     fun calculatesOvernightShiftsAndNeverReturnsNegativeMinutes() {
         assertTrue(isOvernightWorkShift("22:00", "06:00"))

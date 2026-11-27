@@ -1,6 +1,8 @@
 package com.example.taskorganizer
 
 import android.content.Context
+import android.app.NotificationManager
+import android.net.Uri
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -13,19 +15,35 @@ import kotlin.math.exp
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /** Small theme-specific confirmation sounds, generated locally with no audio files or network access. */
 internal object ThemeCompletionSound {
     private const val sampleRate = 22_050
+    private const val preferencesName = "task_organizer_settings"
+    private const val soundsEnabledKey = "completion_sounds_enabled"
+    private val soundExecutor = ThreadPoolExecutor(1, 1, 10, TimeUnit.SECONDS, ArrayBlockingQueue(1), ThreadPoolExecutor.DiscardPolicy())
+
+    fun isEnabled(context: Context): Boolean = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).getBoolean(soundsEnabledKey, true)
+
+    fun setEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit().putBoolean(soundsEnabledKey, enabled).apply()
+    }
 
     fun play(context: Context, theme: OrganizerTheme) {
-        val audioManager = context.getSystemService(AudioManager::class.java) ?: return
-        if (audioManager.ringerMode == AudioManager.RINGER_MODE_SILENT) return
-        if (theme == OrganizerTheme.CARTA_DORATA) {
-            playCrumpledPaper(context)
-            return
-        }
-        Thread {
+        val appContext = context.applicationContext
+        if (!isEnabled(appContext)) return
+        soundExecutor.execute {
+            val audioManager = appContext.getSystemService(AudioManager::class.java) ?: return@execute
+            val notificationManager = appContext.getSystemService(NotificationManager::class.java)
+            if (!isEnabled(appContext) || audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL ||
+                (notificationManager != null && notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL)) return@execute
+            if (theme == OrganizerTheme.CARTA_DORATA) {
+                playCrumpledPaper(appContext)
+                return@execute
+            }
             val samples = samplesFor(theme)
             val track = runCatching {
                 AudioTrack.Builder()
@@ -45,15 +63,17 @@ internal object ThemeCompletionSound {
                     .setBufferSizeInBytes(samples.size * Short.SIZE_BYTES)
                     .setTransferMode(AudioTrack.MODE_STATIC)
                     .build()
-            }.getOrNull() ?: return@Thread
+            }.getOrNull() ?: return@execute
             try {
                 track.write(samples, 0, samples.size)
                 track.play()
                 Thread.sleep((samples.size * 1_000L / sampleRate) + 45L)
+            } catch (_: Exception) {
+                // Audio is optional; a playback failure must not affect the saved task.
             } finally {
                 track.release()
             }
-        }.start()
+        }
     }
 
     private fun samplesFor(theme: OrganizerTheme): ShortArray = when (theme) {
@@ -66,10 +86,18 @@ internal object ThemeCompletionSound {
     }
 
     private fun playCrumpledPaper(context: Context) {
-        val player = runCatching { MediaPlayer.create(context.applicationContext, R.raw.sound_carta_stropicciata) }.getOrNull() ?: return
-        player.setOnCompletionListener { completed -> completed.release() }
-        player.setOnErrorListener { failed, _, _ -> failed.release(); true }
-        player.start()
+        val player = MediaPlayer()
+        try {
+            player.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            player.setDataSource(context, Uri.parse("android.resource://${context.packageName}/${R.raw.sound_carta_stropicciata}"))
+            player.prepare()
+            player.start()
+            Thread.sleep(player.duration.toLong().coerceAtLeast(0L) + 45L)
+        } catch (_: Exception) {
+            // Keep audio failures separate from saving the user's data.
+        } finally {
+            player.release()
+        }
     }
 
     private fun bubbleSamples(): ShortArray = render(145) { t, _ ->

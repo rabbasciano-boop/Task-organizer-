@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.taskorganizer.ui.theme.OrganizerPalette
+import com.example.taskorganizer.ui.theme.OrganizerTheme
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -42,6 +43,10 @@ fun CalendarScreen(
     onToggle: (String) -> Unit,
     onEdit: (OrganizerTask) -> Unit
 ) {
+    if (OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) {
+        CartaDorataCalendar(tasks, onAdd, onToggle, onEdit)
+        return
+    }
     var displayedMonthValue by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     var selectedDateValue by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val displayedMonth = YearMonth.parse(displayedMonthValue)

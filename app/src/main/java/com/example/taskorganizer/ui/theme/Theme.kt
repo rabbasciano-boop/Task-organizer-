@@ -104,7 +104,7 @@ fun TaskOrganizerTheme(theme: OrganizerTheme = OrganizerTheme.ORIGINAL_DARK, con
     CompositionLocalProvider(LocalOrganizerPalette provides palette) {
         MaterialTheme(
             colorScheme = colors,
-            typography = Typography,
+            typography = if (theme == OrganizerTheme.CARTA_DORATA) CartaTypography else Typography,
             content = content
         )
     }

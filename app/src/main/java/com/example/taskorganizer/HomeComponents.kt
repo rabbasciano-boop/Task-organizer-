@@ -52,7 +52,11 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
     Card(
         colors = CardDefaults.cardColors(containerColor = when (action) { "complete" -> Success; "delete" -> Danger; else -> if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor) }),
         shape = cardShape,
-        modifier = Modifier.fillMaxWidth().then(if (OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(cardShape, strong = useSunsetGradient).then(if (useSunsetGradient) Modifier.sunsetTaskSurface(task.cardColor, cardShape) else Modifier) else Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(task.cardColor, cardShape) else Modifier).sunsetGlow(cardShape, strong = useSunsetGradient)).graphicsLayer { translationX = dragOffset }.semantics {
+        modifier = Modifier.fillMaxWidth().graphicsLayer { translationX = dragOffset }.then(
+            if (action != null) Modifier
+            else if (OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(cardShape, strong = true).sunsetTaskSurface(task.cardColor, cardShape)
+            else Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(task.cardColor, cardShape) else Modifier).sunsetGlow(cardShape, strong = useSunsetGradient)
+        ).semantics {
             customActions = buildList {
                 add(CustomAccessibilityAction(if (task.completed) "Segna come da fare" else "Completa") { onToggle(); true })
                 add(CustomAccessibilityAction("Elimina") { onDelete(); true })
@@ -89,7 +93,7 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
                 Box(Modifier.size(48.dp).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
                     val nordic = OrganizerPalette.currentTheme == OrganizerTheme.AURORA_NORDIC
                     val circleShape = RoundedCornerShape(50)
-                    Box(Modifier.size(28.dp).background(if (task.completed) Success else CardBlueLight.copy(alpha = .82f), circleShape).then(if (nordic && !task.completed) Modifier.border(2.dp, Color(0xFF08766D), circleShape) else Modifier), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(28.dp).then(if (task.completed && OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) Modifier.background(goldFoilBrush(), circleShape).border(1.5.dp, Color(0xFF8F6A22), circleShape) else Modifier.background(if (task.completed) Success else CardBlueLight.copy(alpha = .82f), circleShape)).then(if (nordic && !task.completed) Modifier.border(2.dp, Color(0xFF08766D), circleShape) else Modifier), contentAlignment = Alignment.Center) {
                         Text(if (task.completed) "✓" else "", color = NightBlue, fontWeight = FontWeight.ExtraBold)
                     }
                 }

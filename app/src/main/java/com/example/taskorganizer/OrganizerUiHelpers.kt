@@ -23,7 +23,7 @@ internal fun taskCardTextColor(task: OrganizerTask): Color = when {
     else -> Color(0xFFF7F9FC)
 }
 internal fun taskCardMutedColor(task: OrganizerTask): Color = when {
-    OrganizerPalette.gradientTaskCards -> if (OrganizerPalette.agendaReale) Color(0xFF240833).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.88f)
+    OrganizerPalette.gradientTaskCards -> if (OrganizerPalette.agendaReale) Color(0xFF240833).copy(alpha = 0.78f) else Color.White
     task.cardColor == DefaultCardColor -> SoftText
     else -> Color(0xFFD8E1EC)
 }

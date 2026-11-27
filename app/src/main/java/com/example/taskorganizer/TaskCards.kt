@@ -3,6 +3,9 @@ package com.example.taskorganizer
 import androidx.compose.foundation.layout.*
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -21,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.taskorganizer.ui.theme.OrganizerPalette
+import com.example.taskorganizer.ui.theme.OrganizerTheme
 @Composable
 fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit) {
     val shape = RoundedCornerShape(18.dp)
@@ -34,12 +38,12 @@ fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Uni
                 },
                 contentAlignment = Alignment.Center
             ) {
-                Text(if (task.completed) "✓" else "○", color = taskCompletionColor(task), fontSize = 24.sp)
+                TaskCompletionMark(task)
             }
             Spacer(Modifier.size(4.dp))
             Column(modifier = Modifier.weight(1f).clickable(onClick = onEdit)) {
-                Text(task.title, color = if (task.completed) SoftText else MainText, fontWeight = FontWeight.Bold)
-                Text(listOfNotNull(formatTimeRange(task), categoryDisplay(task.category, task.categoryIcon)).joinToString(" · "), color = SoftText, fontSize = 13.sp)
+                Text(task.title, color = if (useSunsetGradient) taskCardTextColor(task) else if (task.completed) SoftText else MainText, fontWeight = FontWeight.Bold)
+                Text(listOfNotNull(formatTimeRange(task), categoryDisplay(task.category, task.categoryIcon)).joinToString(" · "), color = if (useSunsetGradient) taskCardMutedColor(task) else SoftText, fontSize = 13.sp)
             }
         }
     }
@@ -61,7 +65,7 @@ fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDe
                     },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(if (task.completed) "✓" else "○", color = taskCompletionColor(task), fontSize = 25.sp)
+                    TaskCompletionMark(task)
                 }
                 Spacer(Modifier.size(2.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -69,15 +73,26 @@ fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDe
                     Text("${formatItalianDate(task.date)}${formatTimeRange(task)?.let { " · $it" } ?: ""}", color = mutedColor, fontSize = 13.sp)
                 }
             }
-            Text("${categoryDisplay(task.category, task.categoryIcon)} · priorità ${task.priority.lowercase()}", color = Gold, fontSize = 13.sp)
-            task.examStatus?.let { Text("Esame: $it", color = Gold, fontSize = 13.sp) }
+            Text("${categoryDisplay(task.category, task.categoryIcon)} · priorità ${task.priority.lowercase()}", color = if (OrganizerPalette.sunsetGlow) Color.White else Gold, fontSize = 13.sp)
+            task.examStatus?.let { Text("Esame: $it", color = if (OrganizerPalette.sunsetGlow) Color.White else Gold, fontSize = 13.sp) }
             if (task.note.isNotBlank()) Text(task.note, color = mutedColor, fontSize = 14.sp)
             HorizontalDivider(color = if (task.cardColor == DefaultCardColor) CardBlueLight else mutedColor.copy(alpha = 0.25f))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = onToggle) { Text(if (task.completed) "Riapri" else "Completa", color = Success) }
-                TextButton(onClick = onEdit) { Text("Modifica", color = Gold) }
-                TextButton(onClick = onDelete) { Text("Elimina", color = Danger) }
+                TextButton(onClick = onToggle) { Text(if (task.completed) "Riapri" else "Completa", color = if (OrganizerPalette.sunsetGlow) Color.White else Success) }
+                TextButton(onClick = onEdit) { Text("Modifica", color = if (OrganizerPalette.sunsetGlow) Color.White else Gold) }
+                TextButton(onClick = onDelete) { Text("Elimina", color = if (OrganizerPalette.sunsetGlow) Color.White else Danger) }
             }
         }
+    }
+}
+
+@Composable
+private fun TaskCompletionMark(task: OrganizerTask) {
+    if (task.completed && OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) {
+        Box(Modifier.size(28.dp).background(goldFoilBrush(), CircleShape).border(1.5.dp, Color(0xFF8F6A22), CircleShape), contentAlignment = Alignment.Center) {
+            Text("✓", color = NightBlue, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+    } else {
+        Text(if (task.completed) "✓" else "○", color = taskCompletionColor(task), fontSize = 24.sp)
     }
 }

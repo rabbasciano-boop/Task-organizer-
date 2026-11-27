@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,6 +37,9 @@ import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.taskorganizer.ui.theme.CartaHeadingFont
+import com.example.taskorganizer.ui.theme.OrganizerPalette
+import com.example.taskorganizer.ui.theme.OrganizerTheme
 
 @Composable
 internal fun TodayScreen(
@@ -117,10 +121,11 @@ internal fun TodayScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     item { DailySummaryCard(isToday, completedCount, selectedTasks.size, nextTask?.time) }
+                    if (com.example.taskorganizer.ui.theme.OrganizerPalette.currentTheme == com.example.taskorganizer.ui.theme.OrganizerTheme.CARTA_DORATA) item { GoldDivider() }
                     item { HomeFilters(filter, selectedTasks, completedCount) { filter = it } }
                     item {
                         Column {
-                            Text(if (selectedDate == currentDate) "Attività di oggi" else dateFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = MainText, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(if (selectedDate == currentDate) "Attività di oggi" else dateFormatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = MainText, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, fontFamily = if (OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) CartaHeadingFont else null)
                             Text("Scorri una card per completarla o eliminarla", color = SoftText, fontSize = 11.sp)
                         }
                     }
@@ -134,7 +139,7 @@ internal fun TodayScreen(
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp).height(52.dp)
                     .then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.gradientTaskCards) Modifier.sunsetGlow(addShape, strong = true).sunsetPrimarySurface(addShape) else Modifier.background(Gold, addShape).sunsetGlow(addShape))
-                    .clickable(onClick = onAdd).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button }
+                    .clip(addShape).clickable(onClick = onAdd).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button }
                     .padding(horizontal = 18.dp), contentAlignment = Alignment.Center
             ) { Row(verticalAlignment = Alignment.CenterVertically) { Text("+", color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else NightBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("Nuova attività", Modifier.padding(start = 7.dp), color = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Color.White else NightBlue, fontWeight = FontWeight.ExtraBold) } }
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 18.dp, end = 18.dp, bottom = 84.dp))
@@ -153,7 +158,7 @@ private fun HomeHeader(nickname: String, account: SignedInAccount?, selectedDate
         }
         Column(Modifier.weight(1f)) {
             Text(buildString { append(formatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }); if (isToday) append(" • Oggi") }, color = Gold, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-            Text(greetingFor(nickname), color = MainText, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(greetingFor(nickname), color = MainText, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = if (OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) CartaHeadingFont else null, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         val calendarShape = RoundedCornerShape(16.dp)
         Box(Modifier.size(43.dp).then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(calendarShape) else Modifier).clip(calendarShape).background(CardBlue.copy(alpha = .92f)).border(1.dp, Gold.copy(alpha = .24f), calendarShape).clickable(onClick = onOpenCalendar).semantics { contentDescription = "Apri calendario"; role = Role.Button }, contentAlignment = Alignment.Center) {
@@ -222,7 +227,13 @@ private fun DailySummaryCard(isToday: Boolean, completed: Int, total: Int, nextT
             Text(if (isToday) "Oggi: $completed/$total completate" else "Completate: $completed/$total", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             Text(nextTime?.let { "Prossima: $it" } ?: "Nessuna in programma", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
-        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = Gold, trackColor = CardBlueLight)
+        if (com.example.taskorganizer.ui.theme.OrganizerPalette.currentTheme == com.example.taskorganizer.ui.theme.OrganizerTheme.CARTA_DORATA) {
+            Box(Modifier.fillMaxWidth().height(7.dp).clip(CircleShape).background(Color(0xFFE6D8BD)).semantics { progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(progress, 0f..1f) }) {
+                Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(7.dp).background(goldFoilBrush()))
+            }
+        } else {
+            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = Gold, trackColor = CardBlueLight)
+        }
     }
 }
 

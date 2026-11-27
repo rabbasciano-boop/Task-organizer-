@@ -125,6 +125,8 @@ internal fun AppearanceSettingsScreen(
     onFollowSystemThemeChanged: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    var soundsEnabled by remember { mutableStateOf(ThemeCompletionSound.isEnabled(context)) }
     BackHandler(onBack = onBack)
     PageColumn {
         TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text(stringResource(R.string.back_to_settings), color = Gold) }
@@ -137,6 +139,15 @@ internal fun AppearanceSettingsScreen(
                     Text(stringResource(R.string.follow_phone_theme_description), color = SoftText, fontSize = 13.sp)
                 }
                 Switch(checked = followSystemTheme, onCheckedChange = onFollowSystemThemeChanged)
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(stringResource(R.string.completion_sounds), color = MainText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.completion_sounds_description), color = SoftText, fontSize = 13.sp)
+                }
+                Switch(checked = soundsEnabled, onCheckedChange = { enabled -> soundsEnabled = enabled; ThemeCompletionSound.setEnabled(context, enabled) })
             }
         }
         Text(stringResource(R.string.light_themes), color = SoftText, fontSize = 13.sp)

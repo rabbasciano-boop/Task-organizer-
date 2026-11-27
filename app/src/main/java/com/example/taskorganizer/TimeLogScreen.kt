@@ -50,11 +50,11 @@ internal fun TimeLogScreen(
     entries: List<WorkLogEntry>,
     settings: WorkLogSettings,
     activeTimerStartedAt: Long?,
-    onSaveEntry: (WorkLogEntry) -> Unit,
-    onDeleteEntry: (String) -> Unit,
+    onSaveEntry: (WorkLogEntry, (Boolean) -> Unit) -> Unit,
+    onDeleteEntry: (String, (Boolean) -> Unit) -> Unit,
     onSaveSettings: (WorkLogSettings) -> Unit,
     onStartTimer: () -> Unit,
-    onStopTimer: (WorkLogEntry, () -> Unit) -> Unit,
+    onStopTimer: (WorkLogEntry, (Boolean) -> Unit) -> Unit,
     onExportCsv: (String, String) -> Unit,
     onBack: () -> Unit
 ) {
@@ -64,17 +64,30 @@ internal fun TimeLogScreen(
     var resetEditorToken by rememberSaveable { mutableIntStateOf(0) }
     var timerSaving by remember { mutableStateOf(false) }
     var timerSaved by remember { mutableStateOf(false) }
+    var longTimerStartedAt by remember { mutableStateOf<Long?>(null) }
+    var longTimerEnd by remember { mutableStateOf("") }
+    var longTimerError by remember { mutableStateOf<String?>(null) }
     val pendingDeletions = remember { mutableStateListOf<WorkLogEntry>() }
+    val pendingRestores = remember { mutableStateListOf<String>() }
     pendingDeletions.forEach { deleted ->
-        LaunchedEffect(deleted.id) {
-            delay(6_000)
-            if (pendingDeletions.any { it.id == deleted.id }) {
-                onDeleteEntry(deleted.id)
+        key(deleted.id) {
+            val restoring = deleted.id in pendingRestores
+            LaunchedEffect(deleted.id, restoring) {
+                if (restoring) return@LaunchedEffect
+                delay(6_000)
                 pendingDeletions.removeAll { it.id == deleted.id }
             }
         }
     }
     fun openNewEntry() { editor = null; timerSaved = false; resetEditorToken++; tabName = TimeLogTab.INSERT.name }
+    fun saveStoppedTimer(recorded: WorkLogEntry) {
+        timerSaving = true
+        onStopTimer(recorded) { saved ->
+            if (saved) editor = recorded
+            timerSaving = false
+            timerSaved = saved
+        }
+    }
     BackHandler {
         if (tab != TimeLogTab.DASHBOARD) tabName = TimeLogTab.DASHBOARD.name else onBack()
     }
@@ -116,8 +129,13 @@ internal fun TimeLogScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).organizerBackground()) {
             when (tab) {
-                TimeLogTab.DASHBOARD -> TimeLogDashboard(entries.filterNot { candidate -> pendingDeletions.any { it.id == candidate.id } }, settings.hourlyRateCents, { editor = it; tabName = TimeLogTab.INSERT.name }) { entry ->
-                    if (pendingDeletions.none { it.id == entry.id }) pendingDeletions += entry
+                TimeLogTab.DASHBOARD -> TimeLogDashboard(entries.filterNot { candidate -> pendingDeletions.any { it.id == candidate.id } }, settings.hourlyRateCents, { editor = it; timerSaved = false; resetEditorToken++; tabName = TimeLogTab.INSERT.name }) { entry ->
+                    if (pendingDeletions.none { it.id == entry.id }) {
+                        pendingDeletions += entry
+                        onDeleteEntry(entry.id) { saved ->
+                            if (!saved) pendingDeletions.removeAll { it.id == entry.id }
+                        }
+                    }
                 }
                 TimeLogTab.INSERT -> TimeLogEntryEditor(
                     existing = editor, resetToken = resetEditorToken, settings = settings,
@@ -126,29 +144,64 @@ internal fun TimeLogScreen(
                     onStopTimer = { startedAt ->
                         val start = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(startedAt), java.time.ZoneId.systemDefault())
                         val now = LocalDateTime.now()
-                        val recorded = WorkLogEntry(date = start.toLocalDate().toString(), startTime = start.toLocalTime().format(HourFormat), endTime = now.toLocalTime().format(HourFormat))
-                        timerSaving = true
-                        onStopTimer(recorded) {
-                            editor = recorded
-                            timerSaving = false
-                            timerSaved = true
+                        if (workTimerExceedsOneDay(startedAt, System.currentTimeMillis())) {
+                            longTimerStartedAt = startedAt
+                            longTimerEnd = now.toLocalTime().format(HourFormat)
+                            longTimerError = null
+                        } else {
+                            saveStoppedTimer(WorkLogEntry(date = start.toLocalDate().toString(), startTime = start.toLocalTime().format(HourFormat), endTime = now.toLocalTime().format(HourFormat)))
                         }
                     },
-                    onSave = { entry -> onSaveEntry(entry); editor = null; tabName = TimeLogTab.DASHBOARD.name },
+                    onSave = { entry -> onSaveEntry(entry) { saved -> if (saved) { editor = null; tabName = TimeLogTab.DASHBOARD.name } } },
                     onCancel = { editor = null; tabName = TimeLogTab.DASHBOARD.name }
                 )
-                TimeLogTab.SUMMARY -> TimeLogSummary(entries, settings.hourlyRateCents, onExportCsv)
+                TimeLogTab.SUMMARY -> TimeLogSummary(entries.filterNot { candidate -> pendingDeletions.any { it.id == candidate.id } }, settings.hourlyRateCents, onExportCsv)
                 TimeLogTab.SETTINGS -> TimeLogSettingsPage(settings, onSaveSettings)
             }
             Column(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = if (tab == TimeLogTab.DASHBOARD) 88.dp else 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 pendingDeletions.forEach { deleted ->
-                    TimeLogUndoCard(onUndo = { pendingDeletions.removeAll { it.id == deleted.id } })
+                    key(deleted.id) {
+                        TimeLogUndoCard(onUndo = {
+                            if (deleted.id !in pendingRestores) {
+                                pendingRestores += deleted.id
+                                onSaveEntry(deleted) { saved ->
+                                    if (saved) pendingDeletions.removeAll { it.id == deleted.id }
+                                    pendingRestores.remove(deleted.id)
+                                }
+                            }
+                        })
+                    }
                 }
             }
         }
+    }
+    longTimerStartedAt?.let { startedAt ->
+        val start = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(startedAt), java.time.ZoneId.systemDefault())
+        val startTime = start.toLocalTime().format(HourFormat)
+        AlertDialog(
+            onDismissRequest = { longTimerStartedAt = null },
+            containerColor = CardBlue,
+            title = { Text("Timer oltre 24 ore", color = MainText) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Il registro salva turni inferiori a 24 ore. Indica l'orario di fine del primo turno: il tempo restante dovrà essere aggiunto separatamente. Finché non confermi, il timer continua.", color = SoftText)
+                    TimeLogTimeField(value = longTimerEnd, label = "Ora di fine primo turno", onValueChange = { longTimerEnd = it; longTimerError = null }, modifier = Modifier.fillMaxWidth())
+                    longTimerError?.let { Text(it, color = Danger) }
+                }
+            },
+            dismissButton = { TextButton(onClick = { longTimerStartedAt = null }) { Text("Continua timer", color = SoftText) } },
+            confirmButton = { TextButton(onClick = {
+                val end = normalizeTime(longTimerEnd)
+                if (end == null || end == startTime) longTimerError = "Scegli un orario di fine diverso dall'inizio."
+                else {
+                    longTimerStartedAt = null
+                    saveStoppedTimer(WorkLogEntry(date = start.toLocalDate().toString(), startTime = startTime, endTime = end))
+                }
+            }) { Text("Salva primo turno", color = Gold) } }
+        )
     }
 }
 
@@ -167,7 +220,7 @@ private fun TimeLogHeader(hourlyRateCents: Long, activeTimerStartedAt: Long?, on
                 Text("Registro ore", color = MainText, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                 Text("Gestione ore e paga", color = SoftText, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             }
-            if (activeTimerStartedAt != null) TextButton(onClick = onOpenTimer, colors = ButtonDefaults.textButtonColors(contentColor = Danger)) { Text("● ${formatElapsed(elapsed)}", fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) }
+            if (activeTimerStartedAt != null) TextButton(onClick = onOpenTimer, colors = ButtonDefaults.textButtonColors(contentColor = Danger)) { Text("In corso ${formatElapsed(elapsed)}", fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) }
             else Text(
                 formatHourlyRate(hourlyRateCents), color = Gold, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold,
                 modifier = Modifier.background(CardBlueLight, RoundedCornerShape(50)).clickable { editRate = true }.semantics { contentDescription = "Modifica tariffa oraria" }.padding(horizontal = 10.dp, vertical = 7.dp)
@@ -211,7 +264,7 @@ private fun TimeLogDashboard(entries: List<WorkLogEntry>, rateCents: Long, onEdi
 @Composable
 private fun WorkOverviewCard(label: String, days: Int, minutes: Int, rateCents: Long) {
     Column(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(28.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("▣  $label", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text("$days ${if (days == 1) "giorno" else "giorni"}", color = MainText, fontSize = 11.sp, modifier = Modifier.background(CardBlueLight, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text("$days ${if (days == 1) "giorno" else "giorni"}", color = MainText, fontSize = 11.sp, modifier = Modifier.background(CardBlueLight, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
         Row(Modifier.fillMaxWidth()) {
             Column(Modifier.weight(1f)) { Text("Ore totali", color = SoftText, fontSize = 12.sp); Text(formatWorkMinutes(minutes), color = MainText, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold) }
             Column(Modifier.weight(1f).padding(start = 16.dp).border(1.dp, Gold.copy(alpha = .25f), RoundedCornerShape(1.dp)).padding(start = 16.dp)) { Text("Guadagno stimato", color = SoftText, fontSize = 12.sp); Text(formatCurrency(workEarningsCents(minutes, rateCents)), color = Success, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold) }
@@ -239,12 +292,19 @@ private fun WorkEntryCard(entry: WorkLogEntry, rateCents: Long, onEdit: () -> Un
 @Composable
 private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, timerSaving: Boolean, timerSaved: Boolean, onStartTimer: () -> Unit, onStopTimer: (Long) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
     val seed = remember(existing?.id, resetToken) { existing ?: WorkLogEntry(date = LocalDate.now().toString(), startTime = "09:00", endTime = "18:00", breakMinutes = 60) }
-    var dateText by rememberSaveable(seed.id) { mutableStateOf(formatItalianDate(seed.date)) }
-    var startText by rememberSaveable(seed.id) { mutableStateOf(seed.startTime) }
-    var endText by rememberSaveable(seed.id) { mutableStateOf(seed.endTime) }
-    var breakText by rememberSaveable(seed.id) { mutableStateOf(seed.breakMinutes.toString()) }
-    var notes by rememberSaveable(seed.id) { mutableStateOf(seed.notes) }
-    var error by rememberSaveable(seed.id) { mutableStateOf<String?>(null) }
+    var dateText by rememberSaveable(resetToken) { mutableStateOf(formatItalianDate(seed.date)) }
+    var startText by rememberSaveable(resetToken) { mutableStateOf(seed.startTime) }
+    var endText by rememberSaveable(resetToken) { mutableStateOf(seed.endTime) }
+    var breakText by rememberSaveable(resetToken) { mutableStateOf(seed.breakMinutes.toString()) }
+    var notes by rememberSaveable(resetToken) { mutableStateOf(seed.notes) }
+    var error by rememberSaveable(resetToken) { mutableStateOf<String?>(null) }
+    LaunchedEffect(existing?.id, timerSaved) {
+        if (timerSaved && existing != null) {
+            dateText = formatItalianDate(existing.date)
+            startText = existing.startTime
+            endText = existing.endTime
+        }
+    }
     val elapsed = rememberElapsed(activeTimerStartedAt)
     val parsedDate = parseItalianDate(dateText)
     val start = normalizeTime(startText)
@@ -253,10 +313,10 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
     LazyColumn(Modifier.fillMaxSize().widthIn(max = 600.dp), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Column(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(26.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(35.dp).background(Gold.copy(alpha = .15f), CircleShape), contentAlignment = Alignment.Center) { Text("◷", color = Gold, fontSize = 18.sp) }; Column(Modifier.padding(start = 10.dp).weight(1f)) { Text("Timer dal vivo", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Timbra entrata e uscita in tempo reale", color = SoftText, fontSize = 11.sp) }; Text(if (activeTimerStartedAt == null) "In attesa" else "In corso", color = if (activeTimerStartedAt == null) SoftText else Success, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(35.dp).background(Gold.copy(alpha = .15f), CircleShape), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.ic_nav_time_log), contentDescription = null, tint = Gold, modifier = Modifier.size(18.dp)) }; Column(Modifier.padding(start = 10.dp).weight(1f)) { Text("Timer dal vivo", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Timbra entrata e uscita in tempo reale", color = SoftText, fontSize = 11.sp) }; Text(if (activeTimerStartedAt == null) "In attesa" else "In corso", color = if (activeTimerStartedAt == null) SoftText else Success, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 Text(formatElapsed(elapsed), color = MainText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().background(NightBlue.copy(alpha = .25f), RoundedCornerShape(18.dp)).padding(13.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onStartTimer, enabled = activeTimerStartedAt == null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("▶  Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let(onStopTimer) }, enabled = activeTimerStartedAt != null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text(if (timerSaving) "Salvataggio…" else "■  Timbra uscita", fontSize = 12.sp) } }
-                if (timerSaved) Text("✓ Registrazione salvata. Puoi aggiungere note e dettagli qui sotto.", color = Success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onStartTimer, enabled = activeTimerStartedAt == null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let(onStopTimer) }, enabled = activeTimerStartedAt != null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text(if (timerSaving) "Salvataggio…" else "Timbra uscita", fontSize = 12.sp) } }
+                if (timerSaved) Text("Registrazione salvata. Puoi aggiungere note e dettagli qui sotto.", color = Success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
         item { TimeLogSectionTitle("Turni preimpostati", "Tocca un turno per compilare gli orari") }
@@ -277,7 +337,7 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
                     val safeDate = parsedDate
                     if (safeDate == null || start == null || end == null || minutes <= 0) error = "Controlla data e orari: la durata netta deve essere maggiore di zero."
                     else onSave(seed.copy(date = safeDate.toString(), startTime = start, endTime = end, breakMinutes = (breakText.toIntOrNull() ?: 0).coerceIn(0, 480), notes = notes.trim()))
-                }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)) { Text(if (existing == null) "✓  Salva registrazione" else "✓  Aggiorna registrazione", fontWeight = FontWeight.ExtraBold) }
+                }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)) { Text(if (existing == null) "Salva registrazione" else "Aggiorna registrazione", fontWeight = FontWeight.ExtraBold) }
             }
         }
     }
@@ -332,12 +392,12 @@ private fun TimeLogCalendar(entries: List<WorkLogEntry>, selectedDate: LocalDate
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Calendario", color = MainText, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { shownMonthText = shownMonth.minusMonths(1).toString() }) { Text("‹", color = Gold, fontSize = 24.sp) }
+                IconButton(onClick = { shownMonthText = shownMonth.minusMonths(1).toString() }) { Icon(painterResource(R.drawable.ic_arrow_left), contentDescription = "Mese precedente", tint = Gold) }
                 Text(
                     shownMonth.month.getDisplayName(TextStyle.FULL, Locale.ITALY).replaceFirstChar { it.titlecase(Locale.ITALY) } + " ${shownMonth.year}",
                     color = MainText, fontSize = 12.sp, fontWeight = FontWeight.Bold
                 )
-                TextButton(onClick = { shownMonthText = shownMonth.plusMonths(1).toString() }) { Text("›", color = Gold, fontSize = 24.sp) }
+                IconButton(onClick = { shownMonthText = shownMonth.plusMonths(1).toString() }) { Icon(painterResource(R.drawable.ic_arrow_right), contentDescription = "Mese successivo", tint = Gold) }
             }
             Row(Modifier.fillMaxWidth()) {
                 listOf("L", "M", "M", "G", "V", "S", "D").forEach { day ->
@@ -356,12 +416,14 @@ private fun TimeLogCalendar(entries: List<WorkLogEntry>, selectedDate: LocalDate
                             Column(
                                 modifier = Modifier.weight(1f).height(38.dp).padding(horizontal = 2.dp)
                                     .background(if (isSelected) Gold else if (count > 0) CardBlueLight else CardBlue, RoundedCornerShape(10.dp))
-                                    .clickable { onSelected(date) },
+                                    .clickable { onSelected(date) }.semantics {
+                                        contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.ITALY)) + ", $count ${if (count == 1) "registrazione" else "registrazioni"}" + if (isSelected) ", selezionato" else ""
+                                    },
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(day.toString(), color = if (isSelected) NightBlue else MainText, fontWeight = if (isSelected || count > 0) FontWeight.ExtraBold else FontWeight.Normal, fontSize = 11.sp)
-                                if (count > 0) Text("•".repeat(count.coerceAtMost(3)), color = if (isSelected) NightBlue else Gold, fontSize = 9.sp, lineHeight = 8.sp)
+                                if (count > 0) Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) { repeat(count.coerceAtMost(3)) { Box(Modifier.size(3.dp).background(if (isSelected) NightBlue else Gold, CircleShape)) } }
                             }
                         }
                     }
@@ -411,9 +473,9 @@ private fun TimeLogSummary(entries: List<WorkLogEntry>, rateCents: Long, onExpor
     val days = filtered.map { it.date }.distinct().size
     LazyColumn(Modifier.fillMaxSize().widthIn(max = 600.dp), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { TimeLogPeriodTabs(period, listOf("week" to "Settimana", "month" to "Mese", "all" to "Tutto")) { period = it } }
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { TimeLogStat("◷", "Ore lavorate", formatWorkMinutes(minutes), Modifier.weight(1f)); TimeLogStat("€", "Guadagno totale", formatCurrency(workEarningsCents(minutes, rateCents)), Modifier.weight(1f)) } }
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { TimeLogStat("▣", "Giorni lavorati", "$days", Modifier.weight(1f)); TimeLogStat("↗", "Media ore / giorno", formatWorkMinutes(if (days == 0) 0 else minutes / days), Modifier.weight(1f)) } }
-        item { Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Esporta report", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Scarica il foglio CSV del periodo", color = SoftText, fontSize = 12.sp) }; Button(onClick = { onExportCsv("TimeLog_Report_${period}_${LocalDate.now()}.csv", workCsv(filtered, rateCents)) }, shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue), enabled = filtered.isNotEmpty()) { Text("⇩  CSV") } } } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { TimeLogStat(R.drawable.ic_nav_time_log, "Ore lavorate", formatWorkMinutes(minutes), Modifier.weight(1f)); TimeLogStat(R.drawable.ic_time_rate, "Guadagno totale", formatCurrency(workEarningsCents(minutes, rateCents)), Modifier.weight(1f)) } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { TimeLogStat(R.drawable.ic_nav_calendar, "Giorni lavorati", "$days", Modifier.weight(1f)); TimeLogStat(R.drawable.ic_time_summary, "Media ore / giorno", formatWorkMinutes(if (days == 0) 0 else minutes / days), Modifier.weight(1f)) } }
+        item { Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Esporta report", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Scarica il foglio CSV del periodo", color = SoftText, fontSize = 12.sp) }; Button(onClick = { onExportCsv("TimeLog_Report_${period}_${LocalDate.now()}.csv", workCsv(filtered, rateCents)) }, shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue), enabled = filtered.isNotEmpty()) { Text("CSV") } } } }
         item { Text("Dettaglio tabellare · ${filtered.size} voci", color = MainText, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp) }
         if (filtered.isEmpty()) item { EmptyState("Nessun dato per questo periodo", "Aggiungi una registrazione per visualizzare le statistiche.") }
         else items(filtered, key = { it.id }) { entry -> Row(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(16.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(formatItalianDate(entry.date), color = MainText, fontWeight = FontWeight.Bold, fontSize = 13.sp); Text("${entry.startTime} – ${entry.endTime}", color = SoftText, fontSize = 11.sp) }; Text(formatWorkMinutes(workMinutes(entry)), color = MainText, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(formatCurrency(workEarningsCents(workMinutes(entry), rateCents)), color = Success, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.width(82.dp), textAlign = TextAlign.End) } }
@@ -484,11 +546,12 @@ private fun TimeLogSettingsPage(settings: WorkLogSettings, onSaveSettings: (Work
 }
 
 @Composable private fun TimeLogPeriodTabs(selected: String, choices: List<Pair<String, String>>, onSelected: (String) -> Unit) = Row(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(18.dp)).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) { choices.forEach { (key, label) -> Text(label, color = if (selected == key) NightBlue else SoftText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f).background(if (selected == key) Gold else CardBlue, RoundedCornerShape(14.dp)).clickable { onSelected(key) }.padding(vertical = 10.dp)) } }
-@Composable private fun TimeLogStat(symbol: String, label: String, value: String, modifier: Modifier) = Card(modifier, shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) { Column(Modifier.padding(15.dp)) { Text(symbol, color = Gold, fontSize = 18.sp); Text(label, color = SoftText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)); Text(value, color = MainText, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
+@Composable private fun TimeLogStat(icon: Int, label: String, value: String, modifier: Modifier) = Card(modifier, shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = CardBlue)) { Column(Modifier.padding(15.dp)) { Icon(painterResource(icon), contentDescription = null, tint = Gold, modifier = Modifier.size(20.dp)); Text(label, color = SoftText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)); Text(value, color = MainText, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
 @Composable private fun TimeLogSectionTitle(title: String, subtitle: String) = Column { Text(title, color = MainText, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp); Text(subtitle, color = SoftText, fontSize = 11.sp) }
 @Composable private fun TimeLogUndoCard(onUndo: () -> Unit) = Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) { Text("Voce eliminata", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); TextButton(onClick = onUndo) { Text("Annulla", color = Gold, fontWeight = FontWeight.ExtraBold) } } }
 
 private val HourFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+internal fun workTimerExceedsOneDay(startedAt: Long, now: Long): Boolean = now >= startedAt && now - startedAt >= 24L * 60 * 60 * 1_000
 internal fun workMinutes(entry: WorkLogEntry): Int = workMinutes(entry.startTime, entry.endTime, entry.breakMinutes)
 internal fun isOvernightWorkShift(start: String, end: String): Boolean = runCatching { LocalTime.parse(end, HourFormat).isBefore(LocalTime.parse(start, HourFormat)) }.getOrDefault(false)
 internal fun workMinutes(start: String, end: String, breakMinutes: Int): Int = runCatching { var result = java.time.Duration.between(LocalTime.parse(start, HourFormat), LocalTime.parse(end, HourFormat)).toMinutes(); if (result < 0) result += 24 * 60; (result - breakMinutes.coerceAtLeast(0)).coerceAtLeast(0).toInt() }.getOrDefault(0)

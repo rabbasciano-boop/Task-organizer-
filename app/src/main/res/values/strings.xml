@@ -40,6 +40,8 @@
     <string name="account_privacy_title">Privacy e dati</string>
     <string name="account_privacy_subtitle">Consensi, dati locali e cancellazione account</string>
     <string name="appearance_subtitle">Tema e colori dell\'app.</string>
+    <string name="completion_sounds">Suoni di completamento</string>
+    <string name="completion_sounds_description">Riproduci il suono del tema quando completi un’attività.</string>
     <string name="follow_phone_theme">Segui il tema del telefono</string>
     <string name="follow_phone_theme_description">Tema scuro quando il telefono è scuro e Carta Dorata quando è chiaro.</string>
     <string name="free_themes">Temi gratuiti</string>

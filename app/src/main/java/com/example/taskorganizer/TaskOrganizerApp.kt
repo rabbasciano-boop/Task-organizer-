@@ -150,7 +150,7 @@ internal fun TaskOrganizerApp(
         appScope.launch(Dispatchers.IO) { TaskWidgetUpdater.updateAll(context, archive) }
     }
 
-    fun updateArchive(change: (TaskArchive) -> TaskArchive, afterSaved: suspend (TaskArchive) -> Unit = {}) {
+    fun updateArchive(change: (TaskArchive) -> TaskArchive, onFailure: () -> Unit = {}, afterSaved: suspend (TaskArchive) -> Unit = {}) {
         appScope.launch {
             archiveUpdateMutex.withLock {
                 val result = withContext(Dispatchers.IO) { runCatching { store.update(change) } }
@@ -161,6 +161,7 @@ internal fun TaskOrganizerApp(
                     afterSaved(savedArchive)
                 } else {
                     storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
+                    onFailure()
                 }
             }
         }
@@ -207,31 +208,34 @@ internal fun TaskOrganizerApp(
     }
 
     fun toggleTaskById(taskId: String) {
-        val wasCompleted = tasks.firstOrNull { it.id == taskId }?.completed ?: return
+        var becameCompleted = false
         updateArchive(change = { disk ->
-            RecurrenceTiming.toggleTask(disk, taskId)
+            val wasCompleted = disk.tasks.firstOrNull { it.id == taskId }?.completed
+            val updated = RecurrenceTiming.toggleTask(disk, taskId)
+            becameCompleted = wasCompleted == false && updated.tasks.firstOrNull { it.id == taskId }?.completed == true
+            updated
         }) { updated ->
             if (updated.tasks.any { it.id == taskId }) {
                 withContext(Dispatchers.IO) {
                     RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
                 }
             }
-            if (!wasCompleted) ThemeCompletionSound.play(context, selectedTheme)
+            if (becameCompleted) ThemeCompletionSound.play(context, selectedTheme)
         }
     }
 
     fun completeTaskById(taskId: String) {
-        val wasCompleted = tasks.firstOrNull { it.id == taskId }?.completed ?: return
+        var becameCompleted = false
         updateArchive(change = { disk ->
             val current = disk.tasks.firstOrNull { it.id == taskId } ?: return@updateArchive disk
-            if (current.completed) disk else RecurrenceTiming.updateTask(disk, current.copy(completed = true))
+            if (current.completed) disk else RecurrenceTiming.updateTask(disk, current.copy(completed = true)).also { becameCompleted = true }
         }) { updated ->
             if (updated.tasks.any { it.id == taskId }) {
                 withContext(Dispatchers.IO) {
                     RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
                 }
             }
-            if (!wasCompleted) ThemeCompletionSound.play(context, selectedTheme)
+            if (becameCompleted) ThemeCompletionSound.play(context, selectedTheme)
         }
     }
 
@@ -477,23 +481,25 @@ internal fun TaskOrganizerApp(
                     entries = workLogEntries,
                     settings = workLogSettings,
                     activeTimerStartedAt = activeWorkTimerStartedAt,
-                    onSaveEntry = { entry ->
+                    onSaveEntry = { entry, onFinished ->
                         updateArchive(change = { disk ->
                             val index = disk.workLogEntries.indexOfFirst { it.id == entry.id }
                             disk.copy(workLogEntries = if (index >= 0) disk.workLogEntries.toMutableList().also { it[index] = entry } else disk.workLogEntries + entry)
-                        })
+                        }, onFailure = { onFinished(false) }) { onFinished(true) }
                     },
-                    onDeleteEntry = { entryId -> updateArchive(change = { disk -> disk.copy(workLogEntries = disk.workLogEntries.filterNot { it.id == entryId }) }) },
+                    onDeleteEntry = { entryId, onFinished ->
+                        updateArchive(change = { disk -> disk.copy(workLogEntries = disk.workLogEntries.filterNot { it.id == entryId }) }, onFailure = { onFinished(false) }) { onFinished(true) }
+                    },
                     onSaveSettings = { settings -> updateArchive(change = { disk -> disk.copy(workLogSettings = settings) }) },
                     onStartTimer = { updateArchive(change = { disk -> if (disk.activeWorkTimerStartedAt == null) disk.copy(activeWorkTimerStartedAt = System.currentTimeMillis()) else disk }) },
-                    onStopTimer = { recordedEntry, onSaved ->
+                    onStopTimer = { recordedEntry, onFinished ->
                         updateArchive(change = { disk ->
                             val index = disk.workLogEntries.indexOfFirst { it.id == recordedEntry.id }
                             disk.copy(
                                 workLogEntries = if (index >= 0) disk.workLogEntries.toMutableList().also { it[index] = recordedEntry } else disk.workLogEntries + recordedEntry,
                                 activeWorkTimerStartedAt = null
                             )
-                        }) { onSaved() }
+                        }, onFailure = { onFinished(false) }) { onFinished(true) }
                     },
                     onExportCsv = onExportWorkCsv,
                     onBack = { navigateToTab(0) }

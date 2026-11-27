@@ -2,6 +2,8 @@
 
 Questo documento conserva lo storico delle revisioni del progetto Task Organizer. Le revisioni originali erano analisi statiche: lo stato qui sotto viene aggiornato confrontandole con il codice effettivamente compilato e con i commit del repository.
 
+La revisione dei commit del 24 novembre e i test ancora da svolgere sono nel [registro aggiornato del 27 novembre](revisione-24-11-stato-2026-11-27.md).
+
 ## Revisione 1 — base di sicurezza, archivio e promemoria
 
 | Area verificata | Stato attuale | Interventi principali |

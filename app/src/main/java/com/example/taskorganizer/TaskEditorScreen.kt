@@ -389,7 +389,7 @@ private fun TaskEditorPreview(
         if (com.example.taskorganizer.ui.theme.OrganizerPalette.agendaReale) Color(0xFF240833) else Color.White
     } else if (cardColor == DefaultCardColor) MainText else Color(0xFFF7F9FC)
     val previewMuted = if (useSunsetGradient) {
-        if (com.example.taskorganizer.ui.theme.OrganizerPalette.agendaReale) Color(0xFF240833).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.86f)
+        if (com.example.taskorganizer.ui.theme.OrganizerPalette.agendaReale) Color(0xFF240833).copy(alpha = 0.78f) else Color.White
     } else if (cardColor == DefaultCardColor) SoftText else Color(0xFFD8E1EC)
     val reminderText = when (reminderMinutesBefore) {
         0 -> "All'orario"

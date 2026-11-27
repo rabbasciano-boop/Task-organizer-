@@ -5,13 +5,21 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
+import com.example.taskorganizer.ui.theme.OrganizerPalette
+import com.example.taskorganizer.ui.theme.OrganizerTheme
 
 /** Main destinations used by the app's bottom navigation. */
 sealed interface OrganizerScreen {
@@ -48,14 +56,18 @@ fun OrganizerNavigationBar(
         OrganizerScreen.bottomNavigation.forEach { screen ->
             val label = stringResource(screen.labelResource)
             val isSelected = selected == screen
+            val goldSelected = isSelected && OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA
             NavigationBarItem(
                 selected = isSelected,
                 onClick = { onSelected(screen) },
                 icon = {
-                    Icon(
-                        painter = painterResource(screen.icon),
-                        contentDescription = if (isSelected) null else label
-                    )
+                    if (goldSelected) {
+                        Box(Modifier.size(width = 64.dp, height = 32.dp).background(goldFoilBrush(alpha = .32f), RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
+                            Icon(painter = painterResource(screen.icon), contentDescription = null)
+                        }
+                    } else {
+                        Icon(painter = painterResource(screen.icon), contentDescription = if (isSelected) null else label)
+                    }
                 },
                 alwaysShowLabel = false,
                 label = {
@@ -70,7 +82,7 @@ fun OrganizerNavigationBar(
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = selectedColor,
                     selectedTextColor = selectedColor,
-                    indicatorColor = indicatorColor,
+                    indicatorColor = if (goldSelected) Color.Transparent else indicatorColor,
                     unselectedIconColor = mutedColor,
                     unselectedTextColor = mutedColor
                 )
