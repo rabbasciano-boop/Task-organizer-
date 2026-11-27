@@ -27,9 +27,21 @@ internal object ReminderTiming {
         if (remaining < MINUTE_MILLIS) return "Ora"
         val minutes = (remaining + MINUTE_MILLIS - 1) / MINUTE_MILLIS
         return when {
+            minutes == 1_440L -> "Tra 1 giorno"
+            minutes > 1_440L && minutes % 1_440L == 0L -> "Tra ${minutes / 1_440} giorni"
             minutes < 60 -> "Tra $minutes min"
             minutes % 60L == 0L -> "Tra ${minutes / 60} ${if (minutes == 60L) "ora" else "ore"}"
             else -> "Tra ${minutes / 60} h e ${minutes % 60} min"
+        }
+    }
+
+    fun notificationText(startAt: Long, now: Long, title: String): String {
+        val label = remainingLabel(startAt, now)
+        return when {
+            startAt > 0 && now - startAt >= MINUTE_MILLIS -> "Promemoria: $title"
+            label == "Ora" -> "È il momento di: $title"
+            label == "Tra 1 giorno" -> "Manca un giorno a: $title"
+            else -> "$label: $title"
         }
     }
 }

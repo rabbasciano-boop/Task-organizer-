@@ -17,6 +17,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TaskOrganizer">
         <receiver android:name=".TaskReminderReceiver" android:exported="false" />
+        <receiver android:name=".InactivityReceiver" android:exported="false" />
         <receiver
             android:name=".TaskOrganizerProgressWidgetProvider"
             android:exported="false"

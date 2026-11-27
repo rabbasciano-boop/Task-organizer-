@@ -70,6 +70,7 @@ fun SettingsScreen(
             onBack = ::goBack
         )
         "home" -> HomeSettingsScreen(onBack = ::goBack)
+        "notifications" -> NotificationSettingsScreen(onBack = ::goBack)
         "security" -> SecuritySettingsScreen(
             security = security,
             biometricAvailable = biometricAvailable,

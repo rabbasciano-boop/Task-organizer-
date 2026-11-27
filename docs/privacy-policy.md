@@ -24,6 +24,8 @@ Il backup manuale genera un file cifrato protetto dalla password scelta dall'ute
 
 Le notifiche vengono usate soltanto per gli avvisi configurati dall'utente. Il permesso può essere negato o revocato nelle impostazioni Android. La modalità sveglia può richiedere un'autorizzazione Android aggiuntiva per gli avvisi esatti.
 
+L'utente può scegliere di attivare messaggi facoltativi che invitano a riaprire l'app. Per calcolare quando inviarli, l'app conserva localmente l'ultima apertura e la preferenza scelta; non serve un account e queste informazioni non vengono inviate a un server. La funzione può essere disattivata nelle impostazioni dell'app.
+
 ## Conservazione ed eliminazione
 
 L'utente può cancellare i dati locali dalle opzioni dell'app. L'operazione elimina archivio cifrato, preferenze, widget, file di recupero e chiave di cifratura locale.

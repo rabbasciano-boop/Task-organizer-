@@ -160,7 +160,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
             .setContentTitle("Task Organizer")
             .setContentText("Hai un promemoria")
 
-        val timing = TaskReminderScheduler.remainingLabel(TaskReminderScheduler.taskStartAt(intent))
+        val message = ReminderTiming.notificationText(TaskReminderScheduler.taskStartAt(intent), System.currentTimeMillis(), TaskReminderScheduler.title(intent))
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, channelId) else Notification.Builder(context)
         val notificationDefaults = when {
             !isAlarm -> 0
@@ -176,8 +176,9 @@ class TaskReminderReceiver : BroadcastReceiver() {
         }
         val notification = builder
             .setSmallIcon(R.drawable.ic_stat_task_organizer)
-            .setContentTitle(if (isAlarm) "Promemoria importante · $timing" else timing)
-            .setContentText("${TaskReminderScheduler.title(intent)} alle ${TaskReminderScheduler.time(intent)}")
+            .setContentTitle(if (isAlarm) "Promemoria importante" else "Promemoria attività")
+            .setContentText("$message · ${TaskReminderScheduler.time(intent)}")
+            .setStyle(Notification.BigTextStyle().bigText("$message · ${TaskReminderScheduler.time(intent)}"))
             .setContentIntent(openApp)
             .setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -209,6 +210,7 @@ class ReminderBootReceiver : BroadcastReceiver() {
             } catch (_: Exception) {
                 // The encrypted archive remains untouched; recovery is available when the app opens.
             } finally {
+                runCatching { InactivityNotifications.reschedule(context.applicationContext) }
                 pendingResult.finish()
             }
         }.start()

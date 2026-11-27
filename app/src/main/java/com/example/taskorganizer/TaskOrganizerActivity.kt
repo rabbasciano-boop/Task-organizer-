@@ -285,6 +285,7 @@ open class TaskOrganizerActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
+        InactivityNotifications.markUsed(this)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

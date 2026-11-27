@@ -32,6 +32,22 @@ class SunsetContrastTest {
 
 class ReminderTimingTest {
     @Test
+    fun notificationTextUsesTheActualRemainingTimeAndAvoidsClaimingLateEventsAreNow() {
+        val day = 24L * 60 * 60 * 1000
+        assertEquals("Manca un giorno a: Visita", ReminderTiming.notificationText(day, 0, "Visita"))
+        assertEquals("Tra 15 min: Visita", ReminderTiming.notificationText(15 * 60_000L, 0, "Visita"))
+        assertEquals("È il momento di: Visita", ReminderTiming.notificationText(1_000L, 1_000L, "Visita"))
+        assertEquals("Promemoria: Visita", ReminderTiming.notificationText(1_000L, 61_001L, "Visita"))
+    }
+
+    @Test
+    fun inactivityStagesDontDeliverAnOldThreeDayMessageAfterTwoWeeks() {
+        val day = 24L * 60 * 60 * 1000
+        assertEquals(null, InactivityTiming.stageToDeliver(3 * day - 1))
+        assertEquals(0, InactivityTiming.stageToDeliver(3 * day))
+        assertEquals(1, InactivityTiming.stageToDeliver(14 * day))
+    }
+    @Test
     fun keepsTheFinalReminderWhenTheRepeatPlanExceedsTheLimit() {
         val startAt = 24L * 60 * 60 * 1000
         val triggers = ReminderTiming.plannedTriggerTimes(startAt, 24 * 60, 5)
