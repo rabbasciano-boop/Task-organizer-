@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -104,6 +105,27 @@ internal fun TimeLogScreen(
             )
         },
         bottomBar = {
+            Column {
+            if (pendingDeletions.isNotEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    pendingDeletions.forEach { deleted ->
+                        key(deleted.id) {
+                            TimeLogUndoCard(onUndo = {
+                                if (deleted.id !in pendingRestores) {
+                                    pendingRestores += deleted.id
+                                    onSaveEntry(deleted) { saved ->
+                                        if (saved) pendingDeletions.removeAll { it.id == deleted.id }
+                                        pendingRestores.remove(deleted.id)
+                                    }
+                                }
+                            })
+                        }
+                    }
+                }
+            }
             NavigationBar(containerColor = CardBlue) {
                 TimeLogTab.entries.forEach { item ->
                     NavigationBarItem(
@@ -118,6 +140,7 @@ internal fun TimeLogScreen(
                         )
                     )
                 }
+            }
             }
         },
         floatingActionButton = {
@@ -157,24 +180,6 @@ internal fun TimeLogScreen(
                 )
                 TimeLogTab.SUMMARY -> TimeLogSummary(entries.filterNot { candidate -> pendingDeletions.any { it.id == candidate.id } }, settings.hourlyRateCents, onExportCsv)
                 TimeLogTab.SETTINGS -> TimeLogSettingsPage(settings, onSaveSettings)
-            }
-            Column(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = if (tab == TimeLogTab.DASHBOARD) 88.dp else 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                pendingDeletions.forEach { deleted ->
-                    key(deleted.id) {
-                        TimeLogUndoCard(onUndo = {
-                            if (deleted.id !in pendingRestores) {
-                                pendingRestores += deleted.id
-                                onSaveEntry(deleted) { saved ->
-                                    if (saved) pendingDeletions.removeAll { it.id == deleted.id }
-                                    pendingRestores.remove(deleted.id)
-                                }
-                            }
-                        })
-                    }
-                }
             }
         }
     }
