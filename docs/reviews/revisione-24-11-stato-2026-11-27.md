@@ -35,7 +35,7 @@ Usare dati di prova e un backup aggiornato. Verificare eliminazione e annullamen
 - Agenda Reale riduce la frequenza delle scintille ambientali e rispetta l'impostazione di sistema che disabilita le animazioni. Verificare sul telefono, anche riattivando le animazioni.
 - Font Carta Dorata forniti con pesi espliciti, calendario con celle espandibili e data corrente aggiornata periodicamente.
 - Gli avvisi Annulla del Registro ore sopravvivono alla rotazione durante il periodo disponibile; l'eliminazione è comunque salvata subito.
-- Il thread audio si arresta dopo l'inattività; in caso di filtro Non disturbare sconosciuto resta applicata la politica audio Android. La provenienza e la licenza del suono di Carta Dorata restano da verificare prima di pubblicare.
+- Il thread audio si arresta dopo l'inattività; in caso di filtro Non disturbare sconosciuto resta applicata la politica audio Android.
 - Aggiornata la bozza dell'informativa con Registro ore e CSV; contatto e pubblicazione restano da completare.
 - Compilazione debug e test unitari riusciti; le prove manuali su dispositivo restano necessarie.
 
@@ -45,3 +45,9 @@ Usare dati di prova e un backup aggiornato. Verificare eliminazione e annullamen
 - Da verificare dopo la correzione: rispetto di Rimuovi animazioni e immediatezza delle scintille; leggibilità delle registrazioni con caratteri molto grandi; messaggi e salvataggio dal pulsante superiore in Sunset; Annulla dopo rotazione; intensità neon di Sunset scuro.
 - L'app aggiornata è stata installata sul telefono; compilazione e test unitari riusciti. Un test Compose isolato sul telefono ha verificato che il pulsante superiore inoltra la modifica valida in Sunset; rimane la prova del caso concreto dell'utente.
 - Timer oltre 24 ore rimandato su richiesta dell'utente. Il test di Non disturbare non è ancora confermato.
+
+## Fonte del suono Carta Dorata
+
+Il 27 novembre 2026 la proprietaria ha indicato che il suono fornito per Carta Dorata proviene da «Newspaper Foley 3» di floraphonic, scaricato gratuitamente da Pixabay. La [scheda Pixabay](https://pixabay.com/sound-effects/film-special-effects-newspaper-foley-3-196719/) indica l'uso secondo la [Pixabay Content License](https://pixabay.com/service/license-summary/). Le [FAQ di Pixabay](https://pixabay.com/service/faq/) indicano che l'inserimento in un'app è consentito anche per usi commerciali; non è consentita la distribuzione del suono come file autonomo.
+
+Il file incluso nell'app è identico, secondo il confronto SHA-256, al file «sound carta stropicciata.mp3» fornito dalla proprietaria. Non è stato confrontato direttamente con un download da Pixabay. Conservare il file scaricato, la pagina della risorsa e la prova del download e della licenza applicabile al momento del download, se disponibili; completare la verifica prima della distribuzione.
