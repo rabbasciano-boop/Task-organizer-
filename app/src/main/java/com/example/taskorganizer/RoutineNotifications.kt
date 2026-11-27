@@ -45,6 +45,14 @@ internal object RoutineNotifications {
     private fun key(notice: RoutineNotice) = "routine_notice_${notice.key}"
     fun enabled(context: Context, notice: RoutineNotice) = prefs(context).getBoolean(key(notice), false)
 
+    fun ensureChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(CHANNEL, context.getString(R.string.routine_channel), NotificationManager.IMPORTANCE_DEFAULT)
+            )
+        }
+    }
+
     fun setEnabled(context: Context, notice: RoutineNotice, enabled: Boolean) {
         prefs(context).edit().putBoolean(key(notice), enabled).apply()
         cancel(context, notice)
@@ -89,9 +97,7 @@ internal object RoutineNotifications {
             if (prefs(context).getString(deliveryDateKey, null) == today) return
             if (!TaskReminderScheduler.notificationsAllowed(context)) return
             val manager = context.getSystemService(NotificationManager::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                manager.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.routine_channel), NotificationManager.IMPORTANCE_DEFAULT))
-            }
+            ensureChannel(context)
             val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val text = context.getString(notice.body)
             val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL) else Notification.Builder(context)

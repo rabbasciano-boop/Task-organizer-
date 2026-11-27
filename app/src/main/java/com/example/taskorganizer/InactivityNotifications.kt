@@ -35,6 +35,14 @@ internal object InactivityNotifications {
     private fun preferences(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     fun enabled(context: Context): Boolean = preferences(context).getBoolean(ENABLED, false)
 
+    fun ensureChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(CHANNEL, context.getString(R.string.inactivity_channel), NotificationManager.IMPORTANCE_DEFAULT)
+            )
+        }
+    }
+
     fun setEnabled(context: Context, value: Boolean) {
         preferences(context).edit().putBoolean(ENABLED, value).apply()
         if (value) markUsed(context) else cancel(context)
@@ -88,9 +96,7 @@ internal object InactivityNotifications {
         if (stage != InactivityTiming.stageToDeliver(System.currentTimeMillis() - baseline) || stage <= prefs.getInt(SHOWN_STAGE, -1)) return
         if (!TaskReminderScheduler.notificationsAllowed(context)) return
         val manager = context.getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.inactivity_channel), NotificationManager.IMPORTANCE_DEFAULT))
-        }
+        ensureChannel(context)
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL) else Notification.Builder(context)
         val message = context.getString(if (stage == 0) R.string.inactivity_message_first else R.string.inactivity_message_second)

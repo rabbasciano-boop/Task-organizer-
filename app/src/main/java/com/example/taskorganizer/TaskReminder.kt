@@ -84,6 +84,8 @@ object TaskReminderScheduler {
             )
         }
         manager.createNotificationChannel(alarmChannel)
+        InactivityNotifications.ensureChannel(context)
+        RoutineNotifications.ensureChannel(context)
     }
 
     fun notificationsAllowed(context: Context): Boolean {
