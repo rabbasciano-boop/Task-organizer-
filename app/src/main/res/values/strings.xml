@@ -113,7 +113,7 @@
     <string name="notification_setup_reminders_description">Le notifiche ti aiutano a ricordare le attività e gli impegni agli orari che scegli.</string>
     <string name="notification_setup_reminders_note">Decidi tu quando ricevere gli avvisi</string>
     <string name="notification_setup_control_title">Hai il controllo</string>
-    <string name="notification_setup_control_description">Dopo l’attivazione potrai scegliere quali messaggi ricevere e disattivarli nelle Impostazioni. Puoi anche modificare il permesso nelle impostazioni del telefono.</string>
+    <string name="notification_setup_control_description">Dopo l’attivazione puoi disattivare le notifiche nelle impostazioni del telefono.</string>
     <string name="notification_setup_control_note">Scelte modificabili</string>
     <string name="notification_setup_button">Attiva le notifiche</string>
     <string name="notification_setup_denied">Se hai già negato il permesso, si apriranno le impostazioni del telefono: attiva le notifiche e torna qui.</string>

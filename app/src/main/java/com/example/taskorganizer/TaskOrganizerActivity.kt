@@ -156,6 +156,20 @@ open class TaskOrganizerActivity : FragmentActivity() {
                     notificationSetupPending = false
                 }
             }
+            LaunchedEffect(privacyAcknowledged, notificationSetupPending) {
+                if (privacyAcknowledged && notificationSetupPending && !notificationPermissionAllowed && !preferences.getBoolean("notification_permission_requested", false)) {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        preferences.edit().putBoolean("notification_permission_requested", true).apply()
+                    }
+                    requestNotificationPermission()
+                }
+            }
+            LaunchedEffect(privacyAcknowledged, notificationPermissionAllowed) {
+                if (privacyAcknowledged && notificationPermissionAllowed) {
+                    InactivityNotifications.markUsed(this@TaskOrganizerActivity)
+                    RoutineNotifications.rescheduleAll(this@TaskOrganizerActivity)
+                }
+            }
             LaunchedEffect(session.showOpening) {
                 if (!session.showOpening) return@LaunchedEffect
                 delay(1_250)
@@ -296,6 +310,7 @@ open class TaskOrganizerActivity : FragmentActivity() {
         super.onResume()
         notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
         InactivityNotifications.markUsed(this)
+        RoutineNotifications.rescheduleAll(this)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

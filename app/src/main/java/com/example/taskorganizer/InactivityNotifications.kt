@@ -2,7 +2,6 @@ package com.example.taskorganizer
 
 import android.app.AlarmManager
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -21,32 +20,17 @@ internal object InactivityTiming {
     }
 }
 
-/** Optional local-only reminders; never reads activities or contacts a server. */
+/** Local reminders; never reads activities or contacts a server. */
 internal object InactivityNotifications {
     private const val PREFS = "task_organizer_settings"
-    private const val ENABLED = "inactivity_notifications_enabled"
     private const val LAST_USED = "inactivity_last_used"
     private const val SHOWN_STAGE = "inactivity_shown_stage"
-    private const val CHANNEL = "optional_inactivity_reminders"
     private const val BASELINE = "last_used"
     private const val STAGE = "stage"
     private const val NOTIFICATION_ID = 99281
 
     private fun preferences(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    fun enabled(context: Context): Boolean = preferences(context).getBoolean(ENABLED, false)
-
-    fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL, context.getString(R.string.inactivity_channel), NotificationManager.IMPORTANCE_DEFAULT)
-            )
-        }
-    }
-
-    fun setEnabled(context: Context, value: Boolean) {
-        preferences(context).edit().putBoolean(ENABLED, value).apply()
-        if (value) markUsed(context) else cancel(context)
-    }
+    private fun enabled(context: Context): Boolean = preferences(context).getBoolean("privacy_acknowledged", false)
 
     fun markUsed(context: Context) {
         if (!enabled(context)) return
@@ -96,9 +80,10 @@ internal object InactivityNotifications {
         if (stage != InactivityTiming.stageToDeliver(System.currentTimeMillis() - baseline) || stage <= prefs.getInt(SHOWN_STAGE, -1)) return
         if (!TaskReminderScheduler.notificationsAllowed(context)) return
         val manager = context.getSystemService(NotificationManager::class.java)
-        ensureChannel(context)
+        TaskReminderScheduler.ensureNotificationChannels(context)
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL) else Notification.Builder(context)
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, TaskReminderScheduler.REMINDER_CHANNEL) else Notification.Builder(context)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) builder.setDefaults(Notification.DEFAULT_SOUND)
         val message = context.getString(if (stage == 0) R.string.inactivity_message_first else R.string.inactivity_message_second)
         val notification = builder.setSmallIcon(R.drawable.ic_stat_task_organizer)
             .setContentTitle(context.getString(R.string.app_name)).setContentText(message)

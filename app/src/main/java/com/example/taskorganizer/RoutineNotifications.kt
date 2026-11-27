@@ -2,7 +2,6 @@ package com.example.taskorganizer
 
 import android.app.AlarmManager
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -34,30 +33,14 @@ internal object RoutineTiming {
     }
 }
 
-/** Independent opt-in notices, scheduled locally without reading the user's tasks. */
+/** Local notices, scheduled without reading the user's tasks. */
 internal object RoutineNotifications {
     private const val PREFS = "task_organizer_settings"
-    private const val CHANNEL = "optional_routine_notices"
     private const val EXTRA_KIND = "kind"
     private const val EXTRA_WHEN = "scheduled_at"
     private const val NOTIFICATION_BASE = 99310
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private fun key(notice: RoutineNotice) = "routine_notice_${notice.key}"
-    fun enabled(context: Context, notice: RoutineNotice) = prefs(context).getBoolean(key(notice), false)
-
-    fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL, context.getString(R.string.routine_channel), NotificationManager.IMPORTANCE_DEFAULT)
-            )
-        }
-    }
-
-    fun setEnabled(context: Context, notice: RoutineNotice, enabled: Boolean) {
-        prefs(context).edit().putBoolean(key(notice), enabled).apply()
-        cancel(context, notice)
-        if (enabled) schedule(context, notice)
-    }
+    private fun enabled(context: Context) = prefs(context).getBoolean("privacy_acknowledged", false)
 
     private fun pending(context: Context, notice: RoutineNotice, scheduledAt: Long, flags: Int): PendingIntent? {
         val intent = Intent(context, RoutineNotificationReceiver::class.java)
@@ -73,10 +56,10 @@ internal object RoutineNotifications {
     }
 
     fun cancelAll(context: Context) = RoutineNotice.entries.forEach { cancel(context, it) }
-    fun rescheduleAll(context: Context) = RoutineNotice.entries.filter { enabled(context, it) }.forEach { schedule(context, it) }
+    fun rescheduleAll(context: Context) = RoutineNotice.entries.forEach { schedule(context, it) }
 
     private fun schedule(context: Context, notice: RoutineNotice) {
-        if (!enabled(context, notice)) return
+        if (!enabled(context)) return
         val at = RoutineTiming.next(notice, ZonedDateTime.now()).toInstant().toEpochMilli()
         val alarm = pending(context, notice, at, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
         context.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, alarm)
@@ -84,7 +67,7 @@ internal object RoutineNotifications {
 
     fun receive(context: Context, intent: Intent) {
         val notice = RoutineNotice.entries.firstOrNull { it.key == intent.getStringExtra(EXTRA_KIND) } ?: return
-        if (!enabled(context, notice)) return
+        if (!enabled(context)) return
         try {
             val scheduled = intent.getLongExtra(EXTRA_WHEN, 0L)
             val zone = ZoneId.systemDefault()
@@ -97,10 +80,11 @@ internal object RoutineNotifications {
             if (prefs(context).getString(deliveryDateKey, null) == today) return
             if (!TaskReminderScheduler.notificationsAllowed(context)) return
             val manager = context.getSystemService(NotificationManager::class.java)
-            ensureChannel(context)
+            TaskReminderScheduler.ensureNotificationChannels(context)
             val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val text = context.getString(notice.body)
-            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL) else Notification.Builder(context)
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, TaskReminderScheduler.REMINDER_CHANNEL) else Notification.Builder(context)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) builder.setDefaults(Notification.DEFAULT_SOUND)
             val notification = builder.setSmallIcon(R.drawable.ic_stat_task_organizer)
                 .setContentTitle(context.getString(notice.title)).setContentText(text)
                 .setStyle(Notification.BigTextStyle().bigText(text)).setContentIntent(open)

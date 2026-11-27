@@ -90,7 +90,7 @@ fun PrivacyConsentScreen(onContinueAsGuest: () -> Unit) {
             )
             InfoCard(
                 "Niente pubblicità o tracciamento",
-                "Non vendiamo dati, non mostriamo pubblicità e non analizziamo le tue attività. Per completare la configurazione ti chiederemo di attivare le notifiche; potrai poi gestire i singoli avvisi.",
+                "Non vendiamo dati, non mostriamo pubblicità e non analizziamo le tue attività.",
                 "Trasparenza"
             )
             Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -69,7 +69,6 @@ internal fun SettingsHubScreen(signedInAccount: SignedInAccount?, onOpen: (Strin
         SettingsNavigationCard("👤", stringResource(R.string.settings_account_title), stringResource(R.string.settings_account_subtitle)) { onOpen("account") }
         SettingsNavigationCard("🎨", stringResource(R.string.settings_appearance_title), stringResource(R.string.settings_appearance_subtitle)) { onOpen("appearance") }
         SettingsNavigationCard("⌂", stringResource(R.string.settings_home_title), stringResource(R.string.settings_home_subtitle)) { onOpen("home") }
-        SettingsNavigationCard("🔔", stringResource(R.string.inactivity_settings_title), stringResource(R.string.inactivity_settings_subtitle)) { onOpen("notifications") }
         SettingsNavigationCard("🔒", stringResource(R.string.settings_security_title), stringResource(R.string.settings_security_subtitle)) { onOpen("security") }
         SettingsNavigationCard("ⓘ", stringResource(R.string.settings_information_title), stringResource(R.string.settings_information_subtitle)) { onOpen("information") }
     }

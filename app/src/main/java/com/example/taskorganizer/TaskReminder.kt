@@ -18,6 +18,8 @@ import java.time.LocalTime
 import java.time.ZoneId
 
 object TaskReminderScheduler {
+    internal const val REMINDER_CHANNEL = "task_reminders"
+    internal const val ALARM_CHANNEL = "task_alarm_reminders"
     private const val ACTION_REMINDER = "com.example.taskorganizer.REMINDER"
     private const val EXTRA_TASK_ID = "task_id"
     private const val EXTRA_INDEX = "reminder_index"
@@ -72,20 +74,20 @@ object TaskReminderScheduler {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel("task_reminders", "Promemoria attività", NotificationManager.IMPORTANCE_HIGH)
+            NotificationChannel(REMINDER_CHANNEL, "Promemoria", NotificationManager.IMPORTANCE_HIGH)
         )
-        val alarmChannel = NotificationChannel("task_alarm_reminders", "Sveglie attività", NotificationManager.IMPORTANCE_HIGH).apply {
+        val alarmChannel = NotificationChannel(ALARM_CHANNEL, "Sveglie", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Promemoria con suono e vibrazione"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 700)
             setSound(
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
                 AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
             )
         }
         manager.createNotificationChannel(alarmChannel)
-        InactivityNotifications.ensureChannel(context)
-        RoutineNotifications.ensureChannel(context)
+        manager.deleteNotificationChannel("optional_inactivity_reminders")
+        manager.deleteNotificationChannel("optional_routine_notices")
     }
 
     fun notificationsAllowed(context: Context): Boolean {
@@ -149,7 +151,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
         TaskReminderScheduler.ensureNotificationChannels(context)
         val manager = context.getSystemService(NotificationManager::class.java)
         val isAlarm = TaskReminderScheduler.isAlarm(intent)
-        val channelId = if (isAlarm) "task_alarm_reminders" else "task_reminders"
+        val channelId = if (isAlarm) TaskReminderScheduler.ALARM_CHANNEL else TaskReminderScheduler.REMINDER_CHANNEL
         val openApp = PendingIntent.getActivity(
             context,
             0,
@@ -165,14 +167,14 @@ class TaskReminderReceiver : BroadcastReceiver() {
         val message = ReminderTiming.notificationText(TaskReminderScheduler.taskStartAt(intent), System.currentTimeMillis(), TaskReminderScheduler.title(intent))
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, channelId) else Notification.Builder(context)
         val notificationDefaults = when {
-            !isAlarm -> 0
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> Notification.DEFAULT_ALL
-            else -> Notification.DEFAULT_VIBRATE
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> 0
+            isAlarm -> Notification.DEFAULT_VIBRATE or Notification.DEFAULT_SOUND
+            else -> Notification.DEFAULT_SOUND
         }
         if (isAlarm && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             builder
                 .setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
                     AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
                 )
         }
