@@ -89,7 +89,7 @@
     <string name="information_support_description">Prima della pubblicazione verrà indicato qui un canale di assistenza ufficiale.</string>
     <string name="information_preparing">In preparazione</string>
     <string name="inactivity_settings_title">Notifiche</string>
-    <string name="inactivity_settings_subtitle">Promemoria per tornare nell’app</string>
+    <string name="inactivity_settings_subtitle">Avvisi e promemoria facoltativi</string>
     <string name="inactivity_toggle_title">Ricordami di tornare</string>
     <string name="inactivity_toggle_description">Se non apri l’app, ricevi un messaggio dopo circa 3 giorni e uno dopo circa 2 settimane. Puoi disattivarli quando vuoi.</string>
     <string name="inactivity_permission_notice">Per ricevere i messaggi, consenti anche le notifiche nelle impostazioni del telefono.</string>
@@ -97,4 +97,14 @@
     <string name="inactivity_channel">Inviti a tornare nell’app</string>
     <string name="inactivity_message_first">Hai nuovi impegni da organizzare? Ti aspettiamo!</string>
     <string name="inactivity_message_second">Ci manchi! Quando vuoi, siamo qui per aiutarti a organizzare le tue giornate.</string>
+    <string name="routine_channel">Promemoria organizzazione</string>
+    <string name="routine_list_title">La tua lista ti aspetta ✅</string>
+    <string name="routine_list_body">Hai delle attività da organizzare? Apri Task Organizer quando vuoi.</string>
+    <string name="routine_work_title">Il tuo Registro ore 🕒</string>
+    <string name="routine_work_body">Vuoi aggiungere le ore lavorate? Il registro è pronto.</string>
+    <string name="routine_weekly_title">Un riepilogo per te 📊</string>
+    <string name="routine_weekly_body">Dai un’occhiata alle attività della settimana.</string>
+    <string name="routine_list_description">Ogni giorno, intorno alle 8:00.</string>
+    <string name="routine_work_description">Ogni mercoledì, intorno alle 19:00.</string>
+    <string name="routine_weekly_description">Ogni domenica, intorno alle 18:00.</string>
 </resources>

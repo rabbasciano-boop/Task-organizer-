@@ -32,6 +32,20 @@ class SunsetContrastTest {
 
 class ReminderTimingTest {
     @Test
+    fun routineNoticesChooseTheNextLocalOccurrenceAcrossDaylightSaving() {
+        val rome = java.time.ZoneId.of("Europe/Rome")
+        val saturday = java.time.ZonedDateTime.of(2026, 3, 28, 9, 0, 0, 0, rome)
+        val daily = RoutineTiming.next(RoutineNotice.LIST, saturday)
+        assertEquals(java.time.LocalDate.of(2026, 3, 29), daily.toLocalDate())
+        assertEquals(java.time.LocalTime.of(8, 0), daily.toLocalTime())
+        assertEquals("+02:00", daily.offset.id)
+        val sunday = RoutineTiming.next(RoutineNotice.WEEKLY, saturday)
+        assertEquals(java.time.LocalDate.of(2026, 3, 29), sunday.toLocalDate())
+        assertEquals(java.time.LocalTime.of(18, 0), sunday.toLocalTime())
+        assertEquals(java.time.DayOfWeek.WEDNESDAY, RoutineTiming.next(RoutineNotice.WORK, sunday).dayOfWeek)
+        assertEquals(daily.toLocalDate().plusDays(1), RoutineTiming.next(RoutineNotice.LIST, daily).toLocalDate())
+    }
+    @Test
     fun notificationTextUsesTheActualRemainingTimeAndAvoidsClaimingLateEventsAreNow() {
         val day = 24L * 60 * 60 * 1000
         assertEquals("Manca un giorno a: Visita", ReminderTiming.notificationText(day, 0, "Visita"))

@@ -26,6 +26,8 @@ Le notifiche vengono usate soltanto per gli avvisi configurati dall'utente. Il p
 
 L'utente può scegliere di attivare messaggi facoltativi che invitano a riaprire l'app. Per calcolare quando inviarli, l'app conserva localmente l'ultima apertura e la preferenza scelta; non serve un account e queste informazioni non vengono inviate a un server. La funzione può essere disattivata nelle impostazioni dell'app.
 
+L'utente può anche attivare separatamente tre messaggi generici per la lista, il Registro ore e il riepilogo settimanale. Gli avvisi vengono programmati localmente e non leggono i contenuti delle attività; si possono disattivare dalle impostazioni dell'app.
+
 ## Conservazione ed eliminazione
 
 L'utente può cancellare i dati locali dalle opzioni dell'app. L'operazione elimina archivio cifrato, preferenze, widget, file di recupero e chiave di cifratura locale.

@@ -308,6 +308,7 @@ internal fun TaskOrganizerApp(
             }
             result.onSuccess {
                 InactivityNotifications.cancel(context)
+                RoutineNotifications.cancelAll(context)
                 remindersToCancel.forEach { TaskReminderScheduler.cancel(context, it) }
                 tasks.clear()
                 deletedTasks.clear()

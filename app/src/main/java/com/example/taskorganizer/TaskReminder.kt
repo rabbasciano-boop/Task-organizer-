@@ -211,6 +211,7 @@ class ReminderBootReceiver : BroadcastReceiver() {
                 // The encrypted archive remains untouched; recovery is available when the app opens.
             } finally {
                 runCatching { InactivityNotifications.reschedule(context.applicationContext) }
+                runCatching { RoutineNotifications.rescheduleAll(context.applicationContext) }
                 pendingResult.finish()
             }
         }.start()
