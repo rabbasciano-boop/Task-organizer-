@@ -297,6 +297,36 @@ class ArchiveIdNormalizationTest {
 
 class TimeLogCalculationTest {
     @Test
+    fun themeSoundsRespectMuteAndKnownDoNotDisturb() {
+        val normal = android.media.AudioManager.RINGER_MODE_NORMAL
+        val all = android.app.NotificationManager.INTERRUPTION_FILTER_ALL
+        assertTrue(completionSoundAllowed(true, normal, all))
+        assertTrue(completionSoundAllowed(true, normal, android.app.NotificationManager.INTERRUPTION_FILTER_UNKNOWN))
+        assertTrue(!completionSoundAllowed(false, normal, all))
+        assertTrue(!completionSoundAllowed(true, android.media.AudioManager.RINGER_MODE_SILENT, all))
+        assertTrue(!completionSoundAllowed(true, normal, android.app.NotificationManager.INTERRUPTION_FILTER_NONE))
+    }
+    @Test
+    fun shortTimerIsNotSavedAndLongTimerKeepsAllMinutes() {
+        val start = LocalDateTime.of(2026, 11, 27, 9, 15, 20)
+        assertTrue(timerWorkEntries(start, start.plusSeconds(30), 0, "").isEmpty())
+        val entries = timerWorkEntries(start, start.plusHours(30), 30, " Progetto ")
+        assertEquals(3, entries.size)
+        assertEquals(30 * 60 - 30, entries.sumOf { workMinutes(it) })
+        assertEquals(30, entries.sumOf { it.breakMinutes })
+        assertTrue(entries.all { it.notes == "Progetto" })
+        assertEquals(entries.size, entries.map { it.id }.distinct().size)
+        assertEquals("2026-11-28", entries.last().date)
+    }
+
+    @Test
+    fun overnightTimerIsRepresentedWithoutLosingMinutes() {
+        val start = LocalDateTime.of(2026, 11, 27, 23, 30)
+        val entries = timerWorkEntries(start, start.plusHours(1), 0, "")
+        assertEquals(1, entries.size)
+        assertEquals(60, workMinutes(entries.single()))
+    }
+    @Test
     fun stoppedTimerKeepsItsBreakAndNotesInTheRecordedEntry() {
         val entry = timerWorkEntry(LocalDateTime.of(2026, 11, 27, 9, 15), LocalTime.of(12, 45), 30, "  Cliente Rossi  ")
 

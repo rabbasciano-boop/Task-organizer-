@@ -48,6 +48,16 @@ internal fun readableSunsetColor(color: Color, alpha: Float): Color {
     return shade.copy(alpha = alpha)
 }
 
+/** Lighten royal card colors enough for the dark labels, even on a dark background. */
+internal fun readableRoyalColor(color: Color): Color {
+    var shade = color
+    repeat(20) {
+        if (shade.copy(alpha = .88f).compositeOver(Color.Black).luminance() >= .36f) return shade.copy(alpha = .88f)
+        shade = lerp(shade, Color.White, .12f)
+    }
+    return shade.copy(alpha = .88f)
+}
+
 @Composable
 internal fun sunsetTaskBrush(cardColor: String): Brush {
     if (OrganizerPalette.agendaReale && cardColor == DefaultCardColor) {
@@ -65,7 +75,7 @@ internal fun sunsetTaskBrush(cardColor: String): Brush {
             listOf(Color(0xFFF59E42), Color(0xFFEA6A47), Color(0xFFD94E7A))
         }
     }
-    return Brush.linearGradient(colors.map { if (OrganizerPalette.sunsetGlow) readableSunsetColor(it, .88f) else it.copy(alpha = .88f) })
+    return Brush.linearGradient(colors.map { if (OrganizerPalette.sunsetGlow) readableSunsetColor(it, .88f) else readableRoyalColor(it) })
 }
 
 @Composable
@@ -105,12 +115,12 @@ internal fun Modifier.sunsetGlow(shape: Shape = RoundedCornerShape(20.dp), stron
             // Layered translucent outlines make a visible halo, with the centre
             // excluded so no unwanted shapes appear inside transparent cards.
             clipPath(outlinePath, clipOp = ClipOp.Difference) {
-                for (layer in 8 downTo 1) {
-                    val fraction = layer / 8f
+                for (layer in 5 downTo 1) {
+                    val fraction = layer / 5f
                     drawOutline(
                         rounded,
                         color = (if (layer % 2 == 0) glowSecondary else glowColor)
-                            .copy(alpha = ((if (strong) .105f else .075f) * intensity * (1f - fraction * .65f)).coerceIn(0f, 1f)),
+                            .copy(alpha = ((if (strong) .145f else .105f) * intensity * (1f - fraction * .65f)).coerceIn(0f, 1f)),
                         style = Stroke(width = glowRadius * fraction * 2f)
                     )
                 }

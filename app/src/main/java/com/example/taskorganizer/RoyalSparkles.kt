@@ -1,10 +1,17 @@
 package com.example.taskorganizer
 
+import android.animation.ValueAnimator
+import android.database.ContentObserver
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -19,10 +26,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -46,11 +55,25 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
     var size by remember { androidx.compose.runtime.mutableStateOf(IntSize.Zero) }
     var frame by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val context = LocalContext.current
+    fun animationsEnabled(): Boolean = try {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f &&
+            (Build.VERSION.SDK_INT < 26 || ValueAnimator.areAnimatorsEnabled())
+    } catch (_: SecurityException) { true }
+    var systemAnimationsEnabled by remember { androidx.compose.runtime.mutableStateOf(animationsEnabled()) }
+    DisposableEffect(context) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { systemAnimationsEnabled = animationsEnabled() }
+        }
+        context.contentResolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer)
+        onDispose { context.contentResolver.unregisterContentObserver(observer) }
+    }
+    val effectsEnabled = enabled && systemAnimationsEnabled
 
     // Opening the keyboard changes the available height; keep existing sparkles
     // alive instead of restarting the animation on every resize.
-    LaunchedEffect(enabled, size) {
-        if (!enabled) {
+    LaunchedEffect(effectsEnabled, size) {
+        if (!effectsEnabled) {
             particles.clear()
             return@LaunchedEffect
         }
@@ -65,13 +88,14 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
         })
     }
 
-    LaunchedEffect(enabled, lifecycle) {
-        if (!enabled) return@LaunchedEffect
+    LaunchedEffect(effectsEnabled, lifecycle) {
+        if (!effectsEnabled) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             var previousFrame = 0L
             while (true) {
+                delay(if (particles.any { !it.ambient }) 16L else 50L)
                 withFrameNanos { now ->
-                    val step = if (previousFrame == 0L) 1f else ((now - previousFrame) / 16_666_667f).coerceIn(0f, 2f)
+                    val step = if (previousFrame == 0L) 1f else ((now - previousFrame) / 16_666_667f).coerceIn(0f, 4f)
                     previousFrame = now
                     val iterator = particles.listIterator()
                     while (iterator.hasNext()) {
@@ -94,7 +118,7 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
         }
     }
 
-    val observeTaps = if (enabled) Modifier.pointerInput(enabled) {
+    val observeTaps = if (effectsEnabled) Modifier.pointerInput(effectsEnabled) {
         awaitPointerEventScope {
             while (true) {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -132,7 +156,7 @@ internal fun RoyalSparklesContainer(enabled: Boolean, content: @Composable () ->
 
     Box(Modifier.fillMaxSize().onSizeChanged { size = it }.then(observeTaps)) {
         content()
-        if (enabled) Canvas(Modifier.fillMaxSize()) {
+        if (effectsEnabled) Canvas(Modifier.fillMaxSize()) {
             @Suppress("UNUSED_VARIABLE") val redraw = frame
             particles.forEach { particle ->
                 val color = particle.color.copy(alpha = particle.alpha.coerceIn(0f, 1f))

@@ -24,7 +24,9 @@ internal object ThemeCompletionSound {
     private const val sampleRate = 22_050
     private const val preferencesName = "task_organizer_settings"
     private const val soundsEnabledKey = "completion_sounds_enabled"
-    private val soundExecutor = ThreadPoolExecutor(1, 1, 10, TimeUnit.SECONDS, ArrayBlockingQueue(1), ThreadPoolExecutor.DiscardPolicy())
+    private val soundExecutor = ThreadPoolExecutor(1, 1, 10, TimeUnit.SECONDS, ArrayBlockingQueue(1), ThreadPoolExecutor.DiscardPolicy()).apply {
+        allowCoreThreadTimeOut(true)
+    }
 
     fun isEnabled(context: Context): Boolean = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).getBoolean(soundsEnabledKey, true)
 
@@ -38,8 +40,8 @@ internal object ThemeCompletionSound {
         soundExecutor.execute {
             val audioManager = appContext.getSystemService(AudioManager::class.java) ?: return@execute
             val notificationManager = appContext.getSystemService(NotificationManager::class.java)
-            if (!isEnabled(appContext) || audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL ||
-                (notificationManager != null && notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL)) return@execute
+            val interruptionFilter = notificationManager?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_UNKNOWN
+            if (!completionSoundAllowed(isEnabled(appContext), audioManager.ringerMode, interruptionFilter)) return@execute
             if (theme == OrganizerTheme.CARTA_DORATA) {
                 playCrumpledPaper(appContext)
                 return@execute
@@ -196,3 +198,8 @@ internal object ThemeCompletionSound {
         }
     }
 }
+
+/** Unknown means Android applies its own audio policy; known restricted modes are silent. */
+internal fun completionSoundAllowed(enabled: Boolean, ringerMode: Int, interruptionFilter: Int): Boolean =
+    enabled && ringerMode == AudioManager.RINGER_MODE_NORMAL &&
+        (interruptionFilter == NotificationManager.INTERRUPTION_FILTER_ALL || interruptionFilter == NotificationManager.INTERRUPTION_FILTER_UNKNOWN)

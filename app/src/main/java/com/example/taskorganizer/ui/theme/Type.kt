@@ -8,8 +8,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.taskorganizer.R
 
-val CartaHeadingFont = FontFamily(Font(R.font.cormorant_garamond))
-val CartaBodyFont = FontFamily(Font(R.font.hanken_grotesk))
+val CartaHeadingFont = FontFamily(
+    Font(R.font.cormorant_garamond_600, FontWeight.SemiBold),
+    Font(R.font.cormorant_garamond_700, FontWeight.Bold)
+)
+val CartaBodyFont = FontFamily(
+    Font(R.font.hanken_grotesk_400, FontWeight.Normal),
+    Font(R.font.hanken_grotesk_500, FontWeight.Medium),
+    Font(R.font.hanken_grotesk_600, FontWeight.SemiBold),
+    Font(R.font.hanken_grotesk_700, FontWeight.Bold)
+)
 
 val CartaTypography: Typography = Typography().let { base ->
     base.copy(

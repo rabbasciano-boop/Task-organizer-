@@ -13,7 +13,7 @@ Riferimento: `Task Organizer — Revisione commit del 24 11.md`, confrontato con
 
 1. La cancellazione di una voce ore viene richiesta subito all'archivio, mentre una copia consente di annullarla; riepilogo e CSV escludono le eliminazioni in corso. L'utente ha confermato che la voce resta eliminata dopo essere uscita dal Registro ore ed essere rientrata. Restano da provare rotazione, chiusura dell'app e ripristino.
 2. Se il salvataggio del timer fallisce, lo stato di attesa si sblocca e l'errore viene mostrato; il timer salvato nell'archivio resta attivo. Da provare con errore di scrittura controllato.
-3. A partire da 24 ore, il timer chiede l'orario di fine del primo turno e avverte esplicitamente che le ore rimanenti vanno aggiunte separatamente. Annullare lascia il timer attivo. Da verificare con un timer di prova.
+3. Il timer viene suddiviso automaticamente in registrazioni compatibili con l'archivio, con pausa e note, salvate insieme alla chiusura del timer. Prima di un minuto il timer rimane attivo. Da verificare con un timer di prova oltre 24 ore; il cambio di fuso orario o dell'ora legale durante il timer richiede ulteriori verifiche.
 4. Gradienti Sunset scuriti per migliorare il contrasto del testo bianco, inclusi i colori delle card personalizzate. Controllo numerico aggiunto; l'utente ha approvato la prima verifica visiva. Ricontrollare schermate aggiuntive e contrasto reale sul dispositivo.
 5. Interruttore suoni in Aspetto; vibrazione e Non disturbare non producono suoni. Carta Dorata usa le stesse caratteristiche audio degli altri effetti. Da verificare fisicamente; la licenza del file audio fornito deve essere confermata prima della pubblicazione.
 6. Il suono viene deciso sulla transizione effettiva nell'archivio, non sullo stato precedentemente mostrato. Verificare tocchi rapidi.
@@ -28,3 +28,13 @@ Riferimento: `Task Organizer — Revisione commit del 24 11.md`, confrontato con
 ## Prove consigliate
 
 Usare dati di prova e un backup aggiornato. Verificare eliminazione e annullamento delle ore, uscita rapida e rotazione, errore di salvataggio, timer oltre 24 ore, modifica della bozza del timer, suoni attivi/disattivi con vibrazione e Non disturbare, swipe, TalkBack e prestazioni. Controllare anche la leggibilità del calendario e dei font grandi in Carta Dorata.
+
+## Interventi aggiuntivi del 27 novembre
+
+- Migliorato il contrasto delle card Agenda Reale e dei segni di completamento Sunset; ridotto il costo del bagliore Sunset, da verificare visivamente e durante lo scorrimento.
+- Agenda Reale riduce la frequenza delle scintille ambientali e rispetta l'impostazione di sistema che disabilita le animazioni. Verificare sul telefono, anche riattivando le animazioni.
+- Font Carta Dorata forniti con pesi espliciti, calendario con celle espandibili e data corrente aggiornata periodicamente.
+- Gli avvisi Annulla del Registro ore sopravvivono alla rotazione durante il periodo disponibile; l'eliminazione è comunque salvata subito.
+- Il thread audio si arresta dopo l'inattività; in caso di filtro Non disturbare sconosciuto resta applicata la politica audio Android. La provenienza e la licenza del suono di Carta Dorata restano da verificare prima di pubblicare.
+- Aggiornata la bozza dell'informativa con Registro ore e CSV; contatto e pubblicazione restano da completare.
+- Compilazione debug e test unitari riusciti; le prove manuali su dispositivo restano necessarie.

@@ -6,6 +6,8 @@
 
 Task Organizer consente di gestire attività, note, categorie, liste, promemoria e preferenze. Questi dati restano nella memoria privata del telefono e sono cifrati con una chiave custodita dal sistema Android.
 
+Il Registro ore può contenere date e orari di lavoro, pause, note e tariffa oraria. Anche queste informazioni sono conservate nell'archivio locale dell'app. Se l'utente sceglie di esportarle in CSV, viene creato un file non cifrato nella posizione selezionata: la sua protezione e l'eventuale condivisione dipendono da tale posizione e dalle scelte dell'utente.
+
 L'app non mostra pubblicità, non vende dati e non usa strumenti di analisi del comportamento.
 
 ## Account facoltativo
@@ -32,4 +34,4 @@ L'utente che ha creato un account può eliminarlo dalla sezione Account dell'app
 
 Per domande su privacy e dati personali: **[inserire indirizzo email di assistenza]**.
 
-Ultimo aggiornamento: 19 novembre 2026.
+Ultimo aggiornamento della bozza: 27 novembre 2026.

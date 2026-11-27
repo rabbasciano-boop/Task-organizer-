@@ -28,6 +28,8 @@ internal fun taskCardMutedColor(task: OrganizerTask): Color = when {
     else -> Color(0xFFD8E1EC)
 }
 internal fun taskCompletionColor(task: OrganizerTask): Color = when {
+    OrganizerPalette.agendaReale -> Color(0xFF240833)
+    OrganizerPalette.sunsetGlow -> Color.White
     task.cardColor == DefaultCardColor && task.completed -> Success
     task.cardColor == DefaultCardColor -> Gold
     task.completed -> Color(0xFF7EE2B1)

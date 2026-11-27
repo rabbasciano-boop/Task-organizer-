@@ -492,11 +492,11 @@ internal fun TaskOrganizerApp(
                     },
                     onSaveSettings = { settings -> updateArchive(change = { disk -> disk.copy(workLogSettings = settings) }) },
                     onStartTimer = { updateArchive(change = { disk -> if (disk.activeWorkTimerStartedAt == null) disk.copy(activeWorkTimerStartedAt = System.currentTimeMillis()) else disk }) },
-                    onStopTimer = { recordedEntry, onFinished ->
+                    onStopTimer = { recordedEntries, onFinished ->
                         updateArchive(change = { disk ->
-                            val index = disk.workLogEntries.indexOfFirst { it.id == recordedEntry.id }
+                            val ids = recordedEntries.map { it.id }.toSet()
                             disk.copy(
-                                workLogEntries = if (index >= 0) disk.workLogEntries.toMutableList().also { it[index] = recordedEntry } else disk.workLogEntries + recordedEntry,
+                                workLogEntries = disk.workLogEntries.filterNot { it.id in ids } + recordedEntries,
                                 activeWorkTimerStartedAt = null
                             )
                         }, onFailure = { onFinished(false) }) { onFinished(true) }

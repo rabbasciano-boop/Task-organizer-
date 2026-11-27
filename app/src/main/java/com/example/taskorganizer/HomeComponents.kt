@@ -93,8 +93,12 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
                 Box(Modifier.size(48.dp).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
                     val nordic = OrganizerPalette.currentTheme == OrganizerTheme.AURORA_NORDIC
                     val circleShape = RoundedCornerShape(50)
-                    Box(Modifier.size(28.dp).then(if (task.completed && OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) Modifier.background(goldFoilBrush(), circleShape).border(1.5.dp, Color(0xFF8F6A22), circleShape) else Modifier.background(if (task.completed) Success else CardBlueLight.copy(alpha = .82f), circleShape)).then(if (nordic && !task.completed) Modifier.border(2.dp, Color(0xFF08766D), circleShape) else Modifier), contentAlignment = Alignment.Center) {
-                        Text(if (task.completed) "✓" else "", color = NightBlue, fontWeight = FontWeight.ExtraBold)
+                    Box(Modifier.size(28.dp).then(when {
+                        task.completed && OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA -> Modifier.background(goldFoilBrush(), circleShape).border(1.5.dp, Color(0xFF8F6A22), circleShape)
+                        OrganizerPalette.sunsetGlow -> Modifier.background(if (task.completed) Color.White else Color.Transparent, circleShape).border(2.dp, Color.White, circleShape)
+                        else -> Modifier.background(if (task.completed) Success else CardBlueLight.copy(alpha = .82f), circleShape)
+                    }).then(if (nordic && !task.completed) Modifier.border(2.dp, Color(0xFF08766D), circleShape) else Modifier), contentAlignment = Alignment.Center) {
+                        Text(if (task.completed) "✓" else "", color = if (OrganizerPalette.sunsetGlow) Color(0xFF2B1620) else NightBlue, fontWeight = FontWeight.ExtraBold)
                     }
                 }
             }

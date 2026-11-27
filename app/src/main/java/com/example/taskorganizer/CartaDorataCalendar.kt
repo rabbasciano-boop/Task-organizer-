@@ -25,12 +25,20 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /** Calendar layout based on the Carta Dorata concept, using real task data. */
 @Composable
 internal fun CartaDorataCalendar(tasks: List<OrganizerTask>, onAdd: () -> Unit, onToggle: (String) -> Unit, onEdit: (OrganizerTask) -> Unit) {
     var monthText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     var selectedText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    var todayDate by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            todayDate = LocalDate.now()
+            delay(30_000L)
+        }
+    }
     val month = YearMonth.parse(monthText)
     val selected = LocalDate.parse(selectedText)
     val selectedTasks = tasks.filter { it.date == selectedText }.sortedBy { it.time ?: "99:99" }
@@ -67,11 +75,11 @@ internal fun CartaDorataCalendar(tasks: List<OrganizerTask>, onAdd: () -> Unit, 
                             val date = if (n in 1..month.lengthOfMonth()) month.atDay(n) else null
                             if (date == null) Spacer(Modifier.weight(1f).height(46.dp)) else {
                                 val selectedDay = date == selected
-                                val today = date == LocalDate.now()
+                                val today = date == todayDate
                                 val dayShape = RoundedCornerShape(10.dp)
                                 val description = date.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.ITALY)) + if (date.toString() in datesWithTasks) ", con attività" else ", nessuna attività"
                                 Column(
-                                    Modifier.weight(1f).height(46.dp)
+                                    Modifier.weight(1f).heightIn(min = 46.dp)
                                         .background(if (selectedDay) Color(0xFF805C1D) else if (today) Color(0xFFF0E4D0) else Color.Transparent, dayShape)
                                         .then(if (today && !selectedDay) Modifier.border(1.dp, Color(0xFFB88B35), dayShape) else Modifier)
                                         .clickable { selectedText = date.toString() }.semantics { contentDescription = description },

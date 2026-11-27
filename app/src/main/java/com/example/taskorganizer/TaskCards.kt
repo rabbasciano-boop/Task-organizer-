@@ -55,6 +55,11 @@ fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDe
     val mutedColor = taskCardMutedColor(task)
     val shape = RoundedCornerShape(20.dp)
     val useSunsetGradient = OrganizerPalette.gradientTaskCards
+    val cardActionColor = when {
+        OrganizerPalette.agendaReale -> Color(0xFF240833)
+        OrganizerPalette.sunsetGlow -> Color.White
+        else -> null
+    }
     Card(modifier = if (OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(shape, strong = true).sunsetTaskSurface(task.cardColor, shape) else Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(task.cardColor, shape) else Modifier).sunsetGlow(shape, strong = useSunsetGradient), colors = CardDefaults.cardColors(containerColor = if (useSunsetGradient) Color.Transparent else taskCardBackground(task.cardColor)), shape = shape) {
         Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -73,14 +78,14 @@ fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDe
                     Text("${formatItalianDate(task.date)}${formatTimeRange(task)?.let { " · $it" } ?: ""}", color = mutedColor, fontSize = 13.sp)
                 }
             }
-            Text("${categoryDisplay(task.category, task.categoryIcon)} · priorità ${task.priority.lowercase()}", color = if (OrganizerPalette.sunsetGlow) Color.White else Gold, fontSize = 13.sp)
-            task.examStatus?.let { Text("Esame: $it", color = if (OrganizerPalette.sunsetGlow) Color.White else Gold, fontSize = 13.sp) }
+            Text("${categoryDisplay(task.category, task.categoryIcon)} · priorità ${task.priority.lowercase()}", color = cardActionColor ?: Gold, fontSize = 13.sp)
+            task.examStatus?.let { Text("Esame: $it", color = cardActionColor ?: Gold, fontSize = 13.sp) }
             if (task.note.isNotBlank()) Text(task.note, color = mutedColor, fontSize = 14.sp)
             HorizontalDivider(color = if (task.cardColor == DefaultCardColor) CardBlueLight else mutedColor.copy(alpha = 0.25f))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = onToggle) { Text(if (task.completed) "Riapri" else "Completa", color = if (OrganizerPalette.sunsetGlow) Color.White else Success) }
-                TextButton(onClick = onEdit) { Text("Modifica", color = if (OrganizerPalette.sunsetGlow) Color.White else Gold) }
-                TextButton(onClick = onDelete) { Text("Elimina", color = if (OrganizerPalette.sunsetGlow) Color.White else Danger) }
+                TextButton(onClick = onToggle) { Text(if (task.completed) "Riapri" else "Completa", color = cardActionColor ?: Success) }
+                TextButton(onClick = onEdit) { Text("Modifica", color = cardActionColor ?: Gold) }
+                TextButton(onClick = onDelete) { Text("Elimina", color = cardActionColor ?: Danger) }
             }
         }
     }
