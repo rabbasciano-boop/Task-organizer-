@@ -149,6 +149,13 @@ open class TaskOrganizerActivity : FragmentActivity() {
                 Thread { TaskWidgetUpdater.updateAll(this@TaskOrganizerActivity) }.start()
             }
             var privacyAcknowledged by remember { mutableStateOf(preferences.getBoolean("privacy_acknowledged", false)) }
+            var notificationSetupPending by remember { mutableStateOf(preferences.getBoolean("notification_onboarding_pending", false)) }
+            LaunchedEffect(privacyAcknowledged, notificationSetupPending, notificationPermissionAllowed) {
+                if (privacyAcknowledged && notificationSetupPending && notificationPermissionAllowed) {
+                    preferences.edit().remove("notification_onboarding_pending").apply()
+                    notificationSetupPending = false
+                }
+            }
             LaunchedEffect(session.showOpening) {
                 if (!session.showOpening) return@LaunchedEffect
                 delay(1_250)
@@ -159,9 +166,12 @@ open class TaskOrganizerActivity : FragmentActivity() {
                     OpeningScreen()
                 } else if (!privacyAcknowledged) {
                     PrivacyConsentScreen(onContinueAsGuest = {
-                        preferences.edit().putBoolean("privacy_acknowledged", true).apply()
+                        preferences.edit().putBoolean("privacy_acknowledged", true).putBoolean("notification_onboarding_pending", true).apply()
+                        notificationSetupPending = true
                         privacyAcknowledged = true
                     })
+                } else if (notificationSetupNeedsPermission(notificationSetupPending, notificationPermissionAllowed)) {
+                    NotificationOnboardingScreen(onEnable = ::requestNotificationPermission)
                 } else {
                     RoyalSparklesContainer(enabled = effectiveTheme == OrganizerTheme.AGENDA_REALE && session.isUnlocked) {
                         TaskOrganizerApp(

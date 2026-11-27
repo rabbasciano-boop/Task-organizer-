@@ -32,6 +32,12 @@ class SunsetContrastTest {
 
 class ReminderTimingTest {
     @Test
+    fun notificationSetupOnlyBlocksPendingFirstRunWithoutPermission() {
+        assertTrue(notificationSetupNeedsPermission(pending = true, allowed = false))
+        assertTrue(!notificationSetupNeedsPermission(pending = true, allowed = true))
+        assertTrue(!notificationSetupNeedsPermission(pending = false, allowed = false))
+    }
+    @Test
     fun routineNoticesChooseTheNextLocalOccurrenceAcrossDaylightSaving() {
         val rome = java.time.ZoneId.of("Europe/Rome")
         val saturday = java.time.ZonedDateTime.of(2026, 3, 28, 9, 0, 0, 0, rome)

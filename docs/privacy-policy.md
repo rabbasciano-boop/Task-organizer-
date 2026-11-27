@@ -22,7 +22,7 @@ Il backup manuale genera un file cifrato protetto dalla password scelta dall'ute
 
 ## Notifiche e sveglie
 
-Le notifiche vengono usate soltanto per gli avvisi configurati dall'utente. Il permesso può essere negato o revocato nelle impostazioni Android. La modalità sveglia può richiedere un'autorizzazione Android aggiuntiva per gli avvisi esatti.
+Le notifiche vengono usate soltanto per gli avvisi configurati dall'utente. Durante la prima configurazione l'app richiede di abilitarle per proseguire. Dopo la configurazione il permesso può essere revocato nelle impostazioni Android e i singoli avvisi possono essere disattivati nell'app. La modalità sveglia può richiedere un'autorizzazione Android aggiuntiva per gli avvisi esatti.
 
 L'utente può scegliere di attivare messaggi facoltativi che invitano a riaprire l'app. Per calcolare quando inviarli, l'app conserva localmente l'ultima apertura e la preferenza scelta; non serve un account e queste informazioni non vengono inviate a un server. La funzione può essere disattivata nelle impostazioni dell'app.
 
