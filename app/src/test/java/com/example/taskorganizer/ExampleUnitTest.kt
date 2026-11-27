@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
@@ -294,6 +296,18 @@ class ArchiveIdNormalizationTest {
 }
 
 class TimeLogCalculationTest {
+    @Test
+    fun stoppedTimerKeepsItsBreakAndNotesInTheRecordedEntry() {
+        val entry = timerWorkEntry(LocalDateTime.of(2026, 11, 27, 9, 15), LocalTime.of(12, 45), 30, "  Cliente Rossi  ")
+
+        assertEquals("2026-11-27", entry.date)
+        assertEquals("09:15", entry.startTime)
+        assertEquals("12:45", entry.endTime)
+        assertEquals(30, entry.breakMinutes)
+        assertEquals("Cliente Rossi", entry.notes)
+        assertEquals(180, workMinutes(entry))
+        assertEquals(listOf(entry), filterWorkEntries(listOf(entry), "week", LocalDate.of(2026, 11, 27)))
+    }
     @Test
     fun warnsAtAndBeyondTheTwentyFourHourLimit() {
         val start = 1_000L

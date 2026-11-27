@@ -478,7 +478,7 @@ internal fun TaskOrganizerApp(
                 )
                 OrganizerScreen.Calendar -> CalendarScreen(tasks, openNewTask, ::toggleTaskById, openEditTask)
                 OrganizerScreen.TimeLog -> TimeLogScreen(
-                    entries = workLogEntries,
+                    entries = workLogEntries.toList(),
                     settings = workLogSettings,
                     activeTimerStartedAt = activeWorkTimerStartedAt,
                     onSaveEntry = { entry, onFinished ->

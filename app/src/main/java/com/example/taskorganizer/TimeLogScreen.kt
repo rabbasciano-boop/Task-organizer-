@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,9 +66,12 @@ internal fun TimeLogScreen(
     var resetEditorToken by rememberSaveable { mutableIntStateOf(0) }
     var timerSaving by remember { mutableStateOf(false) }
     var timerSaved by remember { mutableStateOf(false) }
+    var newlySavedEntry by remember { mutableStateOf<WorkLogEntry?>(null) }
     var longTimerStartedAt by remember { mutableStateOf<Long?>(null) }
     var longTimerEnd by remember { mutableStateOf("") }
     var longTimerError by remember { mutableStateOf<String?>(null) }
+    var longTimerBreak by remember { mutableIntStateOf(0) }
+    var longTimerNotes by remember { mutableStateOf("") }
     val pendingDeletions = remember { mutableStateListOf<WorkLogEntry>() }
     val pendingRestores = remember { mutableStateListOf<String>() }
     pendingDeletions.forEach { deleted ->
@@ -84,7 +88,10 @@ internal fun TimeLogScreen(
     fun saveStoppedTimer(recorded: WorkLogEntry) {
         timerSaving = true
         onStopTimer(recorded) { saved ->
-            if (saved) editor = recorded
+            if (saved) {
+                editor = recorded
+                newlySavedEntry = recorded
+            }
             timerSaving = false
             timerSaved = saved
         }
@@ -152,7 +159,7 @@ internal fun TimeLogScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).organizerBackground()) {
             when (tab) {
-                TimeLogTab.DASHBOARD -> TimeLogDashboard(entries.filterNot { candidate -> pendingDeletions.any { it.id == candidate.id } }, settings.hourlyRateCents, { editor = it; timerSaved = false; resetEditorToken++; tabName = TimeLogTab.INSERT.name }) { entry ->
+                TimeLogTab.DASHBOARD -> TimeLogDashboard(entries.filterNot { candidate -> pendingDeletions.any { it.id == candidate.id } }, settings.hourlyRateCents, newlySavedEntry, { newlySavedEntry = null }, { editor = it; timerSaved = false; resetEditorToken++; tabName = TimeLogTab.INSERT.name }) { entry ->
                     if (pendingDeletions.none { it.id == entry.id }) {
                         pendingDeletions += entry
                         onDeleteEntry(entry.id) { saved ->
@@ -164,15 +171,17 @@ internal fun TimeLogScreen(
                     existing = editor, resetToken = resetEditorToken, settings = settings,
                     activeTimerStartedAt = activeTimerStartedAt, timerSaving = timerSaving, timerSaved = timerSaved,
                     onStartTimer = { timerSaved = false; onStartTimer() },
-                    onStopTimer = { startedAt ->
+                    onStopTimer = { startedAt, breakMinutes, notes ->
                         val start = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(startedAt), java.time.ZoneId.systemDefault())
                         val now = LocalDateTime.now()
                         if (workTimerExceedsOneDay(startedAt, System.currentTimeMillis())) {
                             longTimerStartedAt = startedAt
                             longTimerEnd = now.toLocalTime().format(HourFormat)
                             longTimerError = null
+                            longTimerBreak = breakMinutes
+                            longTimerNotes = notes
                         } else {
-                            saveStoppedTimer(WorkLogEntry(date = start.toLocalDate().toString(), startTime = start.toLocalTime().format(HourFormat), endTime = now.toLocalTime().format(HourFormat)))
+                            saveStoppedTimer(timerWorkEntry(start, now.toLocalTime(), breakMinutes, notes))
                         }
                     },
                     onSave = { entry -> onSaveEntry(entry) { saved -> if (saved) { editor = null; tabName = TimeLogTab.DASHBOARD.name } } },
@@ -203,7 +212,7 @@ internal fun TimeLogScreen(
                 if (end == null || end == startTime) longTimerError = "Scegli un orario di fine diverso dall'inizio."
                 else {
                     longTimerStartedAt = null
-                    saveStoppedTimer(WorkLogEntry(date = start.toLocalDate().toString(), startTime = startTime, endTime = end))
+                    saveStoppedTimer(timerWorkEntry(start, LocalTime.parse(end, HourFormat), longTimerBreak, longTimerNotes))
                 }
             }) { Text("Salva primo turno", color = Gold) } }
         )
@@ -239,9 +248,17 @@ private fun TimeLogHeader(hourlyRateCents: Long, activeTimerStartedAt: Long?, on
 }
 
 @Composable
-private fun TimeLogDashboard(entries: List<WorkLogEntry>, rateCents: Long, onEdit: (WorkLogEntry) -> Unit, onDelete: (WorkLogEntry) -> Unit) {
+private fun TimeLogDashboard(entries: List<WorkLogEntry>, rateCents: Long, newlySavedEntry: WorkLogEntry?, onSavedEntryShown: () -> Unit, onEdit: (WorkLogEntry) -> Unit, onDelete: (WorkLogEntry) -> Unit) {
     var period by rememberSaveable { mutableStateOf("week") }
     var selectedDateText by rememberSaveable { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(newlySavedEntry?.id, entries) {
+        val saved = newlySavedEntry ?: return@LaunchedEffect
+        if (entries.none { it.id == saved.id }) return@LaunchedEffect
+        selectedDateText = saved.date
+        listState.scrollToItem(3)
+        onSavedEntryShown()
+    }
     val selectedDate = selectedDateText?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     val filtered = remember(entries, period, selectedDateText) {
         (if (selectedDate == null) filterWorkEntries(entries, period) else entries.filter { it.date == selectedDate.toString() })
@@ -250,7 +267,7 @@ private fun TimeLogDashboard(entries: List<WorkLogEntry>, rateCents: Long, onEdi
     val minutes = filtered.sumOf(::workMinutes)
     val days = filtered.map { it.date }.distinct().size
     LazyColumn(
-        Modifier.fillMaxSize().widthIn(max = 600.dp), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
+        Modifier.fillMaxSize().widthIn(max = 600.dp), state = listState, contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item { TimeLogPeriodTabs(period, listOf("week" to "Settimana corrente", "month" to "Mese corrente")) { period = it } }
         item {
@@ -295,7 +312,7 @@ private fun WorkEntryCard(entry: WorkLogEntry, rateCents: Long, onEdit: () -> Un
 }
 
 @Composable
-private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, timerSaving: Boolean, timerSaved: Boolean, onStartTimer: () -> Unit, onStopTimer: (Long) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
+private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, timerSaving: Boolean, timerSaved: Boolean, onStartTimer: () -> Unit, onStopTimer: (Long, Int, String) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
     val seed = remember(existing?.id, resetToken) { existing ?: WorkLogEntry(date = LocalDate.now().toString(), startTime = "09:00", endTime = "18:00", breakMinutes = 60) }
     var dateText by rememberSaveable(resetToken) { mutableStateOf(formatItalianDate(seed.date)) }
     var startText by rememberSaveable(resetToken) { mutableStateOf(seed.startTime) }
@@ -320,8 +337,8 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
             Column(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(26.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(35.dp).background(Gold.copy(alpha = .15f), CircleShape), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.ic_nav_time_log), contentDescription = null, tint = Gold, modifier = Modifier.size(18.dp)) }; Column(Modifier.padding(start = 10.dp).weight(1f)) { Text("Timer dal vivo", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Timbra entrata e uscita in tempo reale", color = SoftText, fontSize = 11.sp) }; Text(if (activeTimerStartedAt == null) "In attesa" else "In corso", color = if (activeTimerStartedAt == null) SoftText else Success, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 Text(formatElapsed(elapsed), color = MainText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().background(NightBlue.copy(alpha = .25f), RoundedCornerShape(18.dp)).padding(13.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onStartTimer, enabled = activeTimerStartedAt == null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let(onStopTimer) }, enabled = activeTimerStartedAt != null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text(if (timerSaving) "Salvataggio…" else "Timbra uscita", fontSize = 12.sp) } }
-                if (timerSaved) Text("Registrazione salvata. Puoi aggiungere note e dettagli qui sotto.", color = Success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onStartTimer, enabled = activeTimerStartedAt == null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let { onStopTimer(it, (breakText.toIntOrNull() ?: 0).coerceIn(0, 480), notes.trim()) } }, enabled = activeTimerStartedAt != null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text(if (timerSaving) "Salvataggio…" else "Timbra uscita", fontSize = 12.sp) } }
+                if (timerSaved) Text("Registrazione salvata con la pausa e le note inserite. Puoi aggiornarle qui sotto.", color = Success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
         item { TimeLogSectionTitle("Turni preimpostati", "Tocca un turno per compilare gli orari") }
@@ -556,6 +573,8 @@ private fun TimeLogSettingsPage(settings: WorkLogSettings, onSaveSettings: (Work
 @Composable private fun TimeLogUndoCard(onUndo: () -> Unit) = Card(colors = CardDefaults.cardColors(containerColor = CardBlueLight), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) { Text("Voce eliminata", color = MainText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); TextButton(onClick = onUndo) { Text("Annulla", color = Gold, fontWeight = FontWeight.ExtraBold) } } }
 
 private val HourFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+internal fun timerWorkEntry(start: LocalDateTime, end: LocalTime, breakMinutes: Int, notes: String): WorkLogEntry =
+    WorkLogEntry(date = start.toLocalDate().toString(), startTime = start.toLocalTime().format(HourFormat), endTime = end.format(HourFormat), breakMinutes = breakMinutes.coerceIn(0, 480), notes = notes.trim())
 internal fun workTimerExceedsOneDay(startedAt: Long, now: Long): Boolean = now >= startedAt && now - startedAt >= 24L * 60 * 60 * 1_000
 internal fun workMinutes(entry: WorkLogEntry): Int = workMinutes(entry.startTime, entry.endTime, entry.breakMinutes)
 internal fun isOvernightWorkShift(start: String, end: String): Boolean = runCatching { LocalTime.parse(end, HourFormat).isBefore(LocalTime.parse(start, HourFormat)) }.getOrDefault(false)
