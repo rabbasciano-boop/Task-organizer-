@@ -117,4 +117,16 @@
     <string name="notification_setup_control_note">Scelte modificabili</string>
     <string name="notification_setup_button">Attiva le notifiche</string>
     <string name="notification_setup_denied">Se hai già negato il permesso, si apriranno le impostazioni del telefono: attiva le notifiche e torna qui.</string>
+    <string name="switch_account_title">Scegli come continuare</string>
+    <string name="switch_account_description">Accedi con un account Google oppure usa il profilo ospite.</string>
+    <string name="switch_account_google">Accedi con Google</string>
+    <string name="switch_account_guest">Continua come ospite</string>
+    <string name="associate_archive_title">Associare i dati precedenti?</string>
+    <string name="associate_archive_description">Vuoi associare i dati già presenti sul telefono a %1$s? L’archivio originale resterà conservato.</string>
+    <string name="associate_archive_confirm">Associa a questo account</string>
+    <string name="associate_archive_later">Non ora</string>
+    <string name="associate_archive_error">Non è stato possibile associare i dati. L’archivio originale è rimasto intatto. %1$s</string>
+    <string name="profile_import_interrupted">Ripristino interrotto: verifica il profilo e riprova.</string>
+    <string name="profile_export_interrupted">Backup non creato: verifica il profilo e riprova. Potrebbe essere rimasto un file vuoto nella cartella scelta.</string>
+    <string name="backup_profile_contents">I backup contengono attività, liste, categorie e Registro ore del profilo corrente. PIN, account e foto profilo restano esclusi.</string>
 </resources>

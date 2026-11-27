@@ -80,7 +80,7 @@ fun PrivacyConsentScreen(onContinueAsGuest: () -> Unit) {
             Text("La tua privacy viene prima dell'organizzazione.", color = SoftText)
             InfoCard(
                 "I tuoi dati restano qui",
-                "Attività, note, liste, categorie, preferenze e PIN restano nel telefono in un archivio cifrato. Non vengono inviati agli sviluppatori.",
+                "Attività, note, liste e categorie restano sul telefono in un archivio cifrato per ogni profilo. Il PIN non viene salvato in chiaro. Questi dati non vengono inviati agli sviluppatori.",
                 "Solo sul telefono"
             )
             InfoCard(

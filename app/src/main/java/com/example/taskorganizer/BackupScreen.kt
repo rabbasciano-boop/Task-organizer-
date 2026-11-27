@@ -33,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -105,7 +106,7 @@ internal fun BackupScreen(
             return@LaunchedEffect
         }
         working = true
-        val result = withContext(Dispatchers.IO) {
+        val result = try { withContext(Dispatchers.IO) {
             runCatching {
                 try {
                     val encrypted = store.exportPasswordProtectedBackup(password)
@@ -128,7 +129,7 @@ internal fun BackupScreen(
                     password.fill('\u0000')
                 }
             }
-        }
+        } } finally { password.fill('\u0000') }
         working = false
         result.onSuccess {
             exportPassword = ""
@@ -144,7 +145,7 @@ internal fun BackupScreen(
         PageColumn(safeBottom = true, safeTop = true) {
             TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) { Text("← Torna alle opzioni", color = Gold) }
             Text("Backup cifrato", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("I backup contengono solo attività, liste e categorie. PIN, account e foto profilo restano esclusi.", color = SoftText)
+            Text(stringResource(R.string.backup_profile_contents), color = SoftText)
             InfoCard("La password è solo tua", "Non viene salvata nell'app e non può essere recuperata. Puoi conservare il file dove preferisci, anche su Drive o OneDrive.", "Protetto")
 
             Text("CREA UNA COPIA", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)

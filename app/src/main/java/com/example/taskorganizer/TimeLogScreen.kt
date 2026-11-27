@@ -54,6 +54,7 @@ private enum class TimeLogTab(val label: String, val icon: Int) {
 /** Independent work-hours area. It deliberately keeps its own bottom navigation, like the supplied TimeLog Pro design. */
 @Composable
 internal fun TimeLogScreen(
+    profileId: String,
     entries: List<WorkLogEntry>,
     settings: WorkLogSettings,
     activeTimerStartedAt: Long?,
@@ -75,7 +76,7 @@ internal fun TimeLogScreen(
     var newlySavedEntry by remember { mutableStateOf<WorkLogEntry?>(null) }
     var timerStopError by remember { mutableStateOf<String?>(null) }
     val activity = LocalContext.current as FragmentActivity
-    val undoState = remember(activity) { ViewModelProvider(activity)[TimeLogUndoViewModel::class.java] }
+    val undoState = remember(activity, profileId) { ViewModelProvider(activity)["time_log_undo_$profileId", TimeLogUndoViewModel::class.java] }
     val pendingDeletions = undoState.pendingDeletions
     val pendingRestores = undoState.pendingRestores
     LaunchedEffect(undoState) {

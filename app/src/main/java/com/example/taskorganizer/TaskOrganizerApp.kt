@@ -25,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -62,13 +64,15 @@ internal fun TaskOrganizerApp(
     takeBackupExportPassword: () -> CharArray?,
     onBackupExportHandled: () -> Unit,
     onExportWorkCsv: (String, String) -> Unit,
-    onSecurityChanged: () -> Unit
+    onSecurityChanged: () -> Unit,
+    profileId: String
 ) {
     val context = LocalContext.current
-    val store = remember { EncryptedTaskStore(context) }
+    val store = remember(profileId) { EncryptedTaskStore(context, profileId = profileId) }
     val appScope = rememberCoroutineScope()
+    val cleanupScope = (context as? ComponentActivity)?.lifecycleScope ?: appScope
     val archiveUpdateMutex = remember { Mutex() }
-    val profile = remember { context.getSharedPreferences("task_organizer_profile", android.content.Context.MODE_PRIVATE) }
+    val profile = remember(profileId) { context.getSharedPreferences("task_organizer_profile_$profileId", android.content.Context.MODE_PRIVATE) }
     var nickname by remember { mutableStateOf(profile.getString("nickname", "Utente").orEmpty().ifBlank { "Utente" }) }
     var archiveLoadResult by remember { mutableStateOf<TaskArchiveLoadResult?>(null) }
     LaunchedEffect(store) {
@@ -146,8 +150,8 @@ internal fun TaskOrganizerApp(
         activeWorkTimerStartedAt = updated.activeWorkTimerStartedAt
     }
 
-    fun refreshWidgets(archive: TaskArchive) {
-        appScope.launch(Dispatchers.IO) { TaskWidgetUpdater.updateAll(context, archive) }
+    fun refreshWidgets() {
+        appScope.launch(Dispatchers.IO) { TaskWidgetUpdater.updateAll(context) }
     }
 
     fun updateArchive(change: (TaskArchive) -> TaskArchive, onFailure: () -> Unit = {}, afterSaved: suspend (TaskArchive) -> Unit = {}) {
@@ -157,7 +161,7 @@ internal fun TaskOrganizerApp(
                 val savedArchive = result.getOrNull()
                 if (savedArchive != null) {
                     applyArchive(savedArchive)
-                    refreshWidgets(savedArchive)
+                    refreshWidgets()
                     afterSaved(savedArchive)
                 } else {
                     storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
@@ -199,7 +203,7 @@ internal fun TaskOrganizerApp(
             disk.copy(tasks = if (index >= 0) disk.tasks.toMutableList().also { it[index] = task } else disk.tasks + task)
         }) { saved ->
             withContext(Dispatchers.IO) {
-                saved.tasks.firstOrNull { it.id == task.id }?.let { TaskReminderScheduler.schedule(context, it) }
+                saved.tasks.firstOrNull { it.id == task.id }?.let { TaskReminderScheduler.schedule(context, it, profileId) }
             }
             editorOpen = false
             editorTaskId = null
@@ -217,7 +221,7 @@ internal fun TaskOrganizerApp(
         }) { updated ->
             if (updated.tasks.any { it.id == taskId }) {
                 withContext(Dispatchers.IO) {
-                    RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
+                    RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it, profileId) }
                 }
             }
             if (becameCompleted) ThemeCompletionSound.play(context, selectedTheme)
@@ -232,7 +236,7 @@ internal fun TaskOrganizerApp(
         }) { updated ->
             if (updated.tasks.any { it.id == taskId }) {
                 withContext(Dispatchers.IO) {
-                    RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it) }
+                    RecurrenceTiming.reminderTasks(updated, taskId).forEach { TaskReminderScheduler.schedule(context, it, profileId) }
                 }
             }
             if (becameCompleted) ThemeCompletionSound.play(context, selectedTheme)
@@ -247,7 +251,7 @@ internal fun TaskOrganizerApp(
                 deletedTasks = disk.deletedTasks.filterNot { it.id == taskId } + current.copy(deletedAt = System.currentTimeMillis())
             )
         }) {
-            withContext(Dispatchers.IO) { TaskReminderScheduler.cancel(context, taskId) }
+            withContext(Dispatchers.IO) { TaskReminderScheduler.cancel(context, taskId, profileId) }
         }
     }
 
@@ -260,7 +264,7 @@ internal fun TaskOrganizerApp(
             )
         }) { updated ->
             updated.tasks.firstOrNull { it.id == taskId }?.let { task ->
-                withContext(Dispatchers.IO) { TaskReminderScheduler.schedule(context, task) }
+                withContext(Dispatchers.IO) { TaskReminderScheduler.schedule(context, task, profileId) }
             }
         }
     }
@@ -278,7 +282,7 @@ internal fun TaskOrganizerApp(
             disk.copy(tasks = disk.tasks.filterNot { it.id in taskIds } + restored, deletedTasks = disk.deletedTasks.filterNot { it.id in taskIds })
         }) { updated ->
             withContext(Dispatchers.IO) {
-                updated.tasks.filter { it.id in taskIds }.forEach { TaskReminderScheduler.schedule(context, it) }
+                updated.tasks.filter { it.id in taskIds }.forEach { TaskReminderScheduler.schedule(context, it, profileId) }
             }
         }
     }
@@ -288,28 +292,18 @@ internal fun TaskOrganizerApp(
         updateArchive(change = { disk -> disk.copy(deletedTasks = disk.deletedTasks.filterNot { it.id in taskIds }) })
     }
 
-    fun clearLocalData() {
+    fun clearLocalData(onFinished: (Boolean) -> Unit = {}) {
         val remindersToCancel = (tasks + deletedTasks).toList()
-        appScope.launch {
+        cleanupScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     store.clearAll()
+                    LegacyProfileAssociation.deleteAssociatedLegacy(context, profileId)
                     check(profile.edit().clear().commit()) { "Profilo locale non cancellato" }
-                    check(
-                        context.getSharedPreferences("task_organizer_settings", android.content.Context.MODE_PRIVATE)
-                            .edit().clear().commit()
-                    ) { "Impostazioni locali non cancellate" }
-                    check(
-                        context.getSharedPreferences(TaskOrganizerWidgetProvider.WIDGET_PREFERENCES, android.content.Context.MODE_PRIVATE)
-                            .edit().clear().commit()
-                    ) { "Preferenze widget non cancellate" }
-                    check(security.clear()) { "Blocco app non cancellato" }
                 }
             }
             result.onSuccess {
-                InactivityNotifications.cancel(context)
-                RoutineNotifications.cancelAll(context)
-                remindersToCancel.forEach { TaskReminderScheduler.cancel(context, it) }
+                remindersToCancel.forEach { TaskReminderScheduler.cancel(context, it, profileId) }
                 tasks.clear()
                 deletedTasks.clear()
                 customCategories.clear()
@@ -318,10 +312,11 @@ internal fun TaskOrganizerApp(
                 workLogEntries.clear()
                 workLogSettings = WorkLogSettings()
                 activeWorkTimerStartedAt = null
-                onSecurityChanged()
-                refreshWidgets(TaskArchive())
+                refreshWidgets()
+                onFinished(true)
             }.onFailure {
                 storageError = "Non è stato possibile completare la cancellazione dei dati locali. Controlla lo spazio disponibile e riprova."
+                onFinished(false)
             }
         }
     }
@@ -376,9 +371,9 @@ internal fun TaskOrganizerApp(
                         val result = withContext(Dispatchers.IO) {
                             runCatching {
                                 val restoreOutcome = store.replaceArchiveWithSafetyCopy(importedArchive)
-                                previousTasks.forEach { TaskReminderScheduler.cancel(context, it) }
-                                importedArchive.tasks.forEach { TaskReminderScheduler.schedule(context, it) }
-                                TaskWidgetUpdater.updateAll(context, importedArchive)
+                                previousTasks.forEach { TaskReminderScheduler.cancel(context, it, profileId) }
+                                importedArchive.tasks.forEach { TaskReminderScheduler.schedule(context, it, profileId) }
+                                TaskWidgetUpdater.updateAll(context)
                                 restoreOutcome
                             }
                         }
@@ -480,6 +475,7 @@ internal fun TaskOrganizerApp(
                 )
                 OrganizerScreen.Calendar -> CalendarScreen(tasks, openNewTask, ::toggleTaskById, openEditTask)
                 OrganizerScreen.TimeLog -> TimeLogScreen(
+                    profileId = profileId,
                     entries = workLogEntries.toList(),
                     settings = workLogSettings,
                     activeTimerStartedAt = activeWorkTimerStartedAt,
@@ -527,12 +523,8 @@ internal fun TaskOrganizerApp(
                     accountMessage = accountMessage,
                     onGoogleSignIn = onGoogleSignIn,
                     onSignOut = { deleteLocalData ->
-                        onSignOut {
-                            if (deleteLocalData) {
-                                clearLocalData()
-                                nickname = "Utente"
-                            }
-                        }
+                        if (deleteLocalData) clearLocalData { cleared -> if (cleared) onSignOut {} }
+                        else onSignOut {}
                     },
                     onDeleteAccount = { deleteLocalData ->
                         onDeleteAccount { deleted ->

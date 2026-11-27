@@ -15,6 +15,9 @@ class UiSessionViewModel(hasPin: Boolean) : ViewModel() {
     var isUnlocked by mutableStateOf(!hasPin)
     var showOpening by mutableStateOf(true)
     private var pendingBackupExportPassword: CharArray? = null
+    var pendingBackupImportProfile: String? = null
+    var pendingBackupExportProfile: String? = null
+    var pendingWorkCsvProfile: String? = null
 
     fun unlock() {
         isUnlocked = true

@@ -27,10 +27,12 @@ object TaskReminderScheduler {
     private const val EXTRA_TIME = "time"
     private const val EXTRA_TASK_START = "task_start"
     private const val EXTRA_ALARM = "alarm"
+    private const val EXTRA_PROFILE = "profile_id"
 
     /** Schedules the requested reminders and always keeps the final, most useful alert. */
-    fun schedule(context: Context, task: OrganizerTask) {
-        cancel(context, task)
+    fun schedule(context: Context, task: OrganizerTask, profileId: String = LocalProfiles.currentId()) {
+        cancel(context, task.id, profileId)
+        if (LocalProfiles.currentId() != profileId) return
         if (task.deletedAt > 0L || !task.reminderEnabled || task.completed || task.time == null) return
         val taskMoment = runCatching {
             LocalDateTime.of(LocalDate.parse(task.date), LocalTime.parse(task.time))
@@ -40,7 +42,7 @@ object TaskReminderScheduler {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         triggerTimes.forEachIndexed { index, triggerAt ->
             if (triggerAt > System.currentTimeMillis()) {
-                val pendingIntent = reminderIntent(context, task, index, taskStartAt)
+                val pendingIntent = reminderIntent(context, task, index, taskStartAt, profileId)
                 // A repeating reminder stays battery-friendly; its final scheduled alert is the precise alarm.
                 val useExactAlarm = task.alarmEnabled && index == triggerTimes.lastIndex && canUseExactAlarms(alarmManager)
                 if (useExactAlarm) {
@@ -53,13 +55,13 @@ object TaskReminderScheduler {
     }
 
     /** Cancels only PendingIntents that already exist. */
-    fun cancel(context: Context, task: OrganizerTask) = cancel(context, task.id)
+    fun cancel(context: Context, task: OrganizerTask, profileId: String = LocalProfiles.currentId()) = cancel(context, task.id, profileId)
 
     /** Cancels all reminders identified by one task id. */
-    fun cancel(context: Context, taskId: String) {
+    fun cancel(context: Context, taskId: String, profileId: String = LocalProfiles.currentId()) {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         repeat(MAX_SCHEDULED_REMINDERS) { index ->
-            existingReminderIntent(context, taskId, index)?.let { pendingIntent ->
+            existingReminderIntent(context, taskId, index, profileId)?.let { pendingIntent ->
                 alarmManager.cancel(pendingIntent)
                 pendingIntent.cancel()
             }
@@ -67,7 +69,8 @@ object TaskReminderScheduler {
     }
 
     fun rescheduleAll(context: Context) {
-        EncryptedTaskStore(context).load().tasks.forEach { schedule(context, it) }
+        val profileId = LocalProfiles.currentId()
+        EncryptedTaskStore(context, profileId = profileId).load().tasks.forEach { schedule(context, it, profileId) }
     }
 
     fun ensureNotificationChannels(context: Context) {
@@ -102,8 +105,8 @@ object TaskReminderScheduler {
     private fun canUseExactAlarms(alarmManager: AlarmManager): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
 
-    private fun reminderIntent(context: Context, task: OrganizerTask, index: Int, taskStartAt: Long): PendingIntent {
-        val intent = reminderBroadcastIntent(context, task.id, index)
+    private fun reminderIntent(context: Context, task: OrganizerTask, index: Int, taskStartAt: Long, profileId: String): PendingIntent {
+        val intent = reminderBroadcastIntent(context, task.id, index, profileId)
             .putExtra(EXTRA_TITLE, task.title)
             .putExtra(EXTRA_TIME, task.time)
             .putExtra(EXTRA_TASK_START, taskStartAt)
@@ -113,11 +116,11 @@ object TaskReminderScheduler {
         return PendingIntent.getBroadcast(context, reminderRequestCode(task.id, index), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    private fun existingReminderIntent(context: Context, taskId: String, index: Int): PendingIntent? =
+    private fun existingReminderIntent(context: Context, taskId: String, index: Int, profileId: String): PendingIntent? =
         PendingIntent.getBroadcast(
             context,
             reminderRequestCode(taskId, index),
-            reminderBroadcastIntent(context, taskId, index),
+            reminderBroadcastIntent(context, taskId, index, profileId),
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -125,12 +128,13 @@ object TaskReminderScheduler {
     private fun reminderRequestCode(taskId: String, index: Int): Int =
         (taskId.hashCode() * 31 + index) and Int.MAX_VALUE
 
-    private fun reminderBroadcastIntent(context: Context, taskId: String, index: Int): Intent =
+    private fun reminderBroadcastIntent(context: Context, taskId: String, index: Int, profileId: String): Intent =
         Intent(context, TaskReminderReceiver::class.java)
             .setAction(ACTION_REMINDER)
-            .setData(android.net.Uri.parse("taskorganizer://reminder/$taskId/$index"))
+            .setData(android.net.Uri.parse("taskorganizer://reminder/$profileId/$taskId/$index"))
             .putExtra(EXTRA_TASK_ID, taskId)
             .putExtra(EXTRA_INDEX, index)
+            .putExtra(EXTRA_PROFILE, profileId)
 
     internal fun taskId(intent: Intent) = intent.getStringExtra(EXTRA_TASK_ID).orEmpty()
     internal fun reminderIndex(intent: Intent) = intent.getIntExtra(EXTRA_INDEX, 0)
@@ -138,6 +142,8 @@ object TaskReminderScheduler {
     internal fun time(intent: Intent) = intent.getStringExtra(EXTRA_TIME).orEmpty()
     internal fun taskStartAt(intent: Intent) = intent.getLongExtra(EXTRA_TASK_START, 0L)
     internal fun isAlarm(intent: Intent) = intent.getBooleanExtra(EXTRA_ALARM, false)
+    internal fun isForCurrentProfile(intent: Intent): Boolean =
+        LocalProfiles.mayAccess(intent.getStringExtra(EXTRA_PROFILE), LocalProfiles.currentId(), LocalProfiles.isSwitching())
 
     internal fun remainingLabel(startAt: Long, now: Long = System.currentTimeMillis()): String =
         ReminderTiming.remainingLabel(startAt, now)
@@ -147,6 +153,7 @@ object TaskReminderScheduler {
 
 class TaskReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (!TaskReminderScheduler.isForCurrentProfile(intent)) return
         if (!TaskReminderScheduler.notificationsAllowed(context)) return
         TaskReminderScheduler.ensureNotificationChannels(context)
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -210,6 +217,7 @@ class ReminderBootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         Thread {
             try {
+                LocalProfiles.clearUnscopedNotificationsOnce(context.applicationContext)
                 TaskReminderScheduler.rescheduleAll(context.applicationContext)
             } catch (_: Exception) {
                 // The encrypted archive remains untouched; recovery is available when the app opens.

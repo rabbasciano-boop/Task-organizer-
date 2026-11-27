@@ -37,6 +37,12 @@ class FirebaseAccountManager(private val activity: ComponentActivity) {
         )
     }
 
+    fun observeAccount(onChanged: (SignedInAccount?) -> Unit): () -> Unit {
+        val listener = FirebaseAuth.AuthStateListener { onChanged(currentAccount()) }
+        auth.addAuthStateListener(listener)
+        return { auth.removeAuthStateListener(listener) }
+    }
+
     fun takePendingResultMessage(): String? = resultPreferences.getString(PENDING_RESULT_MESSAGE, null).also {
         resultPreferences.edit().remove(PENDING_RESULT_MESSAGE).apply()
     }

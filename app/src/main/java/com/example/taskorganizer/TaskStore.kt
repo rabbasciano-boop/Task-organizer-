@@ -131,11 +131,34 @@ sealed interface TaskArchiveLoadResult {
 data class ArchiveRestoreOutcome(val safetyCopyCreated: Boolean)
 
 /** Stores the organizer only in the app-private folder, encrypted with an Android Keystore key. */
-class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_ALIAS) {
+class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profileId: String? = null) {
     private val appContext = context.applicationContext
-    private val dataFile = File(appContext.filesDir, "task-organizer.enc")
+    private val keyAlias = if (profileId == null) keyAlias else "$keyAlias.$profileId"
+    private val storageDir = if (profileId == null) appContext.filesDir else {
+        require(profileId.matches(Regex("[a-z0-9_]{1,80}"))) { "Profilo non valido" }
+        File(File(appContext.filesDir, "organizer-profiles"), profileId).apply {
+            check(isDirectory || mkdirs()) { "Impossibile aprire l'archivio del profilo" }
+        }
+    }
+    private val dataFile = File(storageDir, "task-organizer.enc")
     private val atomicFile = AtomicFile(dataFile)
-    private val restoreSafetyFile = File(appContext.filesDir, "task-organizer-before-restore.enc")
+    private val restoreSafetyFile = File(storageDir, "task-organizer-before-restore.enc")
+
+    fun hasArchive(): Boolean = synchronized(archiveLock) {
+        dataFile.exists() || File(dataFile.path + ".bak").exists() || File(dataFile.path + ".new").exists()
+    }
+
+    /** Copy without overwriting existing data; keep the original until explicitly removed. */
+    internal fun copyIntoEmptyProfile(target: EncryptedTaskStore) = synchronized(archiveLock) {
+        check(hasArchive()) { "Nessun archivio precedente da associare" }
+        val source = loadUnlocked()
+        if (target.hasArchive()) {
+            check(target.loadUnlocked() == source) { "Il profilo contiene già dati: non verranno sovrascritti" }
+        } else {
+            target.saveUnlocked(source)
+        }
+        check(target.loadUnlocked() == source) { "Impossibile verificare la copia dell'archivio" }
+    }
 
     fun load(): TaskArchive = synchronized(archiveLock) { loadUnlocked() }
 
@@ -271,7 +294,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
     private fun loadUnlocked(): TaskArchive {
         // Never convert an unreadable existing archive into an empty list:
         // otherwise a later save could overwrite the user's real data.
-        if (!dataFile.exists()) return TaskArchive()
+        if (!hasArchive()) return TaskArchive()
         return atomicFile.openRead().use { decode(decrypt(it.readBytes())) }
     }
 
@@ -323,7 +346,7 @@ class EncryptedTaskStore(context: Context, private val keyAlias: String = KEY_AL
         }
     }
 
-    private fun recoveryFiles(): List<File> = appContext.filesDir.listFiles()
+    private fun recoveryFiles(): List<File> = storageDir.listFiles()
         ?.filter { it.isFile && it.name.startsWith(RECOVERY_PREFIX) && it.name.endsWith(".enc") }
         .orEmpty()
 

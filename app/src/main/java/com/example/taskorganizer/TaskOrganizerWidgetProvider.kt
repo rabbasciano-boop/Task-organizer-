@@ -29,14 +29,7 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         updateOnWorker {
-            when (val result = TaskWidgetUpdater.loadArchiveResult(context)) {
-                is TaskArchiveLoadResult.Loaded -> appWidgetIds.forEach { id ->
-                    TaskWidgetUpdater.update(context, appWidgetManager, id, form, result.archive)
-                }
-                is TaskArchiveLoadResult.Unreadable -> appWidgetIds.forEach { id ->
-                    TaskWidgetUpdater.updateUnreadable(context, appWidgetManager, id, form)
-                }
-            }
+            appWidgetIds.forEach { id -> TaskWidgetUpdater.update(context, appWidgetManager, id, form) }
         }
     }
 
@@ -65,21 +58,23 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
         }
         if (intent.action != ACTION_TOGGLE_TASK) return
         val taskId = intent.getStringExtra(EXTRA_TASK_ID).orEmpty()
+        val expectedProfile = intent.getStringExtra(EXTRA_PROFILE).orEmpty()
         if (taskId.isBlank()) return
 
         val pendingResult = goAsync()
         Thread {
             try {
                 val appContext = context.applicationContext
-                val store = EncryptedTaskStore(appContext)
+                if (!LocalProfiles.mayAccess(expectedProfile, LocalProfiles.currentId(), LocalProfiles.isSwitching())) return@Thread
+                val store = EncryptedTaskStore(appContext, profileId = expectedProfile)
                 val savedArchive = store.update { archive ->
                     RecurrenceTiming.toggleTask(archive, taskId)
                 }
                 RecurrenceTiming.reminderTasks(savedArchive, taskId).forEach { changed ->
-                    if (changed.completed) TaskReminderScheduler.cancel(appContext, changed)
-                    else TaskReminderScheduler.schedule(appContext, changed)
+                    if (changed.completed) TaskReminderScheduler.cancel(appContext, changed, expectedProfile)
+                    else TaskReminderScheduler.schedule(appContext, changed, expectedProfile)
                 }
-                TaskWidgetUpdater.updateAll(appContext, savedArchive)
+                TaskWidgetUpdater.updateAll(appContext)
             } catch (_: Exception) {
                 // Never replace unreadable data. Tell the person to open the app for safe recovery.
                 TaskWidgetUpdater.updateAll(context.applicationContext)
@@ -104,6 +99,7 @@ abstract class TaskOrganizerWidgetProvider : AppWidgetProvider() {
         const val ACTION_TOGGLE_TASK = "com.example.taskorganizer.widget.TOGGLE_TASK"
         const val ACTION_SET_FILTER = "com.example.taskorganizer.widget.SET_FILTER"
         const val EXTRA_TASK_ID = "widget_task_id"
+        const val EXTRA_PROFILE = "widget_profile_id"
         const val EXTRA_WIDGET_ID = "widget_id"
         const val EXTRA_FILTER = "widget_filter"
         const val WIDGET_PREFERENCES = "task_organizer_widget"
@@ -148,6 +144,7 @@ class WidgetRefreshReceiver : BroadcastReceiver() {
 }
 
 object TaskWidgetUpdater {
+    private val renderLock = Any()
     private const val SETTINGS_PREFERENCES = "task_organizer_settings"
     private const val HIDE_TITLES_KEY = "hide_widget_titles"
 
@@ -160,9 +157,11 @@ object TaskWidgetUpdater {
         val success: Int
     )
 
-    fun updateAll(context: Context, archive: TaskArchive? = null): Boolean {
+    fun updateAll(context: Context): Boolean = synchronized(renderLock) {
         val manager = AppWidgetManager.getInstance(context)
-        val loadResult = archive?.let(TaskArchiveLoadResult::Loaded) ?: loadArchiveResult(context)
+        val owner = LocalProfiles.currentId()
+        val switching = LocalProfiles.isSwitching()
+        val loadResult = if (switching) TaskArchiveLoadResult.Loaded(TaskArchive()) else EncryptedTaskStore(context, profileId = owner).loadSafely()
         var hasWidgets = false
         listOf(
             TaskOrganizerProgressWidgetProvider::class.java to WidgetForm.SMALL,
@@ -173,14 +172,14 @@ object TaskWidgetUpdater {
             manager.getAppWidgetIds(component).forEach {
                 hasWidgets = true
                 when (loadResult) {
-                    is TaskArchiveLoadResult.Loaded -> update(context, manager, it, form, loadResult.archive)
+                    is TaskArchiveLoadResult.Loaded -> update(context, manager, it, form, loadResult.archive, owner, switching)
                     is TaskArchiveLoadResult.Unreadable -> updateUnreadable(context, manager, it, form)
                 }
             }
         }
         WidgetMidnightRefresh.schedule(context, hasWidgets)
         WidgetThemeRefreshJob.schedule(context, hasWidgets)
-        return hasWidgets
+        hasWidgets
     }
 
     fun areTaskTitlesHidden(context: Context): Boolean =
@@ -194,11 +193,14 @@ object TaskWidgetUpdater {
     }
 
     fun loadArchiveResult(context: Context): TaskArchiveLoadResult =
-        EncryptedTaskStore(context).loadSafely()
+        LocalProfiles.currentStore(context).loadSafely()
 
-    fun update(context: Context, manager: AppWidgetManager, appWidgetId: Int, form: WidgetForm) {
-        when (val result = loadArchiveResult(context)) {
-            is TaskArchiveLoadResult.Loaded -> update(context, manager, appWidgetId, form, result.archive)
+    fun update(context: Context, manager: AppWidgetManager, appWidgetId: Int, form: WidgetForm) = synchronized(renderLock) {
+        val owner = LocalProfiles.currentId()
+        val switching = LocalProfiles.isSwitching()
+        val result = if (switching) TaskArchiveLoadResult.Loaded(TaskArchive()) else EncryptedTaskStore(context, profileId = owner).loadSafely()
+        when (result) {
+            is TaskArchiveLoadResult.Loaded -> update(context, manager, appWidgetId, form, result.archive, owner, switching)
             is TaskArchiveLoadResult.Unreadable -> updateUnreadable(context, manager, appWidgetId, form)
         }
     }
@@ -264,8 +266,11 @@ object TaskWidgetUpdater {
         manager: AppWidgetManager,
         appWidgetId: Int,
         form: WidgetForm,
-        archive: TaskArchive
+        archive: TaskArchive,
+        owner: String,
+        switching: Boolean
     ) {
+        if (LocalProfiles.currentId() != owner || LocalProfiles.isSwitching() != switching) return
         val layout = when (form) {
             WidgetForm.SMALL -> R.layout.widget_small
             WidgetForm.MEDIUM -> R.layout.widget_medium
@@ -308,7 +313,7 @@ object TaskWidgetUpdater {
                 views.setTextViewText(R.id.widget_week_total, weekTasks.size.toString())
                 views.setTextViewText(R.id.widget_week_done, weekTasks.count { it.completed }.toString())
                 views.setTextViewText(R.id.widget_week_todo, weekTasks.count { !it.completed }.toString())
-                bindNextTask(context, views, nextTask, palette, hideTaskTitles)
+                bindNextTask(context, views, nextTask, palette, hideTaskTitles, owner)
             }
             WidgetForm.LARGE -> {
                 views.setTextViewText(R.id.widget_day, "${formatDate(today)} · $completed di ${todayTasks.size} oggi completate")
@@ -326,7 +331,7 @@ object TaskWidgetUpdater {
                     row.setTextViewText(R.id.widget_row_toggle, if (task.completed) "✓" else "○")
                     row.setContentDescription(R.id.widget_row_toggle, if (task.completed) "Segna attività come da fare" else "Segna attività come completata")
                     row.setTextColor(R.id.widget_row_toggle, if (task.completed) palette.success else palette.accent)
-                    row.setOnClickPendingIntent(R.id.widget_row_toggle, toggleIntent(context, task))
+                    row.setOnClickPendingIntent(R.id.widget_row_toggle, toggleIntent(context, task, owner))
                     row.setOnClickPendingIntent(R.id.widget_row_root, openAppIntent(context, addNew = false))
                     views.addView(rows, row)
                 }
@@ -344,7 +349,7 @@ object TaskWidgetUpdater {
                 }
             }
         }
-        manager.updateAppWidget(appWidgetId, views)
+        if (LocalProfiles.currentId() == owner && LocalProfiles.isSwitching() == switching) manager.updateAppWidget(appWidgetId, views)
     }
 
     private fun bindNextTask(
@@ -352,7 +357,8 @@ object TaskWidgetUpdater {
         views: RemoteViews,
         task: OrganizerTask?,
         palette: WidgetPalette,
-        hideTaskTitles: Boolean
+        hideTaskTitles: Boolean,
+        owner: String
     ) {
         if (task == null) {
             views.setTextViewText(R.id.widget_next_title, "Nessuna attività in programma")
@@ -367,7 +373,7 @@ object TaskWidgetUpdater {
             views.setTextViewText(R.id.widget_next_toggle, "○")
             views.setContentDescription(R.id.widget_next_toggle, "Segna attività come completata")
             views.setTextColor(R.id.widget_next_toggle, palette.accent)
-            views.setOnClickPendingIntent(R.id.widget_next_toggle, toggleIntent(context, task))
+            views.setOnClickPendingIntent(R.id.widget_next_toggle, toggleIntent(context, task, owner))
         }
     }
 
@@ -461,11 +467,12 @@ object TaskWidgetUpdater {
         return PendingIntent.getActivity(context, if (addNew) 601 else 600, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    private fun toggleIntent(context: Context, task: OrganizerTask): PendingIntent {
+    private fun toggleIntent(context: Context, task: OrganizerTask, owner: String): PendingIntent {
         val intent = Intent(context, TaskOrganizerProgressWidgetProvider::class.java).apply {
             action = TaskOrganizerWidgetProvider.ACTION_TOGGLE_TASK
-            data = Uri.parse("taskorganizer://toggle/${task.id}")
+            data = Uri.parse("taskorganizer://toggle/$owner/${task.id}")
             putExtra(TaskOrganizerWidgetProvider.EXTRA_TASK_ID, task.id)
+            putExtra(TaskOrganizerWidgetProvider.EXTRA_PROFILE, owner)
         }
         return PendingIntent.getBroadcast(context, task.id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }

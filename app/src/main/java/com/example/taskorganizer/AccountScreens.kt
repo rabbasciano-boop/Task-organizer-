@@ -73,9 +73,9 @@ fun AccountProfileScreen(
             onDismissRequest = { signOutDialogOpen = false },
             containerColor = CardBlue,
             title = { Text("Uscire dall'account?", color = MainText) },
-            text = { Text("Puoi mantenere le attività cifrate sul telefono oppure cancellarle definitivamente da questo dispositivo.", color = SoftText) },
+            text = { Text("Puoi conservare i dati cifrati di questo profilo oppure eliminarli dal telefono. Gli eventuali backup salvati altrove rimangono dove li hai messi.", color = SoftText) },
             confirmButton = { TextButton(onClick = { signOutDialogOpen = false; onSignOut(false) }) { Text("Mantieni i dati", color = Gold) } },
-            dismissButton = { TextButton(onClick = { signOutDialogOpen = false; onSignOut(true) }) { Text("Cancella dati locali", color = Danger) } }
+            dismissButton = { TextButton(onClick = { signOutDialogOpen = false; onSignOut(true) }) { Text("Cancella dati del profilo", color = Danger) } }
         )
     }
     if (deleteAccountDialogOpen) {
@@ -83,7 +83,7 @@ fun AccountProfileScreen(
             onDismissRequest = { deleteAccountDialogOpen = false },
             containerColor = CardBlue,
             title = { Text("Eliminare l'account?", color = MainText) },
-            text = { Text("Google chiederà una nuova conferma. L'account Firebase verrà eliminato; le attività locali potrai mantenerle oppure eliminarle anche dal telefono.", color = SoftText) },
+            text = { Text("Google chiederà una nuova conferma. Sarà eliminato l'account di Task Organizer, non il tuo account Google. Puoi mantenere o eliminare anche i dati di questo profilo sul telefono; i backup salvati altrove non vengono eliminati.", color = SoftText) },
             confirmButton = { TextButton(onClick = { deleteAccountDialogOpen = false; onDeleteAccount(false) }) { Text("Mantieni dati locali", color = Gold) } },
             dismissButton = { TextButton(onClick = { deleteAccountDialogOpen = false; onDeleteAccount(true) }) { Text("Elimina anche i dati", color = Danger) } }
         )
@@ -105,10 +105,10 @@ fun PrivacyInfoScreen(onBack: () -> Unit) {
         PageColumn(safeBottom = true, safeTop = true) {
             Text("Privacy e dati", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Informazioni sempre disponibili e comprensibili.", color = SoftText)
-            InfoCard("Dati sul telefono", "Attività, note, liste, categorie, preferenze e PIN restano nel telefono in un archivio cifrato. Non vengono inviati agli sviluppatori.", "Locale e cifrato")
+            InfoCard("Dati sul telefono", "Attività, note, liste e categorie restano in archivi cifrati distinti per ogni account e per l'ospite. Non vengono inviati agli sviluppatori.", "Locale e cifrato")
             InfoCard("Account facoltativo", "L'accesso Google serve solo a riconoscere il tuo profilo nell'app. Non carica automaticamente le attività, non attiva backup e non dà accesso ai tuoi file.", "A tua scelta")
             InfoCard("Backup sotto il tuo controllo", "Puoi creare un file cifrato con password da Opzioni. L'app non lo invia da sola su Drive, OneDrive o su server propri: scegli tu dove conservarlo.", "Manuale e cifrato")
-            InfoCard("Niente tracciamento", "Non vendiamo dati, non mostriamo pubblicità e non analizziamo le tue attività. Le notifiche saranno richieste solo quando deciderai di usarle.", "Nessuna pubblicità")
+            InfoCard("Niente tracciamento", "Non vendiamo dati, non mostriamo pubblicità e non analizziamo le tue attività.", "Nessuna pubblicità")
             InfoCard("Il tuo controllo", "Quando uscirai dall'account potrai scegliere se mantenere o cancellare i dati locali. L'eliminazione dell'account sarà una procedura separata e protetta.", "Decidi tu")
             OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
                 Text("Torna all'account", color = Gold, fontWeight = FontWeight.Bold)

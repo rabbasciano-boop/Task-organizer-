@@ -32,6 +32,14 @@ class SunsetContrastTest {
 
 class ReminderTimingTest {
     @Test
+    fun staleOrMissingProfileTokensCannotAccessAnotherProfile() {
+        assertTrue(LocalProfiles.mayAccess("account_a", "account_a", switching = false))
+        assertTrue(!LocalProfiles.mayAccess("account_a", "account_b", switching = false))
+        assertTrue(!LocalProfiles.mayAccess("account_a", "guest", switching = false))
+        assertTrue(!LocalProfiles.mayAccess(null, "account_a", switching = false))
+        assertTrue(!LocalProfiles.mayAccess("account_a", "account_a", switching = true))
+    }
+    @Test
     fun notificationSetupOnlyBlocksPendingFirstRunWithoutPermission() {
         assertTrue(notificationSetupNeedsPermission(pending = true, allowed = false))
         assertTrue(!notificationSetupNeedsPermission(pending = true, allowed = true))

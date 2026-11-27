@@ -1,6 +1,7 @@
 package com.example.taskorganizer
 
 import android.Manifest
+import android.app.NotificationManager
 import android.graphics.Color as AndroidColor
 import android.graphics.drawable.ColorDrawable
 import android.content.res.Configuration
@@ -25,6 +26,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +38,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +59,8 @@ import com.example.taskorganizer.ui.theme.OrganizerPalette
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 internal val NightBlue get() = OrganizerPalette.background
 internal val CardBlue get() = OrganizerPalette.card
 internal val CardBlueLight get() = OrganizerPalette.cardLight
@@ -87,19 +97,34 @@ open class TaskOrganizerActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         backupImportLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            pendingBackupImportUri = uri
+            val owner = uiSession.pendingBackupImportProfile
+            if (uri != null && LocalProfiles.mayAccess(owner, LocalProfiles.currentId(), LocalProfiles.isSwitching())) {
+                pendingBackupImportUri = uri
+            } else {
+                pendingBackupImportUri = null
+                uiSession.pendingBackupImportProfile = null
+                if (uri != null) Toast.makeText(this, R.string.profile_import_interrupted, Toast.LENGTH_LONG).show()
+            }
         }
         backupExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-            if (uri == null) {
+            val owner = uiSession.pendingBackupExportProfile
+            if (uri == null || !LocalProfiles.mayAccess(owner, LocalProfiles.currentId(), LocalProfiles.isSwitching())) {
                 uiSession.clearBackupExportPassword()
+                uiSession.pendingBackupExportProfile = null
+                pendingBackupExportUri = null
+                if (uri != null) Toast.makeText(this, R.string.profile_export_interrupted, Toast.LENGTH_LONG).show()
+            } else {
+                pendingBackupExportUri = uri
             }
-            pendingBackupExportUri = uri
         }
         workCsvExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
             val export = pendingWorkCsv
             pendingWorkCsv = null
+            val owner = uiSession.pendingWorkCsvProfile
+            uiSession.pendingWorkCsvProfile = null
             when {
                 uri == null -> Toast.makeText(this, "Esportazione annullata", Toast.LENGTH_SHORT).show()
+                !LocalProfiles.mayAccess(owner, LocalProfiles.currentId(), LocalProfiles.isSwitching()) -> Toast.makeText(this, "Il profilo è cambiato: esportazione annullata.", Toast.LENGTH_LONG).show()
                 export == null -> Toast.makeText(this, "Esportazione non riuscita: riprova dal Riepilogo.", Toast.LENGTH_LONG).show()
                 else -> {
                     val written = runCatching {
@@ -122,6 +147,7 @@ open class TaskOrganizerActivity : FragmentActivity() {
         updateSystemBars(initialEffectiveTheme)
         window.setBackgroundDrawable(ColorDrawable(initialBackgroundColor(initialEffectiveTheme)))
         updateSecureWindow()
+        LocalProfiles.clearUnscopedNotificationsOnce(this)
         TaskReminderScheduler.ensureNotificationChannels(this)
         notificationPermissionAllowed = TaskReminderScheduler.notificationsAllowed(this)
         setContent {
@@ -132,6 +158,85 @@ open class TaskOrganizerActivity : FragmentActivity() {
             var signedInAccount by remember { mutableStateOf(accountManager.currentAccount()) }
             var accountWorking by remember { mutableStateOf(false) }
             var accountMessage by remember { mutableStateOf(accountManager.takePendingResultMessage()) }
+            var showAccountChoice by rememberSaveable {
+                mutableStateOf(signedInAccount == null && EncryptedTaskStore(this@TaskOrganizerActivity).hasArchive())
+            }
+            var archiveRevision by remember { mutableIntStateOf(0) }
+            val accountScope = rememberCoroutineScope()
+            val profileId = remember(signedInAccount) { if (signedInAccount == null) LocalProfiles.GUEST else LocalProfiles.currentId() }
+            var associationDismissed by remember(profileId) { mutableStateOf(false) }
+            var associationWorking by remember(profileId) { mutableStateOf(false) }
+            var associationError by remember(profileId) { mutableStateOf<String?>(null) }
+            val needsAssociation = remember(profileId, archiveRevision) { LegacyProfileAssociation.needsConfirmation(this@TaskOrganizerActivity, profileId) }
+            fun prepareProfileSwitch(onReady: () -> Unit) {
+                ViewModelProvider(this@TaskOrganizerActivity)["time_log_undo_$profileId", TimeLogUndoViewModel::class.java].discardPending()
+                pendingBackupImportUri = null
+                pendingBackupExportUri = null
+                pendingWorkCsv = null
+                uiSession.pendingBackupImportProfile = null
+                uiSession.pendingBackupExportProfile = null
+                uiSession.pendingWorkCsvProfile = null
+                uiSession.clearBackupExportPassword()
+                LocalProfiles.beginSwitch()
+                accountScope.launch {
+                    val prepared = withContext(Dispatchers.IO) {
+                        runCatching { TaskWidgetUpdater.updateAll(this@TaskOrganizerActivity) }.isSuccess
+                    }
+                    if (prepared) onReady() else {
+                        LocalProfiles.endSwitch()
+                        val current = accountManager.currentAccount()
+                        if (current != signedInAccount) {
+                            signedInAccount = current
+                            showAccountChoice = current == null
+                        }
+                        accountWorking = false
+                        accountMessage = "Non è stato possibile preparare il cambio di profilo. Riprova."
+                    }
+                }
+            }
+            fun finishProfileSwitch(onFinished: () -> Unit) {
+                LocalProfiles.endSwitch()
+                accountScope.launch {
+                    withContext(Dispatchers.IO) {
+                        runCatching { TaskReminderScheduler.rescheduleAll(this@TaskOrganizerActivity) }
+                        runCatching { TaskWidgetUpdater.updateAll(this@TaskOrganizerActivity) }
+                    }
+                    onFinished()
+                }
+            }
+            DisposableEffect(accountManager, accountWorking) {
+                val unsubscribe = accountManager.observeAccount { current ->
+                    if (!accountWorking && current != signedInAccount) {
+                        accountWorking = true
+                        prepareProfileSwitch {
+                            getSystemService(NotificationManager::class.java).cancelAll()
+                            finishProfileSwitch {
+                                signedInAccount = current
+                                showAccountChoice = current == null
+                                accountWorking = false
+                            }
+                        }
+                    }
+                }
+                onDispose { unsubscribe() }
+            }
+            val signIn: () -> Unit = {
+                accountWorking = true
+                accountMessage = null
+                prepareProfileSwitch {
+                accountManager.signInWithGoogle { account, message ->
+                    accountMessage = message
+                    if (account != null) getSystemService(NotificationManager::class.java).cancelAll()
+                    finishProfileSwitch {
+                    if (account != null) {
+                        signedInAccount = account
+                        showAccountChoice = false
+                    }
+                    accountWorking = false
+                    }
+                }
+                }
+            }
             var selectedTheme by remember {
                 mutableStateOf(
                     OrganizerTheme.fromStorage(
@@ -188,6 +293,10 @@ open class TaskOrganizerActivity : FragmentActivity() {
                     NotificationOnboardingScreen(onEnable = ::requestNotificationPermission)
                 } else {
                     RoyalSparklesContainer(enabled = effectiveTheme == OrganizerTheme.AGENDA_REALE && session.isUnlocked) {
+                        if (showAccountChoice && signedInAccount == null) {
+                            AccountSwitchScreen(working = accountWorking, message = accountMessage, onGoogle = signIn, onGuest = { showAccountChoice = false })
+                        } else {
+                        key(profileId, archiveRevision) {
                         TaskOrganizerApp(
                         selectedTheme = effectiveTheme,
                         followSystemTheme = followSystemTheme,
@@ -214,56 +323,110 @@ open class TaskOrganizerActivity : FragmentActivity() {
                         signedInAccount = signedInAccount,
                         accountWorking = accountWorking,
                         accountMessage = accountMessage,
-                        onGoogleSignIn = {
-                            accountWorking = true
-                            accountMessage = null
-                            accountManager.signInWithGoogle { account, message ->
-                                signedInAccount = account
-                                accountWorking = false
-                                accountMessage = message
-                            }
-                        },
+                        onGoogleSignIn = signIn,
                         onSignOut = { onFinished ->
                             accountWorking = true
+                            prepareProfileSwitch {
                             accountManager.signOut {
-                                signedInAccount = null
-                                accountWorking = false
                                 onFinished()
+                                getSystemService(NotificationManager::class.java).cancelAll()
+                                finishProfileSwitch {
+                                    signedInAccount = null
+                                    showAccountChoice = true
+                                    accountWorking = false
+                                }
+                            }
                             }
                         },
                         onDeleteAccount = { onFinished ->
                             accountWorking = true
                             accountMessage = null
+                            prepareProfileSwitch {
                             accountManager.deleteAccountWithGoogleConfirmation { deleted, message ->
-                                if (deleted) signedInAccount = null
-                                accountWorking = false
+                                if (deleted) getSystemService(NotificationManager::class.java).cancelAll()
                                 accountMessage = message
                                 onFinished(deleted)
+                                finishProfileSwitch {
+                                    if (deleted) {
+                                        signedInAccount = null
+                                        showAccountChoice = true
+                                    }
+                                    accountWorking = false
+                                }
+                            }
                             }
                         },
                         notificationPermissionAllowed = notificationPermissionAllowed,
                         onRequestNotificationPermission = ::requestNotificationPermission,
-                        pendingBackupImportUri = pendingBackupImportUri,
+                        pendingBackupImportUri = pendingBackupImportUri.takeIf { uiSession.pendingBackupImportProfile == profileId },
                         onOpenBackupImport = {
+                            uiSession.pendingBackupImportProfile = profileId
                             backupImportLauncher.launch(arrayOf("application/octet-stream", "application/*"))
                         },
-                        onBackupImportHandled = { pendingBackupImportUri = null },
-                        pendingBackupExportUri = pendingBackupExportUri,
+                        onBackupImportHandled = { pendingBackupImportUri = null; uiSession.pendingBackupImportProfile = null },
+                        pendingBackupExportUri = pendingBackupExportUri.takeIf { uiSession.pendingBackupExportProfile == profileId },
                         onCreateBackupExport = { fileName, password ->
+                            uiSession.pendingBackupExportProfile = profileId
                             uiSession.setBackupExportPassword(password)
                             backupExportLauncher.launch(fileName)
                         },
                         takeBackupExportPassword = uiSession::takeBackupExportPassword,
-                        onBackupExportHandled = { pendingBackupExportUri = null },
+                        onBackupExportHandled = { pendingBackupExportUri = null; uiSession.pendingBackupExportProfile = null },
                         onExportWorkCsv = { fileName, content ->
                             pendingWorkCsv = fileName to content
+                            uiSession.pendingWorkCsvProfile = profileId
                             workCsvExportLauncher.launch(fileName)
                         },
                         onSecurityChanged = {
                             updateSecureWindow()
                             if (!security.hasPin()) session.unlock()
-                        }
+                        },
+                        profileId = profileId
                         )
+                        }
+                        }
+                        if (accountWorking && !(showAccountChoice && signedInAccount == null)) {
+                            Box(Modifier.fillMaxSize().clickable { }) { OpeningScreen() }
+                        }
+                        if (signedInAccount != null && needsAssociation && !associationDismissed && session.isUnlocked && !accountWorking) {
+                            val account = signedInAccount!!
+                            AlertDialog(
+                                onDismissRequest = { if (!associationWorking) associationDismissed = true },
+                                containerColor = CardBlue,
+                                title = { Text(stringResource(R.string.associate_archive_title), color = MainText) },
+                                text = {
+                                    Column {
+                                        Text(stringResource(R.string.associate_archive_description, account.email), color = SoftText)
+                                        associationError?.let { Text(it, color = Danger) }
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(enabled = !associationWorking, onClick = {
+                                        associationWorking = true
+                                        associationError = null
+                                        accountScope.launch {
+                                            val result = withContext(Dispatchers.IO) {
+                                                runCatching { LegacyProfileAssociation.associate(this@TaskOrganizerActivity, profileId) }
+                                            }
+                                            associationWorking = false
+                                            result.onSuccess {
+                                                archiveRevision++
+                                                associationDismissed = true
+                                                Thread {
+                                                    runCatching { TaskReminderScheduler.rescheduleAll(this@TaskOrganizerActivity) }
+                                                    runCatching { TaskWidgetUpdater.updateAll(this@TaskOrganizerActivity) }
+                                                }.start()
+                                            }.onFailure { associationError = getString(R.string.associate_archive_error, it.localizedMessage ?: "") }
+                                        }
+                                    }) { Text(stringResource(R.string.associate_archive_confirm), color = Gold) }
+                                },
+                                dismissButton = {
+                                    TextButton(enabled = !associationWorking, onClick = { associationDismissed = true }) {
+                                        Text(stringResource(R.string.associate_archive_later), color = SoftText)
+                                    }
+                                }
+                            )
+                        }
                         if (!session.isUnlocked) {
                             AppLockScreen(
                                 security = security,
@@ -304,6 +467,15 @@ open class TaskOrganizerActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         if (!isChangingConfigurations && AppSecurity(this).hasPin()) uiSession.lock()
+    }
+
+    override fun onDestroy() {
+        if (LocalProfiles.isSwitching()) {
+            LocalProfiles.endSwitch()
+            val appContext = applicationContext
+            Thread { runCatching { TaskWidgetUpdater.updateAll(appContext) } }.start()
+        }
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -486,7 +658,8 @@ private fun TaskOrganizerPreview() {
             takeBackupExportPassword = { null },
             onBackupExportHandled = {},
             onExportWorkCsv = { _, _ -> },
-            onSecurityChanged = {}
+            onSecurityChanged = {},
+            profileId = LocalProfiles.GUEST
         )
     }
 }

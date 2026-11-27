@@ -7,6 +7,11 @@ import androidx.lifecycle.ViewModel
 class TimeLogUndoViewModel : ViewModel() {
     internal val pendingDeletions = mutableStateListOf<PendingWorkDeletion>()
     internal val pendingRestores = mutableStateListOf<String>()
+
+    internal fun discardPending() {
+        pendingDeletions.clear()
+        pendingRestores.clear()
+    }
 }
 
 internal data class PendingWorkDeletion(val entry: WorkLogEntry, val expiresAtElapsed: Long)
