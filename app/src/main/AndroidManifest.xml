@@ -18,6 +18,7 @@
         android:theme="@style/Theme.TaskOrganizer">
         <receiver android:name=".TaskReminderReceiver" android:exported="false" />
         <receiver android:name=".TaskReminderActionReceiver" android:exported="false" />
+        <receiver android:name=".BackupReminderReceiver" android:exported="false" />
         <receiver android:name=".InactivityReceiver" android:exported="false" />
         <receiver android:name=".RoutineNotificationReceiver" android:exported="false" />
         <receiver

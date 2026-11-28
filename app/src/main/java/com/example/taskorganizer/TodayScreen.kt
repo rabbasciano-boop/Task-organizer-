@@ -49,6 +49,10 @@ internal fun TodayScreen(
     signedInAccount: SignedInAccount?,
     onAdd: () -> Unit,
     onQuickAdd: (OrganizerTask, (QuickTaskSaveResult) -> Unit) -> Unit,
+    backupLastAt: Long? = null,
+    backupSnoozedUntil: Long? = null,
+    onOpenBackup: () -> Unit = {},
+    onSnoozeBackup: () -> Unit = {},
     onToggleTask: (String) -> Unit,
     onCompleteTask: (String) -> Unit,
     onDeleteTask: (String) -> Unit,
@@ -70,9 +74,11 @@ internal fun TodayScreen(
     }
     var selectedDateValue by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     var currentDate by remember { mutableStateOf(LocalDate.now()) }
+    var backupNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(60_000)
+            backupNow = System.currentTimeMillis()
             LocalDate.now().takeIf { it != currentDate }?.let { today -> currentDate = today; selectedDateValue = today.toString() }
         }
     }
@@ -154,6 +160,7 @@ internal fun TodayScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     item { QuickTaskField(quickText, quickDraft, quickSaving, { value -> if (quickText != value) { quickText = value; quickId = java.util.UUID.randomUUID().toString() } }, ::submitQuickTask) }
+                    if (shouldSuggestBackup(tasks.size, backupLastAt, backupSnoozedUntil, backupNow)) item { BackupReminderCard(onOpenBackup, onSnoozeBackup) }
                     item { DailySummaryCard(isToday, completedCount, selectedTasks.size, nextTask?.time) }
                     if (com.example.taskorganizer.ui.theme.OrganizerPalette.currentTheme == com.example.taskorganizer.ui.theme.OrganizerTheme.CARTA_DORATA) item { GoldDivider() }
                     item { HomeFilters(filter, selectedTasks, completedCount) { filter = it } }

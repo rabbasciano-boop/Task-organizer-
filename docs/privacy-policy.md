@@ -22,6 +22,8 @@ Il servizio di autenticazione è fornito da Google Firebase Authentication e Goo
 
 Il backup manuale genera un file cifrato protetto dalla password scelta dall'utente. La password non viene conservata dall'app e non può essere recuperata. L'utente decide dove salvare il file, ad esempio sul proprio spazio Drive, OneDrive o su un supporto esterno. L'app non carica autonomamente il file su server propri.
 
+Per ricordare di creare una copia, l'app conserva sul telefono, separatamente per ogni profilo, la data dell'ultimo backup creato, il rinvio del suggerimento e la data dell'ultimo avviso. Queste informazioni non vengono inviate a server e non fanno parte del file di backup.
+
 ## Notifiche e sveglie
 
 Durante la prima configurazione l'app richiede di abilitare le notifiche per proseguire. Dopo la configurazione il permesso può essere revocato nelle impostazioni Android. Promemoria e sveglie sono gestiti in due categorie distinte nelle impostazioni Android. La modalità sveglia può richiedere un'autorizzazione Android aggiuntiva per gli avvisi esatti.
@@ -40,4 +42,4 @@ L'utente che ha creato un account può eliminarlo dalla sezione Account dell'app
 
 Per domande su privacy e dati personali: **[inserire indirizzo email di assistenza]**.
 
-Ultimo aggiornamento della bozza: 27 novembre 2026.
+Ultimo aggiornamento della bozza: 28 novembre 2026.

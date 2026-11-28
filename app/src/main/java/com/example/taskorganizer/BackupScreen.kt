@@ -56,6 +56,7 @@ internal fun BackupScreen(
     onCreateExport: (String, CharArray) -> Unit,
     takeExportPassword: () -> CharArray?,
     onExportUriHandled: () -> Unit,
+    onExportSucceeded: suspend () -> Boolean = { true },
     onImported: (TaskArchive, (Result<ArchiveRestoreOutcome>) -> Unit) -> Unit
 ) {
     val context = LocalContext.current
@@ -134,7 +135,11 @@ internal fun BackupScreen(
         result.onSuccess {
             exportPassword = ""
             exportConfirmation = ""
-            message = "Backup creato. Conservalo in un luogo sicuro: senza la password non potrà essere recuperato."
+            message = if (onExportSucceeded()) {
+                "Backup creato. Conservalo in un luogo sicuro: senza la password non potrà essere recuperato."
+            } else {
+                context.getString(R.string.backup_saved_reminder_not_recorded)
+            }
         }.onFailure {
             message = "Non è stato possibile creare il backup. Controlla lo spazio disponibile e riprova."
         }

@@ -1,4 +1,11 @@
 <resources>
+    <string name="backup_reminder_title">Fai un backup dei tuoi dati</string>
+    <string name="backup_reminder_message">Una copia aggiornata ti aiuta a conservare i tuoi dati. Apri l’app quando vuoi.</string>
+    <string name="backup_card_description">Una copia cifrata ti aiuta a conservare attività e altri dati.</string>
+    <string name="backup_card_open">Apri backup</string>
+    <string name="backup_card_later">Più tardi</string>
+    <string name="backup_saved_reminder_not_recorded">Backup creato, ma non è stato possibile registrare la data per il promemoria. Conserva la password in un luogo sicuro.</string>
+    <string name="backup_snooze_error">Non è stato possibile rimandare il promemoria. Riprova.</string>
     <string name="quick_add_label">Aggiungi velocemente</string>
     <string name="quick_add_hint">Es. Dentista domani alle 18</string>
     <string name="quick_add_action">Crea attività</string>

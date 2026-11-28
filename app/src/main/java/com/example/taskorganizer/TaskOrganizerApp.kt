@@ -108,6 +108,8 @@ internal fun TaskOrganizerApp(
     }
     val archive = (archiveLoadResult as TaskArchiveLoadResult.Loaded).archive
     val tasks = remember(archiveLoadResult) { mutableStateListOf<OrganizerTask>().also { it.addAll(archive.tasks) } }
+    var backupLastAt by remember(profileId) { mutableStateOf(profile.getLong(LAST_BACKUP_AT, 0L).takeIf { it > 0L }) }
+    var backupSnoozedUntil by remember(profileId) { mutableStateOf(profile.getLong(BACKUP_CARD_SNOOZED_UNTIL, 0L).takeIf { it > 0L }) }
     val customCategories = remember(archiveLoadResult) { mutableStateListOf<String>().also { it.addAll(archive.customCategories) } }
     val customCategoryIcons = remember(archiveLoadResult) { mutableStateMapOf<String, String>().also { it.putAll(archive.customCategoryIcons) } }
     val deletedTasks = remember(archiveLoadResult) { mutableStateListOf<OrganizerTask>().also { it.addAll(archive.deletedTasks) } }
@@ -124,6 +126,9 @@ internal fun TaskOrganizerApp(
     var privacyInfoOpen by rememberSaveable { mutableStateOf(false) }
     var storageError by remember { mutableStateOf<String?>(null) }
     val selectedScreen = OrganizerScreen.all[selectedScreenIndex.coerceIn(0, OrganizerScreen.all.lastIndex)]
+    LaunchedEffect(profileId) {
+        withContext(Dispatchers.IO) { runCatching { BackupReminder.schedule(context, profileId) } }
+    }
 
     LaunchedEffect(pendingBackupImportUri, pendingBackupExportUri) {
         // The document picker briefly places the app in background. Once the PIN is entered,
@@ -181,7 +186,11 @@ internal fun TaskOrganizerApp(
         fun reloadArchive() {
             appScope.launch {
                 archiveUpdateMutex.withLock {
-                    when (val latest = withContext(Dispatchers.IO) { store.loadSafely() }) {
+                    when (val latest = withContext(Dispatchers.IO) {
+                        store.loadSafely().also { result ->
+                            if (result is TaskArchiveLoadResult.Loaded) runCatching { BackupReminder.schedule(context, profileId) }
+                        }
+                    }) {
                         is TaskArchiveLoadResult.Loaded -> applyArchive(latest.archive)
                         is TaskArchiveLoadResult.Unreadable -> archiveLoadResult = latest
                     }
@@ -331,6 +340,9 @@ internal fun TaskOrganizerApp(
             }
             result.onSuccess {
                 remindersToCancel.forEach { TaskReminderScheduler.cancel(context, it, profileId) }
+                BackupReminder.cancel(context, profileId)
+                backupLastAt = null
+                backupSnoozedUntil = null
                 tasks.clear()
                 deletedTasks.clear()
                 customCategories.clear()
@@ -391,6 +403,17 @@ internal fun TaskOrganizerApp(
             onCreateExport = onCreateBackupExport,
             takeExportPassword = takeBackupExportPassword,
             onExportUriHandled = onBackupExportHandled,
+            onExportSucceeded = {
+                val now = System.currentTimeMillis()
+                val recorded = withContext(Dispatchers.IO) {
+                    runCatching {
+                        check(LocalProfiles.mayAccess(profileId, LocalProfiles.currentId(), LocalProfiles.isSwitching()))
+                        BackupReminder.markBackup(context, profileId, now)
+                    }.isSuccess
+                }
+                if (recorded) { backupLastAt = now; backupSnoozedUntil = null }
+                recorded
+            },
             onImported = { importedArchive, onCompleted ->
                 val previousTasks = (tasks + deletedTasks).toList()
                 appScope.launch {
@@ -477,6 +500,16 @@ internal fun TaskOrganizerApp(
                     signedInAccount = signedInAccount,
                     onAdd = openNewTask,
                     onQuickAdd = ::quickAddTask,
+                    backupLastAt = backupLastAt,
+                    backupSnoozedUntil = backupSnoozedUntil,
+                    onOpenBackup = { backupOpen = true },
+                    onSnoozeBackup = {
+                        val until = System.currentTimeMillis() + BACKUP_CARD_SNOOZE
+                        appScope.launch {
+                            val saved = withContext(Dispatchers.IO) { profile.edit().putLong(BACKUP_CARD_SNOOZED_UNTIL, until).commit() }
+                            if (saved) backupSnoozedUntil = until else storageError = context.getString(R.string.backup_snooze_error)
+                        }
+                    },
                     onToggleTask = ::toggleTaskById,
                     onCompleteTask = ::completeTaskById,
                     onDeleteTask = ::deleteTaskById,
