@@ -26,7 +26,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
@@ -158,7 +157,7 @@ private fun HomeHeader(nickname: String, account: SignedInAccount?, selectedDate
         }
         Column(Modifier.weight(1f)) {
             Text(buildString { append(formatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }); if (isToday) append(" • Oggi") }, color = Gold, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-            Text(greetingFor(nickname), color = MainText, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = if (OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) CartaHeadingFont else null, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(greetingFor(nickname), color = MainText, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = if (OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) CartaHeadingFont else null)
         }
         val calendarShape = RoundedCornerShape(16.dp)
         Box(Modifier.size(43.dp).then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(calendarShape) else Modifier).clip(calendarShape).background(CardBlue.copy(alpha = .92f)).border(1.dp, Gold.copy(alpha = .24f), calendarShape).clickable(onClick = onOpenCalendar).semantics { contentDescription = "Apri calendario"; role = Role.Button }, contentAlignment = Alignment.Center) {
