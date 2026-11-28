@@ -22,7 +22,7 @@ Il servizio di autenticazione è fornito da Google Firebase Authentication e Goo
 
 Il backup manuale genera un file cifrato protetto dalla password scelta dall'utente. La password non viene conservata dall'app e non può essere recuperata. L'utente decide dove salvare il file, ad esempio sul proprio spazio Drive, OneDrive o su un supporto esterno. L'app non carica autonomamente il file su server propri.
 
-Per ricordare di creare una copia, l'app conserva sul telefono, separatamente per ogni profilo, la data dell'ultimo backup creato, il rinvio del suggerimento e la data dell'ultimo avviso. Queste informazioni non vengono inviate a server e non fanno parte del file di backup.
+Per ricordare di creare una copia, l'app conserva sul telefono, separatamente per ogni profilo, la data dell'ultimo backup creato, il rinvio del suggerimento, la data dell'ultimo avviso e se il profilo contiene dati da salvare. Queste informazioni non vengono inviate a server e non fanno parte del file di backup.
 
 ## Notifiche e sveglie
 

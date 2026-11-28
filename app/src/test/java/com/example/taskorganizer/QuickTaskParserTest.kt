@@ -76,6 +76,17 @@ class QuickTaskParserTest {
         assertEquals(null, invalid.time)
     }
 
+    @Test fun recognizesCapitalizedAbbreviationsAtStart() {
+        val gym = parseQuickTask("  Gio palestra", now)
+        assertEquals("palestra", gym.title)
+        assertEquals(LocalDate.of(2026, 12, 3), gym.date)
+        val dinner = parseQuickTask("Ven alle 18 cena", now)
+        assertEquals("cena", dinner.title)
+        assertEquals(LocalDate.of(2026, 12, 4), dinner.date)
+        assertEquals(LocalTime.of(18, 0), dinner.time)
+        assertEquals("Chiamare Mar", parseQuickTask("Chiamare Mar domani alle 9", now).title)
+    }
+
     @Test fun identifiesAmbiguousAndPastTimes() {
         val ambiguous = parseQuickTask("Visita domani alle 6", now)
         assertEquals(LocalTime.of(6, 0), ambiguous.time)

@@ -43,7 +43,7 @@ internal fun parseQuickTask(text: String, now: LocalDateTime): QuickTaskDraft {
         consumed += match.range
     }
     if (date == null) weekdayPattern.findAll(text).firstOrNull { match ->
-        match.value.length > 3 || match.value.first().isLowerCase()
+        match.value.length > 3 || match.value.first().isLowerCase() || text.substring(0, match.range.first).isBlank()
     }?.let { match ->
         val day = when (match.value.lowercase(Locale.ITALY).take(3)) {
             "lun" -> DayOfWeek.MONDAY; "mar" -> DayOfWeek.TUESDAY; "mer" -> DayOfWeek.WEDNESDAY

@@ -18,15 +18,25 @@ internal const val LAST_BACKUP_AT = "backup_last_export_at"
 internal const val BACKUP_CARD_SNOOZED_UNTIL = "backup_card_snoozed_until"
 private const val BASELINE = "backup_reminder_baseline"
 private const val LAST_NOTICE = "backup_reminder_last_notice"
+private const val HAD_DATA = "backup_reminder_had_data"
+private const val RETRY_COUNT = "backup_reminder_retry_count"
 private const val PROFILE = "backup_reminder_profile"
 private const val ID = 99330
+internal const val BACKUP_RETRY_DELAY = 60L * 60 * 1000
+internal const val BACKUP_MAX_RETRIES = 3
 
 internal fun shouldSuggestBackup(taskCount: Int, lastBackupAt: Long?, snoozedUntil: Long?, now: Long): Boolean =
     taskCount >= BACKUP_MIN_TASKS && (snoozedUntil == null || snoozedUntil <= now) &&
         (lastBackupAt == null || (lastBackupAt > 0L && now >= lastBackupAt && now - lastBackupAt >= BACKUP_REMINDER_PERIOD))
 
 internal fun nextBackupNoticeAt(lastBackupAt: Long?, baseline: Long, lastNoticeAt: Long?): Long =
-    maxOf(lastBackupAt ?: baseline, lastNoticeAt ?: 0L) + BACKUP_REMINDER_PERIOD
+    maxOf(lastBackupAt ?: 0L, baseline, lastNoticeAt ?: 0L) + BACKUP_REMINDER_PERIOD
+
+internal fun backupBaselineAfterDataChange(baseline: Long, hadData: Boolean?, hasData: Boolean, now: Long): Long =
+    if (baseline <= 0L || baseline > now || (hadData == false && hasData)) now else baseline
+
+internal fun nextBackupRetryAt(retries: Int, now: Long): Long? =
+    if (retries in 0 until BACKUP_MAX_RETRIES) now + BACKUP_RETRY_DELAY else null
 
 private fun WorkShiftPreset.backupRelevantFields() = listOf(name, startTime, endTime, breakMinutes.toString())
 private val defaultShiftFields = WorkLogSettings().presets.map { it.backupRelevantFields() }
@@ -63,11 +73,10 @@ internal object BackupReminder {
             return
         }
         val prefs = prefs(context, profile)
-        var baseline = prefs.getLong(BASELINE, 0L)
-        if (baseline <= 0L || baseline > now) {
-            baseline = now
-            check(prefs.edit().putLong(BASELINE, baseline).commit())
-        }
+        val hasData = hasDataToBackUp(EncryptedTaskStore(context, profileId = profile).load())
+        val hadData = if (prefs.contains(HAD_DATA)) prefs.getBoolean(HAD_DATA, false) else null
+        val baseline = backupBaselineAfterDataChange(prefs.getLong(BASELINE, 0L), hadData, hasData, now)
+        check(prefs.edit().putLong(BASELINE, baseline).putBoolean(HAD_DATA, hasData).remove(RETRY_COUNT).commit())
         val lastBackup = prefs.getLong(LAST_BACKUP_AT, 0L).takeIf { it > 0 }
         val lastNotice = prefs.getLong(LAST_NOTICE, 0L).takeIf { it > 0 }
         val due = maxOf(nextBackupNoticeAt(lastBackup, baseline, lastNotice), notBefore)
@@ -80,6 +89,17 @@ internal object BackupReminder {
         check(prefs.edit().putLong(LAST_BACKUP_AT, now).putLong(BASELINE, now).remove(LAST_NOTICE).remove(BACKUP_CARD_SNOOZED_UNTIL).commit())
         runCatching { cancel(context, profile); schedule(context, profile, now) }
             .onFailure { Log.e("BackupReminder", "Could not schedule next backup reminder", it) }
+    }
+
+    @Synchronized fun retryAfterFailure(context: Context, profile: String, now: Long = System.currentTimeMillis()) {
+        if (!LocalProfiles.mayAccess(profile, LocalProfiles.currentId(), LocalProfiles.isSwitching())) return
+        if (!TaskReminderScheduler.notificationsAllowed(context)) return
+        val preferences = prefs(context, profile)
+        val count = preferences.getInt(RETRY_COUNT, 0)
+        val retryAt = nextBackupRetryAt(count, now) ?: return
+        val pi = pending(context, profile, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
+        check(preferences.edit().putInt(RETRY_COUNT, count + 1).commit())
+        context.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, retryAt, pi)
     }
 
     @Synchronized fun receive(context: Context, intent: Intent) {
@@ -95,7 +115,9 @@ internal object BackupReminder {
             schedule(context, profile, now)
             return
         }
-        if (!hasDataToBackUp(EncryptedTaskStore(context, profileId = profile).load())) {
+        val archive = EncryptedTaskStore(context, profileId = profile).load()
+        if (prefs.contains(RETRY_COUNT)) prefs.edit().remove(RETRY_COUNT).apply()
+        if (!hasDataToBackUp(archive)) {
             schedule(context, profile, now, now + BACKUP_REMINDER_PERIOD)
             return
         }
@@ -119,7 +141,10 @@ class BackupReminderReceiver : BroadcastReceiver() {
         val pending = goAsync()
         Thread {
             try { BackupReminder.receive(context.applicationContext, intent) }
-            catch (error: Exception) { Log.e("BackupReminder", "Could not process backup reminder", error) }
+            catch (error: Exception) {
+                Log.e("BackupReminder", "Could not process backup reminder", error)
+                runCatching { BackupReminder.retryAfterFailure(context.applicationContext, intent.getStringExtra(PROFILE).orEmpty()) }
+            }
             finally { pending.finish() }
         }.start()
     }

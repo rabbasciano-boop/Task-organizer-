@@ -269,6 +269,7 @@ class ReminderBootReceiver : BroadcastReceiver() {
                 TaskReminderScheduler.rescheduleAll(context.applicationContext)
             } catch (_: Exception) {
                 // The encrypted archive remains untouched; recovery is available when the app opens.
+                runCatching { BackupReminder.retryAfterFailure(context.applicationContext, LocalProfiles.currentId()) }
             } finally {
                 runCatching { InactivityNotifications.reschedule(context.applicationContext) }
                 runCatching { RoutineNotifications.rescheduleAll(context.applicationContext) }

@@ -3,6 +3,7 @@ package com.example.taskorganizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BackupReminderTimingTest {
@@ -22,6 +23,24 @@ class BackupReminderTimingTest {
         assertEquals(now + BACKUP_REMINDER_PERIOD, nextBackupNoticeAt(null, now, null))
         assertEquals(now + BACKUP_REMINDER_PERIOD, nextBackupNoticeAt(now, now - BACKUP_REMINDER_PERIOD, null))
         assertEquals(now + BACKUP_REMINDER_PERIOD, nextBackupNoticeAt(now - BACKUP_REMINDER_PERIOD, now - BACKUP_REMINDER_PERIOD, now))
+        assertEquals(now + BACKUP_REMINDER_PERIOD, nextBackupNoticeAt(now - 3 * BACKUP_REMINDER_PERIOD, now, null))
+    }
+
+    @Test fun firstDataAfterAnEmptyProfileStartsAFreshTwoWeekCountdown() {
+        val old = now - 20L * 24 * 60 * 60 * 1000
+        val updated = backupBaselineAfterDataChange(old, false, true, now)
+        assertEquals(now, updated)
+        assertEquals(now + BACKUP_REMINDER_PERIOD, nextBackupNoticeAt(null, updated, null))
+        assertEquals(old, backupBaselineAfterDataChange(old, true, true, now))
+        assertEquals(old, backupBaselineAfterDataChange(old, null, true, now))
+        assertEquals(old, backupBaselineAfterDataChange(old, false, false, now))
+    }
+
+    @Test fun failedReadRetriesAreLimited() {
+        assertEquals(now + BACKUP_RETRY_DELAY, nextBackupRetryAt(0, now))
+        assertEquals(now + BACKUP_RETRY_DELAY, nextBackupRetryAt(2, now))
+        assertNull(nextBackupRetryAt(3, now))
+        assertNull(nextBackupRetryAt(-1, now))
     }
 
     @Test fun emptyProfileDoesNotNeedBackupNotification() {
