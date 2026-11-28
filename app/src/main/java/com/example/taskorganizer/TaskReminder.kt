@@ -87,8 +87,12 @@ object TaskReminderScheduler {
     fun rescheduleAll(context: Context) {
         val profileId = LocalProfiles.currentId()
         val tasks = EncryptedTaskStore(context, profileId = profileId).load().tasks
-        tasks.forEach { schedule(context, it, profileId) }
-        BackupReminder.schedule(context, profileId)
+        try {
+            tasks.forEach { schedule(context, it, profileId) }
+            BackupReminder.schedule(context, profileId)
+        } finally {
+            WorkTimerAutoStopScheduler.synchronize(context, profileId)
+        }
     }
 
     fun ensureNotificationChannels(context: Context) {

@@ -66,7 +66,16 @@ data class WorkLogEntry(
     val endTime: String,
     val breakMinutes: Int = 0,
     val notes: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val autoStopped: Boolean = false
+)
+
+data class WorkTimerAutoStop(
+    val deadlineAt: Long,
+    val breakMinutes: Int = 0,
+    val notes: String = "",
+    val startedElapsedRealtime: Long? = null,
+    val bootCount: Int? = null
 )
 
 data class WorkShiftPreset(
@@ -101,7 +110,8 @@ data class TaskArchive(
     val workLogEntries: List<WorkLogEntry> = emptyList(),
     val workLogSettings: WorkLogSettings = WorkLogSettings(),
     /** A running timer is persisted so elapsed time is correct after leaving or reopening the app. */
-    val activeWorkTimerStartedAt: Long? = null
+    val activeWorkTimerStartedAt: Long? = null,
+    val activeWorkTimerAutoStop: WorkTimerAutoStop? = null
 )
 
 /** Keeps the newest item for each id so a malformed imported archive cannot break lazy lists. */
@@ -396,6 +406,7 @@ class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profile
                     .put("startTime", entry.startTime).put("endTime", entry.endTime)
                     .put("breakMinutes", entry.breakMinutes).put("notes", entry.notes)
                     .put("createdAt", entry.createdAt)
+                    .put("autoStopped", entry.autoStopped)
             )
         }
         val presets = JSONArray()
@@ -410,7 +421,9 @@ class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profile
         val workLogSettings = JSONObject()
             .put("hourlyRateCents", archive.workLogSettings.hourlyRateCents)
             .put("presets", presets)
-        return JSONObject().put("version", 8).put("tasks", items).put("deletedTasks", deletedItems).put("listItems", listEntries).put("customCategories", categories).put("customCategoryIcons", categoryIcons).put("workLogEntries", workLogEntries).put("workLogSettings", workLogSettings).put("activeWorkTimerStartedAt", archive.activeWorkTimerStartedAt ?: 0L).toString().toByteArray(Charsets.UTF_8)
+        return JSONObject().put("version", 9).put("tasks", items).put("deletedTasks", deletedItems).put("listItems", listEntries).put("customCategories", categories).put("customCategoryIcons", categoryIcons).put("workLogEntries", workLogEntries).put("workLogSettings", workLogSettings).put("activeWorkTimerStartedAt", archive.activeWorkTimerStartedAt ?: 0L).apply {
+            archive.activeWorkTimerAutoStop?.let { timer -> put("activeWorkTimerAutoStop", JSONObject().put("deadlineAt", timer.deadlineAt).put("breakMinutes", timer.breakMinutes).put("notes", timer.notes).put("startedElapsedRealtime", timer.startedElapsedRealtime ?: -1L).put("bootCount", timer.bootCount ?: -1)) }
+        }.toString().toByteArray(Charsets.UTF_8)
     }
 
     private fun decode(bytes: ByteArray): TaskArchive {
@@ -484,7 +497,8 @@ class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profile
                     endTime = endTime,
                     breakMinutes = entry.optInt("breakMinutes").coerceIn(0, 480),
                     notes = entry.optString("notes"),
-                    createdAt = entry.optLong("createdAt", System.currentTimeMillis())
+                    createdAt = entry.optLong("createdAt", System.currentTimeMillis()),
+                    autoStopped = entry.optBoolean("autoStopped", false)
                 )
             }
         }.orEmpty()
@@ -511,7 +525,13 @@ class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profile
             } ?: defaultWorkSettings.presets
         )
         val activeWorkTimerStartedAt = archive.optLong("activeWorkTimerStartedAt", 0L).takeIf { it > 0L }
-        return normalizeArchiveIds(TaskArchive(tasks, customCategories, customCategoryIcons, deletedTasks, listItems, workLogEntries, workLogSettings, activeWorkTimerStartedAt))
+        val activeWorkTimerAutoStop = archive.optJSONObject("activeWorkTimerAutoStop")?.let { timer ->
+            val deadline = timer.optLong("deadlineAt", 0L)
+            if (activeWorkTimerStartedAt != null && deadline == activeWorkTimerStartedAt + WORK_TIMER_LIMIT_MILLIS) {
+                WorkTimerAutoStop(deadline, timer.optInt("breakMinutes", 0).coerceIn(0, 480), timer.optString("notes"), timer.optLong("startedElapsedRealtime", -1L).takeIf { it >= 0L }, timer.optInt("bootCount", -1).takeIf { it >= 0 })
+            } else null
+        }
+        return normalizeArchiveIds(TaskArchive(tasks, customCategories, customCategoryIcons, deletedTasks, listItems, workLogEntries, workLogSettings, activeWorkTimerStartedAt, activeWorkTimerAutoStop))
     }
 
     private fun taskJson(task: OrganizerTask): JSONObject = JSONObject()

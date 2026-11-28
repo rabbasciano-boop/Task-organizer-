@@ -117,6 +117,7 @@ internal fun TaskOrganizerApp(
     val workLogEntries = remember(archiveLoadResult) { mutableStateListOf<WorkLogEntry>().also { it.addAll(archive.workLogEntries) } }
     var workLogSettings by remember(archiveLoadResult) { mutableStateOf(archive.workLogSettings) }
     var activeWorkTimerStartedAt by remember(archiveLoadResult) { mutableStateOf(archive.activeWorkTimerStartedAt) }
+    var activeWorkTimerAutoStop by remember(archiveLoadResult) { mutableStateOf(archive.activeWorkTimerAutoStop) }
     var selectedScreenIndex by rememberSaveable { mutableIntStateOf(0) }
     var tabHistory by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     var editorTaskId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -125,9 +126,24 @@ internal fun TaskOrganizerApp(
     var backupOpen by rememberSaveable { mutableStateOf(false) }
     var privacyInfoOpen by rememberSaveable { mutableStateOf(false) }
     var storageError by remember { mutableStateOf<String?>(null) }
+    var timerStartPending by remember { mutableStateOf(false) }
     val selectedScreen = OrganizerScreen.all[selectedScreenIndex.coerceIn(0, OrganizerScreen.all.lastIndex)]
     LaunchedEffect(profileId) {
         withContext(Dispatchers.IO) { runCatching { BackupReminder.schedule(context, profileId) } }
+    }
+    LaunchedEffect(profileId, activeWorkTimerStartedAt, activeWorkTimerAutoStop?.deadlineAt) {
+        val timer = activeWorkTimerAutoStop
+        if (activeWorkTimerStartedAt != null && timer != null) {
+            withContext(Dispatchers.IO) { runCatching { WorkTimerAutoStopScheduler.synchronize(context, profileId) } }
+            while (true) {
+                val remaining = workTimerRemaining(timer, System.currentTimeMillis(), android.os.SystemClock.elapsedRealtime(), WorkTimerAutoStopScheduler.currentBootCount(context))
+                if (remaining == 0L) {
+                    withContext(Dispatchers.IO) { runCatching { WorkTimerAutoStopScheduler.synchronize(context, profileId) } }
+                    break
+                }
+                kotlinx.coroutines.delay(remaining.coerceAtMost(60_000L))
+            }
+        }
     }
 
     LaunchedEffect(pendingBackupImportUri, pendingBackupExportUri) {
@@ -158,6 +174,7 @@ internal fun TaskOrganizerApp(
         workLogEntries.addAll(updated.workLogEntries)
         workLogSettings = updated.workLogSettings
         activeWorkTimerStartedAt = updated.activeWorkTimerStartedAt
+        activeWorkTimerAutoStop = updated.activeWorkTimerAutoStop
     }
 
     fun refreshWidgets() {
@@ -178,6 +195,35 @@ internal fun TaskOrganizerApp(
                     storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."
                     onFailure()
                 }
+            }
+        }
+    }
+
+    fun startWorkTimer(breakMinutes: Int, notes: String) {
+        if (timerStartPending) return
+        timerStartPending = true
+        appScope.launch {
+            archiveUpdateMutex.withLock {
+                val startWall = System.currentTimeMillis()
+                val timer = WorkTimerAutoStop(startWall + WORK_TIMER_LIMIT_MILLIS, breakMinutes, notes, android.os.SystemClock.elapsedRealtime(), WorkTimerAutoStopScheduler.currentBootCount(context))
+                var started = false
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        WorkTimerAutoStopScheduler.arm(context, profileId, startWall, timer)
+                        try {
+                            store.update { disk ->
+                                if (disk.activeWorkTimerStartedAt != null || !LocalProfiles.mayAccess(profileId, LocalProfiles.currentId(), LocalProfiles.isSwitching())) disk
+                                else { started = true; disk.copy(activeWorkTimerStartedAt = startWall, activeWorkTimerAutoStop = timer) }
+                            }.also { if (!started) WorkTimerAutoStopScheduler.cancel(context, profileId, startWall) }
+                        } catch (error: Exception) {
+                            runCatching { WorkTimerAutoStopScheduler.cancel(context, profileId, startWall) }
+                            throw error
+                        }
+                    }
+                }
+                result.onSuccess { saved -> applyArchive(saved); refreshWidgets() }
+                    .onFailure { storageError = context.getString(R.string.work_timer_start_error) }
+                timerStartPending = false
             }
         }
     }
@@ -331,6 +377,7 @@ internal fun TaskOrganizerApp(
 
     fun clearLocalData(onFinished: (Boolean) -> Unit = {}) {
         val remindersToCancel = (tasks + deletedTasks).toList()
+        val timerToCancel = activeWorkTimerStartedAt
         cleanupScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -341,6 +388,7 @@ internal fun TaskOrganizerApp(
             }
             result.onSuccess {
                 remindersToCancel.forEach { TaskReminderScheduler.cancel(context, it, profileId) }
+                timerToCancel?.let { WorkTimerAutoStopScheduler.cancel(context, profileId, it) }
                 BackupReminder.cancel(context, profileId)
                 backupLastAt = null
                 backupSnoozedUntil = null
@@ -352,6 +400,7 @@ internal fun TaskOrganizerApp(
                 workLogEntries.clear()
                 workLogSettings = WorkLogSettings()
                 activeWorkTimerStartedAt = null
+                activeWorkTimerAutoStop = null
                 refreshWidgets()
                 onFinished(true)
             }.onFailure {
@@ -541,6 +590,9 @@ internal fun TaskOrganizerApp(
                     entries = workLogEntries.toList(),
                     settings = workLogSettings,
                     activeTimerStartedAt = activeWorkTimerStartedAt,
+                    activeTimerAutoStop = activeWorkTimerAutoStop,
+                    notificationPermissionAllowed = notificationPermissionAllowed,
+                    timerStartPending = timerStartPending,
                     onSaveEntry = { entry, onFinished ->
                         updateArchive(change = { disk ->
                             val index = disk.workLogEntries.indexOfFirst { it.id == entry.id }
@@ -551,15 +603,37 @@ internal fun TaskOrganizerApp(
                         updateArchive(change = { disk -> disk.copy(workLogEntries = disk.workLogEntries.filterNot { it.id == entryId }) }, onFailure = { onFinished(false) }) { onFinished(true) }
                     },
                     onSaveSettings = { settings -> updateArchive(change = { disk -> disk.copy(workLogSettings = settings) }) },
-                    onStartTimer = { updateArchive(change = { disk -> if (disk.activeWorkTimerStartedAt == null) disk.copy(activeWorkTimerStartedAt = System.currentTimeMillis()) else disk }) },
-                    onStopTimer = { recordedEntries, onFinished ->
+                    onStartTimer = ::startWorkTimer,
+                    onTimerDraftChanged = { expectedStart, breakMinutes, notes ->
+                        appScope.launch {
+                            archiveUpdateMutex.withLock {
+                                val saved = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        store.updateIf { disk -> applyWorkTimerDraft(disk, expectedStart, breakMinutes, notes) }
+                                    }
+                                }
+                                saved.onSuccess { updated ->
+                                    if (updated != null) {
+                                        if (updated.activeWorkTimerStartedAt == expectedStart) activeWorkTimerAutoStop = updated.activeWorkTimerAutoStop
+                                        else applyArchive(updated)
+                                    }
+                                }
+                                    .onFailure { storageError = context.getString(R.string.work_timer_draft_save_error) }
+                            }
+                        }
+                    },
+                    onStopTimer = { expectedStart, recordedEntries, onFinished ->
+                        var stopped = false
                         updateArchive(change = { disk ->
-                            val ids = recordedEntries.map { it.id }.toSet()
-                            disk.copy(
-                                workLogEntries = disk.workLogEntries.filterNot { it.id in ids } + recordedEntries,
-                                activeWorkTimerStartedAt = null
-                            )
-                        }, onFailure = { onFinished(false) }) { onFinished(true) }
+                            if (disk.activeWorkTimerStartedAt != expectedStart) disk else {
+                                stopped = true
+                                val ids = recordedEntries.map { it.id }.toSet()
+                                disk.copy(workLogEntries = disk.workLogEntries.filterNot { it.id in ids } + recordedEntries, activeWorkTimerStartedAt = null, activeWorkTimerAutoStop = null)
+                            }
+                        }, onFailure = { onFinished(false) }) {
+                            if (stopped) withContext(Dispatchers.IO) { WorkTimerAutoStopScheduler.cancel(context, profileId, expectedStart) }
+                            onFinished(stopped)
+                        }
                     },
                     onExportCsv = onExportWorkCsv,
                     onBack = { navigateToTab(0) }

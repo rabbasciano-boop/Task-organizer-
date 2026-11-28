@@ -1,4 +1,12 @@
 <resources>
+    <string name="work_timer_auto_explanation">Il timer si ferma dopo 8 ore e salva la registrazione. Potrai avviarne un altro.</string>
+    <string name="work_timer_legacy_explanation">Questo timer è stato avviato prima dell’aggiornamento: fermalo manualmente. I prossimi si fermeranno dopo 8 ore.</string>
+    <string name="work_timer_auto_notification_title">Timer fermato automaticamente</string>
+    <string name="work_timer_auto_notification_body">Sono trascorse 8 ore. La registrazione è stata salvata nel Registro ore.</string>
+    <string name="work_timer_auto_entry">Timer fermato automaticamente dopo 8 ore</string>
+    <string name="work_timer_notifications_disabled">Le notifiche sono disattivate: la registrazione sarà comunque salvata quando il timer si ferma.</string>
+    <string name="work_timer_draft_save_error">Non è stato possibile salvare le note o la pausa del timer. Riprova prima di chiudere l’app.</string>
+    <string name="work_timer_start_error">Non è stato possibile avviare il timer e programmare l’arresto automatico. Riprova.</string>
     <string name="reminder_exact_permission_message">Per ricevere il promemoria all’orario scelto, abilita “Sveglie e promemoria” nelle impostazioni Android. Altrimenti potrebbe arrivare in ritardo.</string>
     <string name="reminder_advance_passed_title">Anticipo già passato</string>
     <string name="reminder_advance_passed_message">L’anticipo impostato è già passato, quindi questo promemoria non arriverebbe. Puoi riceverlo all’orario dell’attività oppure tornare indietro e modificarla.</string>

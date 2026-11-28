@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -58,11 +59,15 @@ internal fun TimeLogScreen(
     entries: List<WorkLogEntry>,
     settings: WorkLogSettings,
     activeTimerStartedAt: Long?,
+    activeTimerAutoStop: WorkTimerAutoStop?,
+    notificationPermissionAllowed: Boolean,
+    timerStartPending: Boolean,
     onSaveEntry: (WorkLogEntry, (Boolean) -> Unit) -> Unit,
     onDeleteEntry: (String, (Boolean) -> Unit) -> Unit,
     onSaveSettings: (WorkLogSettings) -> Unit,
-    onStartTimer: () -> Unit,
-    onStopTimer: (List<WorkLogEntry>, (Boolean) -> Unit) -> Unit,
+    onStartTimer: (Int, String) -> Unit,
+    onTimerDraftChanged: (Long, Int, String) -> Unit,
+    onStopTimer: (Long, List<WorkLogEntry>, (Boolean) -> Unit) -> Unit,
     onExportCsv: (String, String) -> Unit,
     onBack: () -> Unit
 ) {
@@ -98,9 +103,22 @@ internal fun TimeLogScreen(
         }
     }
     fun openNewEntry() { editor = null; timerSaved = false; resetEditorToken++; tabName = TimeLogTab.INSERT.name }
-    fun saveStoppedTimer(recorded: List<WorkLogEntry>) {
+    var observedTimerStart by remember { mutableStateOf(activeTimerStartedAt) }
+    LaunchedEffect(activeTimerStartedAt, entries) {
+        val previous = observedTimerStart
+        if (previous != null && activeTimerStartedAt == null) {
+            val automaticEntries = (0..3).mapNotNull { index -> entries.firstOrNull { it.id == autoStoppedWorkEntryId(previous, index) && it.autoStopped } }
+            automaticEntries.lastOrNull()?.let { saved ->
+                editor = saved
+                timerSaved = true
+                timerSegmentCount = automaticEntries.size
+            }
+        }
+        observedTimerStart = activeTimerStartedAt
+    }
+    fun saveStoppedTimer(startedAt: Long, recorded: List<WorkLogEntry>) {
         timerSaving = true
-        onStopTimer(recorded) { saved ->
+        onStopTimer(startedAt, recorded) { saved ->
             if (saved) {
                 timerSegmentCount = recorded.size
                 editor = recorded.last()
@@ -120,6 +138,7 @@ internal fun TimeLogScreen(
             TimeLogHeader(
                 hourlyRateCents = settings.hourlyRateCents,
                 activeTimerStartedAt = activeTimerStartedAt,
+                activeTimerAutoStop = activeTimerAutoStop,
                 onBack = onBack,
                 onOpenTimer = { tabName = TimeLogTab.INSERT.name },
                 onSaveRate = { cents -> onSaveSettings(settings.copy(hourlyRateCents = cents)) }
@@ -183,14 +202,21 @@ internal fun TimeLogScreen(
                 }
                 TimeLogTab.INSERT -> TimeLogEntryEditor(
                     existing = editor, resetToken = resetEditorToken, settings = settings,
-                    activeTimerStartedAt = activeTimerStartedAt, timerSaving = timerSaving, timerSaved = timerSaved, timerSegmentCount = timerSegmentCount,
-                    onStartTimer = { timerSaved = false; onStartTimer() },
+                    activeTimerStartedAt = activeTimerStartedAt, activeTimerAutoStop = activeTimerAutoStop, notificationPermissionAllowed = notificationPermissionAllowed,
+                    timerSaving = timerSaving || timerStartPending, timerSaved = timerSaved, timerSegmentCount = timerSegmentCount,
+                    onStartTimer = { breakMinutes, notes -> timerSaved = false; onStartTimer(breakMinutes, notes) },
+                    onTimerDraftChanged = onTimerDraftChanged,
                     onStopTimer = { startedAt, breakMinutes, notes ->
                         val start = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(startedAt), java.time.ZoneId.systemDefault())
                         val now = LocalDateTime.now()
-                        val recorded = timerWorkEntries(start, now, breakMinutes, notes)
+                        val timer = activeTimerAutoStop
+                        val elapsed = android.os.SystemClock.elapsedRealtime()
+                        val boot = WorkTimerAutoStopScheduler.currentBootCount(activity)
+                        val recorded = if (timer != null && workTimerRemaining(timer, System.currentTimeMillis(), elapsed, boot) == 0L) {
+                            autoStoppedWorkEntries(startedAt, timer.copy(breakMinutes = breakMinutes, notes = notes), java.time.ZoneId.systemDefault())
+                        } else timerWorkEntries(start, now, breakMinutes, notes)
                         if (recorded.isEmpty()) timerStopError = "Il timer è durato meno di un minuto registrabile, oppure l'orologio del telefono è cambiato. Attendi il minuto successivo e riprova: il timer resta attivo."
-                        else saveStoppedTimer(recorded)
+                        else saveStoppedTimer(startedAt, recorded)
                     },
                     onSave = { entry -> onSaveEntry(entry) { saved -> if (saved) { editor = null; tabName = TimeLogTab.DASHBOARD.name } } },
                     onCancel = { editor = null; tabName = TimeLogTab.DASHBOARD.name }
@@ -212,8 +238,8 @@ internal fun TimeLogScreen(
 }
 
 @Composable
-private fun TimeLogHeader(hourlyRateCents: Long, activeTimerStartedAt: Long?, onBack: () -> Unit, onOpenTimer: () -> Unit, onSaveRate: (Long) -> Unit) {
-    val elapsed = rememberElapsed(activeTimerStartedAt)
+private fun TimeLogHeader(hourlyRateCents: Long, activeTimerStartedAt: Long?, activeTimerAutoStop: WorkTimerAutoStop?, onBack: () -> Unit, onOpenTimer: () -> Unit, onSaveRate: (Long) -> Unit) {
+    val elapsed = rememberElapsed(activeTimerStartedAt, activeTimerAutoStop)
     var editRate by remember { mutableStateOf(false) }
     Surface(color = CardBlue.copy(alpha = .97f), shadowElevation = 2.dp) {
         Row(
@@ -311,6 +337,7 @@ private fun WorkEntryCard(entry: WorkLogEntry, rateCents: Long, onEdit: () -> Un
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text(date?.format(DateTimeFormatter.ofPattern("MMM d", Locale.ITALY))?.replaceFirstChar { it.titlecase(Locale.ITALY) } ?: entry.date, color = MainText, fontWeight = FontWeight.ExtraBold); date?.let { safeDate -> Text(safeDate.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALY).replaceFirstChar { it.titlecase(Locale.ITALY) }, color = Success, fontSize = 11.sp, modifier = Modifier.background(Success.copy(alpha = .13f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 3.dp)) }; Text("${entry.startTime} – ${entry.endTime}${if (isOvernightWorkShift(entry.startTime, entry.endTime)) " (+1 giorno)" else ""}", color = SoftText, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 Text(entry.notes.ifBlank { "Nessuna nota aggiunta" }, color = if (entry.notes.isBlank()) SoftText else MainText, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 9.dp))
+                if (entry.autoStopped) Text(stringResource(R.string.work_timer_auto_entry), color = Gold, fontSize = 11.sp)
                 Row(Modifier.fillMaxWidth().padding(top = 9.dp), horizontalArrangement = Arrangement.End) { if (entry.breakMinutes > 0) Text("Pausa: ${entry.breakMinutes} min", color = SoftText, fontSize = 10.sp, modifier = Modifier.weight(1f)); TextButton(onClick = onEdit, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text("Modifica", color = Gold, fontSize = 11.sp) }; TextButton(onClick = { if (deleteArmed) onDelete() else deleteArmed = true }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(if (deleteArmed) "Conferma?" else "Elimina", color = Danger, fontSize = 11.sp) } }
             }
             Column(horizontalAlignment = Alignment.End) { Text(formatWorkMinutes(workMinutes(entry)), color = MainText, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold); Text(formatCurrency(workEarningsCents(workMinutes(entry), rateCents)), color = Success, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
@@ -319,8 +346,8 @@ private fun WorkEntryCard(entry: WorkLogEntry, rateCents: Long, onEdit: () -> Un
 }
 
 @Composable
-private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, timerSaving: Boolean, timerSaved: Boolean, timerSegmentCount: Int, onStartTimer: () -> Unit, onStopTimer: (Long, Int, String) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
-    val seed = remember(existing?.id, resetToken) { existing ?: WorkLogEntry(date = LocalDate.now().toString(), startTime = "09:00", endTime = "18:00", breakMinutes = 60) }
+private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, settings: WorkLogSettings, activeTimerStartedAt: Long?, activeTimerAutoStop: WorkTimerAutoStop?, notificationPermissionAllowed: Boolean, timerSaving: Boolean, timerSaved: Boolean, timerSegmentCount: Int, onStartTimer: (Int, String) -> Unit, onTimerDraftChanged: (Long, Int, String) -> Unit, onStopTimer: (Long, Int, String) -> Unit, onSave: (WorkLogEntry) -> Unit, onCancel: () -> Unit) {
+    val seed = remember(existing?.id, resetToken) { existing ?: WorkLogEntry(date = LocalDate.now().toString(), startTime = "09:00", endTime = "18:00", breakMinutes = activeTimerAutoStop?.breakMinutes ?: 60, notes = activeTimerAutoStop?.notes.orEmpty()) }
     var dateText by rememberSaveable(resetToken) { mutableStateOf(formatItalianDate(seed.date)) }
     var startText by rememberSaveable(resetToken) { mutableStateOf(seed.startTime) }
     var endText by rememberSaveable(resetToken) { mutableStateOf(seed.endTime) }
@@ -334,7 +361,7 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
             endText = existing.endTime
         }
     }
-    val elapsed = rememberElapsed(activeTimerStartedAt)
+    val elapsed = rememberElapsed(activeTimerStartedAt, activeTimerAutoStop)
     val parsedDate = parseItalianDate(dateText)
     val start = normalizeTime(startText)
     val end = normalizeTime(endText)
@@ -344,12 +371,14 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
             Column(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(26.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(35.dp).background(Gold.copy(alpha = .15f), CircleShape), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.ic_nav_time_log), contentDescription = null, tint = Gold, modifier = Modifier.size(18.dp)) }; Column(Modifier.padding(start = 10.dp).weight(1f)) { Text("Timer dal vivo", color = MainText, fontWeight = FontWeight.ExtraBold); Text("Timbra entrata e uscita in tempo reale", color = SoftText, fontSize = 11.sp) }; Text(if (activeTimerStartedAt == null) "In attesa" else "In corso", color = if (activeTimerStartedAt == null) SoftText else Success, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 Text(formatElapsed(elapsed), color = MainText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().background(NightBlue.copy(alpha = .25f), RoundedCornerShape(18.dp)).padding(13.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = onStartTimer, enabled = activeTimerStartedAt == null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let { onStopTimer(it, (breakText.toIntOrNull() ?: 0).coerceIn(0, 480), notes.trim()) } }, enabled = activeTimerStartedAt != null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text(if (timerSaving) "Salvataggio…" else "Timbra uscita", fontSize = 12.sp) } }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onClick = { onStartTimer((breakText.toIntOrNull() ?: 0).coerceIn(0, 480), notes.trim()) }, enabled = activeTimerStartedAt == null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Success, contentColor = NightBlue)) { Text("Timbra entrata", fontSize = 12.sp) }; Button(onClick = { activeTimerStartedAt?.let { onStopTimer(it, (breakText.toIntOrNull() ?: 0).coerceIn(0, 480), notes.trim()) } }, enabled = activeTimerStartedAt != null && !timerSaving, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = MainText)) { Text(if (timerSaving) "Salvataggio…" else "Timbra uscita", fontSize = 12.sp) } }
+                Text(stringResource(if (activeTimerStartedAt != null && activeTimerAutoStop == null) R.string.work_timer_legacy_explanation else R.string.work_timer_auto_explanation), color = SoftText, fontSize = 12.sp)
+                if (!notificationPermissionAllowed) Text(stringResource(R.string.work_timer_notifications_disabled), color = SoftText, fontSize = 12.sp)
                 if (timerSaved) Text(if (timerSegmentCount > 1) "Timer salvato in $timerSegmentCount registrazioni. Qui puoi modificare l'ultima; le altre sono nella dashboard." else "Registrazione salvata con la pausa e le note inserite. Puoi aggiornarle qui sotto.", color = Success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
         item { TimeLogSectionTitle("Turni preimpostati", "Tocca un turno per compilare gli orari") }
-        item { Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { settings.presets.forEach { preset -> AssistChip(onClick = { startText = preset.startTime; endText = preset.endTime; breakText = preset.breakMinutes.toString() }, label = { Text("${preset.name} (${preset.startTime}-${preset.endTime})", maxLines = 1) }, colors = AssistChipDefaults.assistChipColors(containerColor = CardBlueLight, labelColor = MainText), border = null) } } }
+        item { Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { settings.presets.forEach { preset -> AssistChip(onClick = { startText = preset.startTime; endText = preset.endTime; breakText = preset.breakMinutes.toString(); activeTimerStartedAt?.let { onTimerDraftChanged(it, preset.breakMinutes.coerceIn(0, 480), notes) } }, label = { Text("${preset.name} (${preset.startTime}-${preset.endTime})", maxLines = 1) }, colors = AssistChipDefaults.assistChipColors(containerColor = CardBlueLight, labelColor = MainText), border = null) } } }
         item {
             Column(Modifier.fillMaxWidth().background(CardBlue, RoundedCornerShape(26.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(if (existing == null) "Registra giornata" else "Modifica giornata", color = MainText, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp); if (existing != null) TextButton(onClick = onCancel) { Text("Chiudi", color = SoftText) } }
@@ -359,8 +388,8 @@ private fun TimeLogEntryEditor(existing: WorkLogEntry?, resetToken: Int, setting
                     TimeLogTimeField(value = startText, label = "Ora inizio", onValueChange = { startText = it; error = null }, modifier = Modifier.weight(1f))
                     TimeLogTimeField(value = endText, label = "Ora fine", onValueChange = { endText = it; error = null }, modifier = Modifier.weight(1f))
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(value = breakText, onValueChange = { breakText = it.filter(Char::isDigit); error = null }, label = { Text("Pausa (min)") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()); Column(Modifier.weight(1f).background(Gold.copy(alpha = .12f), RoundedCornerShape(16.dp)).padding(10.dp), horizontalAlignment = Alignment.End) { Text("Totale netto", color = SoftText, fontSize = 10.sp); Text("${formatWorkMinutes(minutes)}${if (start != null && end != null && isOvernightWorkShift(start, end)) " · +1 giorno" else ""}", color = MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold); Text(formatCurrency(workEarningsCents(minutes, settings.hourlyRateCents)), color = MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold) } }
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Note attività svolta") }, placeholder = { Text("Es. riunione, progetto, consegna…") }, modifier = Modifier.fillMaxWidth().heightIn(min = 112.dp), colors = editorFieldColors())
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(value = breakText, onValueChange = { breakText = it.filter(Char::isDigit); error = null; activeTimerStartedAt?.let { started -> onTimerDraftChanged(started, (breakText.toIntOrNull() ?: 0).coerceIn(0, 480), notes) } }, label = { Text("Pausa (min)") }, modifier = Modifier.weight(1f), singleLine = true, colors = compactEditorFieldColors()); Column(Modifier.weight(1f).background(Gold.copy(alpha = .12f), RoundedCornerShape(16.dp)).padding(10.dp), horizontalAlignment = Alignment.End) { Text("Totale netto", color = SoftText, fontSize = 10.sp); Text("${formatWorkMinutes(minutes)}${if (start != null && end != null && isOvernightWorkShift(start, end)) " · +1 giorno" else ""}", color = MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold); Text(formatCurrency(workEarningsCents(minutes, settings.hourlyRateCents)), color = MainText, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold) } }
+                OutlinedTextField(value = notes, onValueChange = { notes = it; activeTimerStartedAt?.let { started -> onTimerDraftChanged(started, (breakText.toIntOrNull() ?: 0).coerceIn(0, 480), notes) } }, label = { Text("Note attività svolta") }, placeholder = { Text("Es. riunione, progetto, consegna…") }, modifier = Modifier.fillMaxWidth().heightIn(min = 112.dp), colors = editorFieldColors())
                 error?.let { Text(it, color = Danger, fontSize = 12.sp) }
                 Button(onClick = {
                     val safeDate = parsedDate
@@ -609,7 +638,17 @@ internal fun workEarningsCents(minutes: Int, hourlyRateCents: Long): Long = (min
 private fun formatWorkMinutes(minutes: Int) = "${minutes / 60}h ${(minutes % 60).toString().padStart(2, '0')}m"
 private fun formatHourlyRate(cents: Long) = "${formatCurrency(cents)}/h"
 private fun formatElapsed(milliseconds: Long) = "%02d:%02d:%02d".format(milliseconds / 3_600_000, (milliseconds / 60_000) % 60, (milliseconds / 1_000) % 60)
-@Composable private fun rememberElapsed(startedAt: Long?): Long { var now by remember(startedAt) { mutableLongStateOf(System.currentTimeMillis()) }; LaunchedEffect(startedAt) { while (startedAt != null) { now = System.currentTimeMillis(); delay(1_000) } }; return (startedAt?.let { (now - it).coerceAtLeast(0) } ?: 0L) }
+@Composable
+private fun rememberElapsed(startedAt: Long?, timer: WorkTimerAutoStop?): Long {
+    val context = LocalContext.current
+    val boot = remember(context) { WorkTimerAutoStopScheduler.currentBootCount(context) }
+    var now by remember(startedAt) { mutableLongStateOf(System.currentTimeMillis()) }
+    var elapsedNow by remember(startedAt) { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(startedAt) {
+        while (startedAt != null) { now = System.currentTimeMillis(); elapsedNow = SystemClock.elapsedRealtime(); delay(1_000) }
+    }
+    return if (startedAt == null) 0L else if (timer != null) WORK_TIMER_LIMIT_MILLIS - workTimerRemaining(timer, now, elapsedNow, boot) else (now - startedAt).coerceAtLeast(0)
+}
 internal fun filterWorkEntries(entries: List<WorkLogEntry>, period: String, today: LocalDate = LocalDate.now()): List<WorkLogEntry> = when (period) { "week" -> { val monday = today.minusDays((today.dayOfWeek.value - 1).toLong()); entries.filter { runCatching { val date = LocalDate.parse(it.date); !date.isBefore(monday) && !date.isAfter(monday.plusDays(6)) }.getOrDefault(false) } }; "month" -> entries.filter { runCatching { val date = LocalDate.parse(it.date); date.year == today.year && date.month == today.month }.getOrDefault(false) }; else -> entries.filter { validWorkLogEntry(it.date, it.startTime, it.endTime) } }
 private fun csvText(value: String): String { val safe = if (value.trimStart().firstOrNull() in setOf('=', '+', '-', '@')) "'$value" else value; return "\"${safe.replace("\"", "\"\"")}\"" }
 internal fun workCsv(entries: List<WorkLogEntry>, rateCents: Long): String = buildString { append("Data;Ora inizio;Ora fine;Pausa (min);Ore nette;Tariffa oraria (€);Guadagno (€);Note\n"); entries.filter { validWorkLogEntry(it.date, it.startTime, it.endTime) }.sortedBy { it.date }.forEach { entry -> val minutes = workMinutes(entry); append("${entry.date};${entry.startTime};${entry.endTime};${entry.breakMinutes};${(minutes / 60.0).toString().replace('.', ',')};${(rateCents / 100.0).toString().replace('.', ',')};${(workEarningsCents(minutes, rateCents) / 100.0).toString().replace('.', ',')};${csvText(entry.notes)}\n") } }
