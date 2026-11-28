@@ -43,7 +43,9 @@ fun ActivitiesScreen(
         .sortedBy { it.first }
         .map { (category, icon) -> category to categoryDisplay(category, icon) }
     val statusOptions = listOf("all" to "Tutte", "todo" to "Da fare", "done" to "Completate")
-    val sortedTasks = tasks.filter { task ->
+    val taskSnapshot = tasks.toList()
+    val sortedTasks = remember(taskSnapshot, selectedMonth, selectedCategory, selectedStatus, searchQuery) {
+        taskSnapshot.filter { task ->
                 (selectedMonth.isBlank() || task.date.startsWith(selectedMonth)) &&
                     (selectedCategory.isBlank() || task.category == selectedCategory) &&
                     taskMatchesQuery(task, searchQuery) &&
@@ -53,6 +55,7 @@ fun ActivitiesScreen(
                         else -> true
                     }
             }.sortedWith(compareBy<OrganizerTask> { it.completed }.thenBy { it.date }.thenBy { it.time ?: "99:99" })
+    }
     val completed = tasks.count { it.completed }
 
     LazyPageColumn {

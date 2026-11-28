@@ -22,11 +22,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 internal enum class QuickTaskSaveResult { SAVED, SAVED_WITHOUT_REMINDER, FAILED }
 
 @Composable
-internal fun QuickTaskField(text: String, draft: QuickTaskDraft?, saving: Boolean, onTextChange: (String) -> Unit, onSubmit: () -> Unit) {
+internal fun QuickTaskField(text: String, draft: QuickTaskDraft?, now: LocalDateTime, saving: Boolean, onTextChange: (String) -> Unit, onSubmit: () -> Unit) {
     val enabled = text.isNotBlank() && !saving
     Card(colors = CardDefaults.cardColors(containerColor = CardBlue.copy(alpha = .92f)), shape = RoundedCornerShape(22.dp)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -51,7 +52,13 @@ internal fun QuickTaskField(text: String, draft: QuickTaskDraft?, saving: Boolea
                     else -> formatItalianDate(draft.date.toString())
                 }
                 val timeLabel = draft.time?.toString() ?: stringResource(R.string.quick_no_time)
+                Text(stringResource(R.string.quick_preview_title, draft.title), color = MainText, fontSize = 13.sp)
                 Text(stringResource(R.string.quick_preview, dateLabel, timeLabel), color = SoftText, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                if (draft.ambiguousHour && draft.time != null) {
+                    val laterTime = draft.time.plusHours(12).toString()
+                    Text(stringResource(R.string.quick_time_ambiguous, timeLabel, laterTime), color = SoftText, fontSize = 12.sp)
+                }
+                if (draft.isPast(now)) Text(stringResource(R.string.quick_time_past), color = Danger, fontSize = 13.sp)
             }
         }
     }

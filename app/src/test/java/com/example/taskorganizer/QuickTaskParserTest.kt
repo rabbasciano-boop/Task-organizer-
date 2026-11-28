@@ -59,4 +59,30 @@ class QuickTaskParserTest {
         assertEquals(LocalDate.of(2027, 1, 1), next.date)
         assertEquals(LocalTime.MIDNIGHT, next.time)
     }
+
+    @Test fun preservesNamesAndRecognizesPunctuation() {
+        val name = parseQuickTask("Chiamare Mar", now)
+        assertEquals("Chiamare Mar", name.title)
+        assertEquals(now.toLocalDate(), name.date)
+        assertEquals("Chiamare Mar", parseQuickTask("Chiamare Mar domani alle 18", now).title)
+        val dot = parseQuickTask("Visita domani alle 9.", now)
+        assertEquals("Visita.", dot.title)
+        assertEquals(LocalTime.of(9, 0), dot.time)
+        val comma = parseQuickTask("Visita domani alle 9,30", now)
+        assertEquals("Visita", comma.title)
+        assertEquals(LocalTime.of(9, 30), comma.time)
+        val invalid = parseQuickTask("Visita domani alle 9,3", now)
+        assertEquals("Visita alle 9,3", invalid.title)
+        assertEquals(null, invalid.time)
+    }
+
+    @Test fun identifiesAmbiguousAndPastTimes() {
+        val ambiguous = parseQuickTask("Visita domani alle 6", now)
+        assertEquals(LocalTime.of(6, 0), ambiguous.time)
+        org.junit.Assert.assertTrue(ambiguous.ambiguousHour)
+        val explicit = parseQuickTask("Visita oggi alle 9", now)
+        org.junit.Assert.assertTrue(explicit.isPast(now))
+        val withoutDate = parseQuickTask("Visita alle 9", now)
+        org.junit.Assert.assertFalse(withoutDate.isPast(now))
+    }
 }

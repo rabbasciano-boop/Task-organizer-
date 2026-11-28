@@ -83,7 +83,7 @@ internal object RoutineNotifications {
             TaskReminderScheduler.ensureNotificationChannels(context)
             val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val text = context.getString(notice.body)
-            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, TaskReminderScheduler.REMINDER_CHANNEL) else Notification.Builder(context)
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, TaskReminderScheduler.SUGGESTIONS_CHANNEL) else Notification.Builder(context)
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) builder.setDefaults(Notification.DEFAULT_SOUND)
             val notification = builder.setSmallIcon(R.drawable.ic_stat_task_organizer)
                 .setContentTitle(context.getString(notice.title)).setContentText(text)

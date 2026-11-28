@@ -82,7 +82,7 @@ internal object InactivityNotifications {
         val manager = context.getSystemService(NotificationManager::class.java)
         TaskReminderScheduler.ensureNotificationChannels(context)
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, TaskReminderScheduler.REMINDER_CHANNEL) else Notification.Builder(context)
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, TaskReminderScheduler.SUGGESTIONS_CHANNEL) else Notification.Builder(context)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) builder.setDefaults(Notification.DEFAULT_SOUND)
         val message = context.getString(if (stage == 0) R.string.inactivity_message_first else R.string.inactivity_message_second)
         val notification = builder.setSmallIcon(R.drawable.ic_stat_task_organizer)

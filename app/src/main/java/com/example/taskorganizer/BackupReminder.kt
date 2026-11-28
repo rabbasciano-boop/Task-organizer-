@@ -28,6 +28,15 @@ internal fun shouldSuggestBackup(taskCount: Int, lastBackupAt: Long?, snoozedUnt
 internal fun nextBackupNoticeAt(lastBackupAt: Long?, baseline: Long, lastNoticeAt: Long?): Long =
     maxOf(lastBackupAt ?: baseline, lastNoticeAt ?: 0L) + BACKUP_REMINDER_PERIOD
 
+private fun WorkShiftPreset.backupRelevantFields() = listOf(name, startTime, endTime, breakMinutes.toString())
+private val defaultShiftFields = WorkLogSettings().presets.map { it.backupRelevantFields() }
+
+internal fun hasDataToBackUp(archive: TaskArchive): Boolean =
+    archive.tasks.isNotEmpty() || archive.deletedTasks.isNotEmpty() || archive.listItems.isNotEmpty() ||
+        archive.workLogEntries.isNotEmpty() || archive.activeWorkTimerStartedAt != null ||
+        archive.workLogSettings.hourlyRateCents != 0L || archive.workLogSettings.presets.map { it.backupRelevantFields() } != defaultShiftFields ||
+        archive.customCategories.isNotEmpty() || archive.customCategoryIcons.isNotEmpty()
+
 internal object BackupReminder {
     private fun prefs(context: Context, profile: String) = context.getSharedPreferences("task_organizer_profile_$profile", Context.MODE_PRIVATE)
 
@@ -47,7 +56,7 @@ internal object BackupReminder {
         context.getSystemService(NotificationManager::class.java).cancel(profile, ID)
     }
 
-    @Synchronized fun schedule(context: Context, profile: String, now: Long = System.currentTimeMillis()) {
+    @Synchronized fun schedule(context: Context, profile: String, now: Long = System.currentTimeMillis(), notBefore: Long = now + 60_000L) {
         if (!LocalProfiles.mayAccess(profile, LocalProfiles.currentId(), LocalProfiles.isSwitching())) return
         if (!TaskReminderScheduler.notificationsAllowed(context)) {
             cancel(context, profile)
@@ -61,7 +70,7 @@ internal object BackupReminder {
         }
         val lastBackup = prefs.getLong(LAST_BACKUP_AT, 0L).takeIf { it > 0 }
         val lastNotice = prefs.getLong(LAST_NOTICE, 0L).takeIf { it > 0 }
-        val due = maxOf(nextBackupNoticeAt(lastBackup, baseline, lastNotice), now + 60_000L)
+        val due = maxOf(nextBackupNoticeAt(lastBackup, baseline, lastNotice), notBefore)
         val pi = pending(context, profile, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
         context.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, due, pi)
     }
@@ -84,6 +93,10 @@ internal object BackupReminder {
         val lastNotice = prefs.getLong(LAST_NOTICE, 0L).takeIf { it > 0 }
         if (baseline <= 0L || now < nextBackupNoticeAt(lastBackup, baseline, lastNotice) || !TaskReminderScheduler.notificationsAllowed(context)) {
             schedule(context, profile, now)
+            return
+        }
+        if (!hasDataToBackUp(EncryptedTaskStore(context, profileId = profile).load())) {
+            schedule(context, profile, now, now + BACKUP_REMINDER_PERIOD)
             return
         }
         if (!LocalProfiles.mayAccess(profile, LocalProfiles.currentId(), LocalProfiles.isSwitching())) return

@@ -172,6 +172,7 @@ internal fun TaskOrganizerApp(
                 if (savedArchive != null) {
                     applyArchive(savedArchive)
                     refreshWidgets()
+                    appScope.launch(Dispatchers.IO) { runCatching { BackupReminder.schedule(context, profileId) } }
                     afterSaved(savedArchive)
                 } else {
                     storageError = "Non è stato possibile salvare le modifiche. Le tue attività non sono state cambiate: prova di nuovo o libera spazio sul telefono."

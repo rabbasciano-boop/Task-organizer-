@@ -23,4 +23,15 @@ class BackupReminderTimingTest {
         assertEquals(now + BACKUP_REMINDER_PERIOD, nextBackupNoticeAt(now, now - BACKUP_REMINDER_PERIOD, null))
         assertEquals(now + BACKUP_REMINDER_PERIOD, nextBackupNoticeAt(now - BACKUP_REMINDER_PERIOD, now - BACKUP_REMINDER_PERIOD, now))
     }
+
+    @Test fun emptyProfileDoesNotNeedBackupNotification() {
+        assertFalse(hasDataToBackUp(TaskArchive()))
+        assertTrue(hasDataToBackUp(TaskArchive(tasks = listOf(OrganizerTask(title = "Prova", date = "2026-11-28")))))
+        assertTrue(hasDataToBackUp(TaskArchive(listItems = listOf(OrganizerListItem(title = "Latte")))))
+        assertTrue(hasDataToBackUp(TaskArchive(workLogEntries = listOf(WorkLogEntry(date = "2026-11-28", startTime = "09:00", endTime = "10:00")))))
+        assertTrue(hasDataToBackUp(TaskArchive(customCategories = listOf("Salute"))))
+        assertTrue(hasDataToBackUp(TaskArchive(activeWorkTimerStartedAt = now)))
+        assertTrue(hasDataToBackUp(TaskArchive(workLogSettings = WorkLogSettings(hourlyRateCents = 100))))
+        assertTrue(hasDataToBackUp(TaskArchive(workLogSettings = WorkLogSettings(presets = emptyList()))))
+    }
 }

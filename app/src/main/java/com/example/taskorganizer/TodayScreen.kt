@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -106,13 +108,14 @@ internal fun TodayScreen(
     var quickText by rememberSaveable { mutableStateOf("") }
     var quickId by rememberSaveable { mutableStateOf(java.util.UUID.randomUUID().toString()) }
     var quickSaving by remember { mutableStateOf(false) }
+    var confirmPastQuickTask by rememberSaveable { mutableStateOf(false) }
     var quickNow by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(quickText) {
         quickNow = LocalDateTime.now()
         while (quickText.isNotBlank()) { delay(15_000); quickNow = LocalDateTime.now() }
     }
     val quickDraft = remember(quickText, quickNow) { quickText.takeIf { it.isNotBlank() }?.let { parseQuickTask(it, quickNow) } }
-    fun submitQuickTask() {
+    fun saveQuickTask() {
         if (quickText.isBlank() || quickSaving) return
         val textAtSubmit = quickText
         val idAtSubmit = quickId
@@ -132,6 +135,21 @@ internal fun TodayScreen(
                 }
             }
         }
+    }
+    fun submitQuickTask() {
+        if (quickText.isBlank() || quickSaving) return
+        if (parseQuickTask(quickText, LocalDateTime.now()).isPast(LocalDateTime.now())) confirmPastQuickTask = true
+        else saveQuickTask()
+    }
+    if (confirmPastQuickTask) {
+        AlertDialog(
+            onDismissRequest = { confirmPastQuickTask = false },
+            containerColor = CardBlue,
+            title = { Text(stringResource(R.string.quick_past_confirm_title), color = MainText) },
+            text = { Text(stringResource(R.string.quick_past_confirm_message), color = SoftText) },
+            confirmButton = { TextButton(onClick = { confirmPastQuickTask = false; saveQuickTask() }) { Text(stringResource(R.string.quick_past_confirm_save), color = Gold) } },
+            dismissButton = { TextButton(onClick = { confirmPastQuickTask = false }) { Text(stringResource(R.string.quick_past_confirm_edit), color = SoftText) } }
+        )
     }
 
     ModalNavigationDrawer(
@@ -159,7 +177,7 @@ internal fun TodayScreen(
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 104.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    item { QuickTaskField(quickText, quickDraft, quickSaving, { value -> if (quickText != value) { quickText = value; quickId = java.util.UUID.randomUUID().toString() } }, ::submitQuickTask) }
+                    item { QuickTaskField(quickText, quickDraft, quickNow, quickSaving, { value -> if (quickText != value) { quickText = value; quickId = java.util.UUID.randomUUID().toString() } }, ::submitQuickTask) }
                     if (shouldSuggestBackup(tasks.size, backupLastAt, backupSnoozedUntil, backupNow)) item { BackupReminderCard(onOpenBackup, onSnoozeBackup) }
                     item { DailySummaryCard(isToday, completedCount, selectedTasks.size, nextTask?.time) }
                     if (com.example.taskorganizer.ui.theme.OrganizerPalette.currentTheme == com.example.taskorganizer.ui.theme.OrganizerTheme.CARTA_DORATA) item { GoldDivider() }
@@ -199,7 +217,7 @@ private fun HomeHeader(nickname: String, account: SignedInAccount?, selectedDate
         }
         Column(Modifier.weight(1f)) {
             Text(buildString { append(formatter.format(selectedDate).replaceFirstChar { it.titlecase(Locale.ITALY) }); if (isToday) append(" • Oggi") }, color = Gold, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-            Text(greetingFor(nickname), color = MainText, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = if (OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) CartaHeadingFont else null)
+            Text(greetingFor(nickname), modifier = Modifier.heightIn(max = 120.dp).verticalScroll(rememberScrollState()), color = MainText, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = if (OrganizerPalette.currentTheme == OrganizerTheme.CARTA_DORATA) CartaHeadingFont else null)
         }
         val calendarShape = RoundedCornerShape(16.dp)
         Box(Modifier.size(43.dp).then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(calendarShape) else Modifier).clip(calendarShape).background(CardBlue.copy(alpha = .92f)).border(1.dp, Gold.copy(alpha = .24f), calendarShape).clickable(onClick = onOpenCalendar).semantics { contentDescription = "Apri calendario"; role = Role.Button }, contentAlignment = Alignment.Center) {

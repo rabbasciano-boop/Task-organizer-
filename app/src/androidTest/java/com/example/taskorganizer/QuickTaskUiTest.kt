@@ -1,6 +1,7 @@
 package com.example.taskorganizer
 
 import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.performTextInput
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import com.example.taskorganizer.ui.theme.TaskOrganizerTheme
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -63,5 +65,45 @@ class QuickTaskUiTest {
         compose.runOnIdle { assertTrue(called) }
         compose.onNodeWithText("Promemoria prova").assertExists()
         compose.onNodeWithText("Attività creata").assertDoesNotExist()
+    }
+
+    @Test fun pastTimeRequiresExplicitConfirmation() {
+        var saved: OrganizerTask? = null
+        compose.setContent {
+            TaskOrganizerTheme(OrganizerTheme.CARTA_DORATA) {
+                TodayScreen(
+                    tasks = emptyList(), nickname = "Utente", signedInAccount = null, onAdd = {},
+                    onQuickAdd = { task, done -> saved = task; done(QuickTaskSaveResult.SAVED) },
+                    onToggleTask = {}, onCompleteTask = {}, onDeleteTask = {}, onRestoreTask = {}, onEdit = {},
+                    onOpenActivities = {}, onOpenLists = {}, onOpenCalendar = {}, onOpenTimeLog = {}, onManageAccount = {}, onOpenPrivacy = {}
+                )
+            }
+        }
+        val yesterday = LocalDate.now().minusDays(1).format(DateTimeFormatter.ofPattern("dd/MM/uuuu"))
+        compose.onNodeWithText("Aggiungi velocemente").performTextInput("Prova $yesterday alle 09:00")
+        compose.onNodeWithText("L’orario è già passato: il promemoria potrebbe non arrivare.").assertExists()
+        compose.onNodeWithContentDescription("Crea attività").performClick()
+        compose.onNodeWithText("Orario già passato").assertExists()
+        compose.onNodeWithText("Modifica", substring = false).performClick()
+        compose.runOnIdle { assertEquals(null, saved) }
+        compose.onNodeWithContentDescription("Crea attività").performClick()
+        compose.onNodeWithText("Salva comunque").performClick()
+        compose.runOnIdle { assertEquals("Prova", saved?.title) }
+    }
+
+    @Test fun veryLongNicknameDoesNotHideTheHomeContent() {
+        val nickname = "Nome molto lungo ".repeat(25)
+        compose.setContent {
+            TaskOrganizerTheme(OrganizerTheme.CARTA_DORATA) {
+                TodayScreen(
+                    tasks = emptyList(), nickname = nickname, signedInAccount = null, onAdd = {},
+                    onQuickAdd = { _, _ -> }, onToggleTask = {}, onCompleteTask = {}, onDeleteTask = {},
+                    onRestoreTask = {}, onEdit = {}, onOpenActivities = {}, onOpenLists = {}, onOpenCalendar = {},
+                    onOpenTimeLog = {}, onManageAccount = {}, onOpenPrivacy = {}
+                )
+            }
+        }
+        compose.onNodeWithText(greetingFor(nickname)).assertIsDisplayed()
+        compose.onNodeWithText("Aggiungi velocemente").assertIsDisplayed()
     }
 }

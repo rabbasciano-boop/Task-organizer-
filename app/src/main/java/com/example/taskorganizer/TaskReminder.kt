@@ -20,6 +20,7 @@ import java.time.ZoneId
 object TaskReminderScheduler {
     internal const val REMINDER_CHANNEL = "task_reminders"
     internal const val ALARM_CHANNEL = "task_alarm_reminders"
+    internal const val SUGGESTIONS_CHANNEL = "organizer_suggestions_v1"
     private const val ACTION_REMINDER = "com.example.taskorganizer.REMINDER"
     private const val EXTRA_TASK_ID = "task_id"
     private const val EXTRA_INDEX = "reminder_index"
@@ -105,6 +106,12 @@ object TaskReminderScheduler {
             )
         }
         manager.createNotificationChannel(alarmChannel)
+        if (manager.getNotificationChannel(SUGGESTIONS_CHANNEL) == null) {
+            val importance = if (manager.getNotificationChannel(REMINDER_CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) {
+                NotificationManager.IMPORTANCE_NONE
+            } else NotificationManager.IMPORTANCE_DEFAULT
+            manager.createNotificationChannel(NotificationChannel(SUGGESTIONS_CHANNEL, context.getString(R.string.suggestions_channel), importance))
+        }
         manager.deleteNotificationChannel("optional_inactivity_reminders")
         manager.deleteNotificationChannel("optional_routine_notices")
     }

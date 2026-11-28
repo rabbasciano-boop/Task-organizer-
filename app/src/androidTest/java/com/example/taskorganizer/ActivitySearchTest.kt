@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.runtime.mutableStateListOf
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import com.example.taskorganizer.ui.theme.TaskOrganizerTheme
 import org.junit.Rule
@@ -40,5 +41,19 @@ class ActivitySearchTest {
         compose.onNodeWithText("CITTA esami").assertDoesNotExist()
         compose.onNodeWithText("Cerca attività").performTextInput("inesistente")
         compose.onNodeWithText("Nessuna attività trovata per «inesistente»").performScrollTo().assertExists()
+    }
+
+    @Test fun updatingTheTaskListRefreshesSearchResults() {
+        val items = mutableStateListOf(tasks.first())
+        compose.setContent {
+            TaskOrganizerTheme(OrganizerTheme.CARTA_DORATA) {
+                ActivitiesScreen(items, emptyList(), {}, {}, {}, {}, {}, {}, {}, {})
+            }
+        }
+        compose.onNodeWithText("Cerca attività").performTextInput("visita")
+        compose.onNodeWithText("Visita in Città").assertExists()
+        compose.runOnIdle { items[0] = items[0].copy(title = "Appuntamento") }
+        compose.onNodeWithText("Visita in Città").assertDoesNotExist()
+        compose.onNodeWithText("Nessuna attività trovata per «visita»").performScrollTo().assertExists()
     }
 }

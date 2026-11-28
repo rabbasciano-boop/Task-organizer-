@@ -1,4 +1,5 @@
 <resources>
+    <string name="suggestions_channel">Suggerimenti</string>
     <string name="backup_reminder_title">Fai un backup dei tuoi dati</string>
     <string name="backup_reminder_message">Una copia aggiornata ti aiuta a conservare i tuoi dati. Apri l’app quando vuoi.</string>
     <string name="backup_card_description">Una copia cifrata ti aiuta a conservare attività e altri dati.</string>
@@ -13,6 +14,13 @@
     <string name="quick_date_tomorrow">Domani</string>
     <string name="quick_no_time">senza orario</string>
     <string name="quick_preview">%1$s · %2$s</string>
+    <string name="quick_preview_title">Titolo: %1$s</string>
+    <string name="quick_time_ambiguous">Orario interpretato: %1$s. Per il pomeriggio o la sera scrivi %2$s.</string>
+    <string name="quick_time_past">L’orario è già passato: il promemoria potrebbe non arrivare.</string>
+    <string name="quick_past_confirm_title">Orario già passato</string>
+    <string name="quick_past_confirm_message">L’attività sarà salvata nell’orario indicato, ma il promemoria non potrà arrivare in tempo. Vuoi continuare?</string>
+    <string name="quick_past_confirm_save">Salva comunque</string>
+    <string name="quick_past_confirm_edit">Modifica</string>
     <string name="quick_saved">Attività creata</string>
     <string name="quick_saved_no_reminder">Attività salvata, ma non è stato possibile programmare il promemoria.</string>
     <string name="quick_edit">Modifica</string>
@@ -138,25 +146,14 @@
     <string name="account_delete_local_option">Elimina anche i dati di questo profilo dal telefono</string>
     <string name="account_sign_out_confirm">Esci</string>
     <string name="account_delete_confirm">Elimina account</string>
-    <string name="inactivity_settings_title">Notifiche</string>
-    <string name="inactivity_settings_subtitle">Avvisi e promemoria facoltativi</string>
-    <string name="inactivity_toggle_title">Ricordami di tornare</string>
-    <string name="inactivity_toggle_description">Se non apri l’app, ricevi un messaggio dopo circa 3 giorni e uno dopo circa 2 settimane. Puoi disattivarli quando vuoi.</string>
-    <string name="inactivity_permission_notice">Per ricevere i messaggi, consenti anche le notifiche nelle impostazioni del telefono.</string>
-    <string name="inactivity_open_android_settings">Apri impostazioni notifiche</string>
-    <string name="inactivity_channel">Inviti a tornare nell’app</string>
     <string name="inactivity_message_first">Hai nuovi impegni da organizzare? Ti aspettiamo!</string>
     <string name="inactivity_message_second">Ci manchi! Quando vuoi, siamo qui per aiutarti a organizzare le tue giornate.</string>
-    <string name="routine_channel">Promemoria organizzazione</string>
     <string name="routine_list_title">La tua lista ti aspetta ✅</string>
     <string name="routine_list_body">Hai delle attività da organizzare? Apri Task Organizer quando vuoi.</string>
     <string name="routine_work_title">Il tuo Registro ore 🕒</string>
     <string name="routine_work_body">Vuoi aggiungere le ore lavorate? Il registro è pronto.</string>
     <string name="routine_weekly_title">Un riepilogo per te 📊</string>
     <string name="routine_weekly_body">Dai un’occhiata alle attività della settimana.</string>
-    <string name="routine_list_description">Ogni giorno, intorno alle 8:00.</string>
-    <string name="routine_work_description">Ogni mercoledì, intorno alle 19:00.</string>
-    <string name="routine_weekly_description">Ogni domenica, intorno alle 18:00.</string>
     <string name="notification_setup_title">Restiamo in contatto</string>
     <string name="notification_setup_description">Attiva le notifiche del telefono per completare la configurazione dell’app.</string>
     <string name="notification_setup_reminders_title">I tuoi promemoria</string>

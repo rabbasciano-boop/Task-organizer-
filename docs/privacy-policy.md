@@ -26,7 +26,7 @@ Per ricordare di creare una copia, l'app conserva sul telefono, separatamente pe
 
 ## Notifiche e sveglie
 
-Durante la prima configurazione l'app richiede di abilitare le notifiche per proseguire. Dopo la configurazione il permesso può essere revocato nelle impostazioni Android. Promemoria e sveglie sono gestiti in due categorie distinte nelle impostazioni Android. La modalità sveglia può richiedere un'autorizzazione Android aggiuntiva per gli avvisi esatti.
+Durante la prima configurazione l'app richiede di abilitare le notifiche per proseguire. Dopo la configurazione il permesso può essere revocato nelle impostazioni Android. Su Android 8 e versioni successive, promemoria, sveglie e suggerimenti generici sono gestiti in categorie distinte nelle impostazioni Android. La modalità sveglia può richiedere un'autorizzazione Android aggiuntiva per gli avvisi esatti.
 
 L'app può inviare messaggi che invitano a riaprirla. Per calcolare quando inviarli, l'app conserva localmente l'ultima apertura; non serve un account e questa informazione non viene inviata a un server. Gli avvisi si possono disattivare nelle impostazioni Android.
 
