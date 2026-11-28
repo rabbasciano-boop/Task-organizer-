@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,6 +32,7 @@ fun ActivitiesScreen(
     var selectedMonth by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("") }
     var selectedStatus by rememberSaveable { mutableStateOf("all") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var filterOpen by rememberSaveable { mutableStateOf<String?>(null) }
     var taskToDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
     val taskToDelete = taskToDeleteId?.let { id -> tasks.firstOrNull { it.id == id } }
@@ -41,19 +43,16 @@ fun ActivitiesScreen(
         .sortedBy { it.first }
         .map { (category, icon) -> category to categoryDisplay(category, icon) }
     val statusOptions = listOf("all" to "Tutte", "todo" to "Da fare", "done" to "Completate")
-    val sortedTasks by remember {
-        derivedStateOf {
-            tasks.filter { task ->
+    val sortedTasks = tasks.filter { task ->
                 (selectedMonth.isBlank() || task.date.startsWith(selectedMonth)) &&
                     (selectedCategory.isBlank() || task.category == selectedCategory) &&
+                    taskMatchesQuery(task, searchQuery) &&
                     when (selectedStatus) {
                         "todo" -> !task.completed
                         "done" -> task.completed
                         else -> true
                     }
             }.sortedWith(compareBy<OrganizerTask> { it.completed }.thenBy { it.date }.thenBy { it.time ?: "99:99" })
-        }
-    }
     val completed = tasks.count { it.completed }
 
     LazyPageColumn {
@@ -72,6 +71,7 @@ fun ActivitiesScreen(
                 }
             }
         }
+        item { ActivitySearchField(searchQuery) { searchQuery = it } }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(20.dp)) {
                 Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -85,7 +85,13 @@ fun ActivitiesScreen(
         }
         item { Text("${sortedTasks.size} attività mostrate", color = SoftText, fontSize = 13.sp) }
         if (sortedTasks.isEmpty()) {
-            item { EmptyState("Nessuna attività trovata", "Prova a cambiare i filtri oppure aggiungi una nuova attività.") }
+            item {
+                if (searchQuery.isNotBlank()) {
+                    EmptyState(stringResource(R.string.activity_search_no_results, searchQuery.trim()), stringResource(R.string.activity_search_no_results_hint))
+                } else {
+                    EmptyState("Nessuna attività trovata", "Prova a cambiare i filtri oppure aggiungi una nuova attività.")
+                }
+            }
         } else {
             items(sortedTasks, key = { it.id }) { task ->
                 TaskCard(task, onToggle = { onToggle(task.id) }, onEdit = { onEdit(task) }, onDelete = { taskToDeleteId = task.id })

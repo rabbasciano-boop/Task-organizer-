@@ -1,4 +1,9 @@
 <resources>
+    <string name="activity_search_label">Cerca attività</string>
+    <string name="activity_search_hint">Titolo, note o categoria</string>
+    <string name="activity_search_clear">Cancella ricerca</string>
+    <string name="activity_search_no_results">Nessuna attività trovata per «%1$s»</string>
+    <string name="activity_search_no_results_hint">Prova a cambiare la ricerca o i filtri.</string>
     <string name="app_name">Task Organizer</string>
     <string name="nav_home">Home</string>
     <string name="nav_activities">Attività</string>
