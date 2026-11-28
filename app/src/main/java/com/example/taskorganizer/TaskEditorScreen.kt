@@ -91,6 +91,8 @@ internal fun TaskEditorScreen(
     var alarmEnabled by rememberSaveable(task?.id) { mutableStateOf(task?.alarmEnabled ?: false) }
     var cardColor by rememberSaveable(task?.id) { mutableStateOf(task?.cardColor ?: DefaultCardColor) }
     var recurrence by rememberSaveable(task?.id) { mutableStateOf(task?.recurrence ?: "none") }
+    var subtasks by rememberSaveable(task?.id, stateSaver = SubtaskListSaver) { mutableStateOf(task?.subtasks.orEmpty()) }
+    var subtaskDraft by rememberSaveable(task?.id) { mutableStateOf("") }
     var error by rememberSaveable(task?.id) { mutableStateOf("") }
     var discardDialogOpen by rememberSaveable(task?.id) { mutableStateOf(false) }
     var datePickerOpen by rememberSaveable(task?.id) { mutableStateOf(false) }
@@ -109,7 +111,8 @@ internal fun TaskEditorScreen(
         reminderRepeatMinutes != (task?.reminderRepeatMinutes ?: 0) ||
         alarmEnabled != (task?.alarmEnabled ?: false) ||
         cardColor != (task?.cardColor ?: DefaultCardColor) ||
-        recurrence != (task?.recurrence ?: "none")
+        recurrence != (task?.recurrence ?: "none") ||
+        subtasks != task?.subtasks.orEmpty() || subtaskDraft.isNotBlank()
 
     fun requestClose() {
         if (hasUnsavedChanges) discardDialogOpen = true else onCancel()
@@ -123,6 +126,7 @@ internal fun TaskEditorScreen(
         val validEndTime = endTime.isBlank() || normalizedEndTime != null
         error = when {
             title.isBlank() -> "Inserisci un titolo."
+            subtaskDraft.isNotBlank() -> context.getString(R.string.subtasks_pending)
             parsedDate == null -> "La data deve essere nel formato GG-MM-AAAA."
             !validTime -> "L'orario deve essere nel formato 00:00."
             !validEndTime -> "L'orario di fine deve essere nel formato 00:00."
@@ -140,7 +144,8 @@ internal fun TaskEditorScreen(
                     completed = task?.completed ?: false, reminderEnabled = reminderEnabled && normalizedTime != null, reminderMinutesBefore = reminderMinutesBefore, reminderRepeatMinutes = reminderRepeatMinutes, alarmEnabled = alarmEnabled && reminderEnabled && normalizedTime != null, cardColor = cardColor, examStatus = if (category == "Esami") examStatus else null,
                     createdAt = task?.createdAt ?: System.currentTimeMillis(), deletedAt = task?.deletedAt ?: 0L, recurrence = recurrence,
                     seriesId = if (recurrence == "none") null else task?.seriesId,
-                    recurrenceAnchorDate = if (recurrence == "none" || recurrenceScheduleChanged) null else task?.recurrenceAnchorDate
+                    recurrenceAnchorDate = if (recurrence == "none" || recurrenceScheduleChanged) null else task?.recurrenceAnchorDate,
+                    subtasks = subtasks
                 )
             )
         }
@@ -178,7 +183,8 @@ internal fun TaskEditorScreen(
                 reminderEnabled = reminderEnabled,
                 reminderMinutesBefore = reminderMinutesBefore,
                 alarmEnabled = alarmEnabled,
-                cardColor = cardColor
+                cardColor = cardColor,
+                subtasks = subtasks
             )
         }
         Column(
@@ -194,6 +200,7 @@ internal fun TaskEditorScreen(
                 TaskColorPicker(selectedColor = cardColor, onSelected = { cardColor = it })
             }
         }
+        SubtaskEditor(subtasks, subtaskDraft, { subtaskDraft = it }, { subtasks = it })
         Card(modifier = Modifier.editorSunsetGlow(), colors = CardDefaults.cardColors(containerColor = CardBlue), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("DATA E FASCIA ORARIA", color = SoftText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -383,7 +390,8 @@ private fun TaskEditorPreview(
     reminderEnabled: Boolean,
     reminderMinutesBefore: Int,
     alarmEnabled: Boolean,
-    cardColor: String
+    cardColor: String,
+    subtasks: List<Subtask>
 ) {
     val useSunsetGradient = com.example.taskorganizer.ui.theme.OrganizerPalette.gradientTaskCards
     val previewShape = RoundedCornerShape(22.dp)
@@ -404,7 +412,7 @@ private fun TaskEditorPreview(
     Card(modifier = if (com.example.taskorganizer.ui.theme.OrganizerPalette.sunsetGlow) Modifier.sunsetGlow(previewShape, strong = true).sunsetTaskSurface(cardColor, previewShape) else Modifier.then(if (useSunsetGradient) Modifier.sunsetTaskSurface(cardColor, previewShape) else Modifier).sunsetGlow(previewShape, strong = useSunsetGradient), colors = CardDefaults.cardColors(containerColor = previewBackground), shape = previewShape) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("${categoryDisplay(category, categoryIcon)}", color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(listOfNotNull(categoryDisplay(category, categoryIcon), subtaskCount(subtasks)).joinToString(" · "), color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     if (alarmEnabled) Text("⏰ Sveglia", color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text(priority, color = previewText, fontSize = 12.sp, fontWeight = FontWeight.Bold)

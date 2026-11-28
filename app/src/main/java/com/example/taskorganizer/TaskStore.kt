@@ -20,6 +20,8 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
+data class Subtask(val id: String = UUID.randomUUID().toString(), val title: String, val done: Boolean = false)
+
 data class OrganizerTask(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -41,7 +43,8 @@ data class OrganizerTask(
     val deletedAt: Long = 0L,
     val recurrence: String = "none",
     val seriesId: String? = null,
-    val recurrenceAnchorDate: String? = null
+    val recurrenceAnchorDate: String? = null,
+    val subtasks: List<Subtask> = emptyList()
 )
 
 data class OrganizerListItem(
@@ -407,7 +410,7 @@ class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profile
         val workLogSettings = JSONObject()
             .put("hourlyRateCents", archive.workLogSettings.hourlyRateCents)
             .put("presets", presets)
-        return JSONObject().put("version", 7).put("tasks", items).put("deletedTasks", deletedItems).put("listItems", listEntries).put("customCategories", categories).put("customCategoryIcons", categoryIcons).put("workLogEntries", workLogEntries).put("workLogSettings", workLogSettings).put("activeWorkTimerStartedAt", archive.activeWorkTimerStartedAt ?: 0L).toString().toByteArray(Charsets.UTF_8)
+        return JSONObject().put("version", 8).put("tasks", items).put("deletedTasks", deletedItems).put("listItems", listEntries).put("customCategories", categories).put("customCategoryIcons", categoryIcons).put("workLogEntries", workLogEntries).put("workLogSettings", workLogSettings).put("activeWorkTimerStartedAt", archive.activeWorkTimerStartedAt ?: 0L).toString().toByteArray(Charsets.UTF_8)
     }
 
     private fun decode(bytes: ByteArray): TaskArchive {
@@ -435,7 +438,8 @@ class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profile
                 deletedAt = if (deleted) item.optLong("deletedAt", System.currentTimeMillis()) else 0L,
                 recurrence = item.optString("recurrence", "none"),
                 seriesId = item.optString("seriesId").ifBlank { null },
-                recurrenceAnchorDate = item.optString("recurrenceAnchorDate").ifBlank { null }
+                recurrenceAnchorDate = item.optString("recurrenceAnchorDate").ifBlank { null },
+                subtasks = decodeSubtasks(item.optJSONArray("subtasks"))
             )
         }
         val tasks = tasksFrom(archive.getJSONArray("tasks"))
@@ -532,6 +536,11 @@ class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profile
         .put("recurrence", task.recurrence)
         .put("seriesId", task.seriesId ?: "")
         .put("recurrenceAnchorDate", task.recurrenceAnchorDate ?: "")
+        .apply {
+            if (task.subtasks.isNotEmpty()) put("subtasks", JSONArray().apply {
+                task.subtasks.forEach { subtask -> put(JSONObject().put("id", subtask.id).put("title", subtask.title).put("done", subtask.done)) }
+            })
+        }
 
     private fun encrypt(plainText: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")

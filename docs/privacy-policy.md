@@ -4,7 +4,7 @@
 
 ## Dati organizzativi
 
-Task Organizer consente di gestire attività, note, categorie, liste e promemoria. Questi dati restano nella memoria privata del telefono in archivi cifrati separati per ogni account Google e per l'ospite, con chiavi custodite dal sistema Android. Il PIN e le impostazioni del dispositivo sono gestiti separatamente.
+Task Organizer consente di gestire attività, passaggi delle attività, note, categorie, liste e promemoria. Questi dati restano nella memoria privata del telefono in archivi cifrati separati per ogni account Google e per l'ospite, con chiavi custodite dal sistema Android. Il PIN e le impostazioni del dispositivo sono gestiti separatamente.
 
 Il Registro ore può contenere date e orari di lavoro, pause, note e tariffa oraria. Anche queste informazioni sono conservate nell'archivio locale dell'app. Se l'utente sceglie di esportarle in CSV, viene creato un file non cifrato nella posizione selezionata: la sua protezione e l'eventuale condivisione dipendono da tale posizione e dalle scelte dell'utente.
 

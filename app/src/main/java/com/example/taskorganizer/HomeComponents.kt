@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -42,6 +43,8 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: () -> Unit, onDelete: () -> Unit, onEdit: () -> Unit) {
+    val context = LocalContext.current
+    val subtaskDescription = if (task.subtasks.isEmpty()) "" else ", " + context.getString(R.string.subtasks_accessibility, task.subtasks.count { it.done }, task.subtasks.size)
     var dragOffset by remember(task.id) { mutableFloatStateOf(0f) }
     val threshold = with(LocalDensity.current) { 88.dp.toPx() }
     val action = when { dragOffset > 12f -> "complete"; dragOffset < -12f -> "delete"; else -> null }
@@ -61,7 +64,7 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
                 add(CustomAccessibilityAction(if (task.completed) "Segna come da fare" else "Completa") { onToggle(); true })
                 add(CustomAccessibilityAction("Elimina") { onDelete(); true })
             }
-            contentDescription = "${task.title}, ${formatTimeRange(task) ?: "senza orario"}, ${task.category}, ${if (task.completed) "completata" else "da fare"}"
+            contentDescription = "${task.title}, ${formatTimeRange(task) ?: "senza orario"}, ${task.category}, ${if (task.completed) "completata" else "da fare"}$subtaskDescription"
             role = Role.Button
         }.pointerInput(task.id, task.completed) {
             detectHorizontalDragGestures(
@@ -88,7 +91,7 @@ fun HomeAgendaTaskCard(task: OrganizerTask, onToggle: () -> Unit, onComplete: ()
                 Text(categoryIcon(task.category, task.categoryIcon), fontSize = 24.sp)
                 Column(Modifier.weight(1f)) {
                     Text(task.title, color = if (task.completed) mutedColor else titleColor, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, textDecoration = if (task.completed) TextDecoration.LineThrough else TextDecoration.None)
-                    Text(listOfNotNull(formatTimeRange(task), task.category).joinToString(" • ").ifBlank { "Senza orario" }, color = mutedColor, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(listOfNotNull(formatTimeRange(task), task.category, subtaskCount(task.subtasks)).joinToString(" • ").ifBlank { "Senza orario" }, color = mutedColor, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 }
                 Box(Modifier.size(48.dp).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
                     val nordic = OrganizerPalette.currentTheme == OrganizerTheme.AURORA_NORDIC

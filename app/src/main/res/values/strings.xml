@@ -1,4 +1,12 @@
 <resources>
+    <string name="subtasks_title">Passaggi</string>
+    <string name="subtasks_description">Aggiungi i passaggi da completare per questa attività.</string>
+    <string name="subtasks_input">Nuovo passaggio</string>
+    <string name="subtasks_add">Aggiungi</string>
+    <string name="subtasks_limit">Puoi aggiungere fino a 20 passaggi.</string>
+    <string name="subtasks_delete">Elimina passaggio %1$s</string>
+    <string name="subtasks_pending">Aggiungi il passaggio scritto oppure cancellalo prima di salvare.</string>
+    <string name="subtasks_accessibility">%1$d passaggi completati su %2$d</string>
     <string name="notification_action_complete">Completa</string>
     <string name="notification_action_snooze">Posticipa 10 min</string>
     <string name="activity_search_label">Cerca attività</string>

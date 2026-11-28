@@ -49,7 +49,8 @@ internal object RecurrenceTiming {
                 createdAt = System.currentTimeMillis(),
                 deletedAt = 0L,
                 seriesId = seriesId,
-                recurrenceAnchorDate = anchorDate
+                recurrenceAnchorDate = anchorDate,
+                subtasks = updatedTask.subtasks.map { it.copy(id = java.util.UUID.randomUUID().toString(), done = false) }
             )
         } else null
         val generatedOccurrence = if (

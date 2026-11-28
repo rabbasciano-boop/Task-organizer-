@@ -43,7 +43,7 @@ fun CompactTaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Uni
             Spacer(Modifier.size(4.dp))
             Column(modifier = Modifier.weight(1f).clickable(onClick = onEdit)) {
                 Text(task.title, color = if (useSunsetGradient) taskCardTextColor(task) else if (task.completed) SoftText else MainText, fontWeight = FontWeight.Bold)
-                Text(listOfNotNull(formatTimeRange(task), categoryDisplay(task.category, task.categoryIcon)).joinToString(" · "), color = if (useSunsetGradient) taskCardMutedColor(task) else SoftText, fontSize = 13.sp)
+                Text(listOfNotNull(formatTimeRange(task), categoryDisplay(task.category, task.categoryIcon), subtaskCount(task.subtasks)).joinToString(" · "), color = if (useSunsetGradient) taskCardMutedColor(task) else SoftText, fontSize = 13.sp)
             }
         }
     }
@@ -78,7 +78,7 @@ fun TaskCard(task: OrganizerTask, onToggle: () -> Unit, onEdit: () -> Unit, onDe
                     Text("${formatItalianDate(task.date)}${formatTimeRange(task)?.let { " · $it" } ?: ""}", color = mutedColor, fontSize = 13.sp)
                 }
             }
-            Text("${categoryDisplay(task.category, task.categoryIcon)} · priorità ${task.priority.lowercase()}", color = cardActionColor ?: Gold, fontSize = 13.sp)
+            Text(listOfNotNull(categoryDisplay(task.category, task.categoryIcon), subtaskCount(task.subtasks), "priorità ${task.priority.lowercase()}").joinToString(" · "), color = cardActionColor ?: Gold, fontSize = 13.sp)
             task.examStatus?.let { Text("Esame: $it", color = cardActionColor ?: Gold, fontSize = 13.sp) }
             if (task.note.isNotBlank()) Text(task.note, color = mutedColor, fontSize = 14.sp)
             HorizontalDivider(color = if (task.cardColor == DefaultCardColor) CardBlueLight else mutedColor.copy(alpha = 0.25f))
