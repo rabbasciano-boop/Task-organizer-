@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -104,6 +105,7 @@ internal fun TodayScreen(
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val context = LocalContext.current
     var quickText by rememberSaveable { mutableStateOf("") }
     var quickId by rememberSaveable { mutableStateOf(java.util.UUID.randomUUID().toString()) }
@@ -169,12 +171,12 @@ internal fun TodayScreen(
         }
     ) {
         Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = 6.dp)) {
+            Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = 6.dp, bottom = if (keyboardVisible) 0.dp else 84.dp)) {
                 HomeHeader(nickname, signedInAccount, selectedDate, isToday, { scope.launch { drawerState.open() } }, onOpenCalendar, dateFormatter)
                 HomeWeekStrip(weekDays, selectedDate, currentDate, tasks) { selectedDateValue = it.toString() }
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = 600.dp).imePadding(),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 104.dp),
+                    modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = 600.dp).imePadding().testTag("home_activity_list"),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     item { QuickTaskField(quickText, quickDraft, quickNow, quickSaving, { value -> if (quickText != value) { quickText = value; quickId = java.util.UUID.randomUUID().toString() } }, ::submitQuickTask) }
@@ -195,7 +197,7 @@ internal fun TodayScreen(
                 }
             }
             val addShape = RoundedCornerShape(18.dp)
-            Box(
+            if (!keyboardVisible) Box(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp).height(52.dp)
                     .then(if (com.example.taskorganizer.ui.theme.OrganizerPalette.gradientTaskCards) Modifier.sunsetGlow(addShape, strong = true).sunsetPrimarySurface(addShape) else Modifier.background(Gold, addShape).sunsetGlow(addShape))
                     .clip(addShape).clickable(onClick = onAdd).semantics { contentDescription = "Crea una nuova attività"; role = Role.Button }
