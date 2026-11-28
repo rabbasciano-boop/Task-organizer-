@@ -223,6 +223,21 @@ internal fun TaskOrganizerApp(
         }
     }
 
+    fun quickAddTask(task: OrganizerTask, onFinished: (QuickTaskSaveResult) -> Unit) {
+        updateArchive(change = { disk ->
+            if (disk.tasks.any { it.id == task.id } || disk.deletedTasks.any { it.id == task.id }) disk
+            else disk.copy(tasks = disk.tasks + task)
+        }, onFailure = { onFinished(QuickTaskSaveResult.FAILED) }) { saved ->
+            val actual = saved.tasks.firstOrNull { it.id == task.id }
+            if (actual == null) {
+                onFinished(QuickTaskSaveResult.FAILED)
+            } else {
+                val reminderScheduled = withContext(Dispatchers.IO) { runCatching { TaskReminderScheduler.schedule(context, actual, profileId) }.isSuccess }
+                onFinished(if (reminderScheduled) QuickTaskSaveResult.SAVED else QuickTaskSaveResult.SAVED_WITHOUT_REMINDER)
+            }
+        }
+    }
+
     fun toggleTaskById(taskId: String) {
         var becameCompleted = false
         updateArchive(change = { disk ->
@@ -461,6 +476,7 @@ internal fun TaskOrganizerApp(
                     nickname = nickname,
                     signedInAccount = signedInAccount,
                     onAdd = openNewTask,
+                    onQuickAdd = ::quickAddTask,
                     onToggleTask = ::toggleTaskById,
                     onCompleteTask = ::completeTaskById,
                     onDeleteTask = ::deleteTaskById,

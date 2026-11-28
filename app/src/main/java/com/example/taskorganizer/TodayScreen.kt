@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -46,6 +48,7 @@ internal fun TodayScreen(
     nickname: String,
     signedInAccount: SignedInAccount?,
     onAdd: () -> Unit,
+    onQuickAdd: (OrganizerTask, (QuickTaskSaveResult) -> Unit) -> Unit,
     onToggleTask: (String) -> Unit,
     onCompleteTask: (String) -> Unit,
     onDeleteTask: (String) -> Unit,
@@ -93,6 +96,37 @@ internal fun TodayScreen(
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var quickText by rememberSaveable { mutableStateOf("") }
+    var quickId by rememberSaveable { mutableStateOf(java.util.UUID.randomUUID().toString()) }
+    var quickSaving by remember { mutableStateOf(false) }
+    var quickNow by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(quickText) {
+        quickNow = LocalDateTime.now()
+        while (quickText.isNotBlank()) { delay(15_000); quickNow = LocalDateTime.now() }
+    }
+    val quickDraft = remember(quickText, quickNow) { quickText.takeIf { it.isNotBlank() }?.let { parseQuickTask(it, quickNow) } }
+    fun submitQuickTask() {
+        if (quickText.isBlank() || quickSaving) return
+        val textAtSubmit = quickText
+        val idAtSubmit = quickId
+        val parsed = parseQuickTask(textAtSubmit, LocalDateTime.now())
+        val task = OrganizerTask(id = idAtSubmit, title = parsed.title, date = parsed.date.toString(), time = parsed.time?.toString(), reminderEnabled = parsed.time != null)
+        quickSaving = true
+        onQuickAdd(task) { result ->
+            quickSaving = false
+            if (result != QuickTaskSaveResult.FAILED) {
+                if (quickId == idAtSubmit && quickText == textAtSubmit) {
+                    quickText = ""
+                    quickId = java.util.UUID.randomUUID().toString()
+                }
+                scope.launch {
+                    val message = context.getString(if (result == QuickTaskSaveResult.SAVED) R.string.quick_saved else R.string.quick_saved_no_reminder)
+                    if (snackbar.showSnackbar(message, actionLabel = context.getString(R.string.quick_edit), duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) onEdit(task)
+                }
+            }
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -115,10 +149,11 @@ internal fun TodayScreen(
                 HomeHeader(nickname, signedInAccount, selectedDate, isToday, { scope.launch { drawerState.open() } }, onOpenCalendar, dateFormatter)
                 HomeWeekStrip(weekDays, selectedDate, currentDate, tasks) { selectedDateValue = it.toString() }
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = 600.dp),
+                    modifier = Modifier.fillMaxWidth().weight(1f).widthIn(max = 600.dp).imePadding(),
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 104.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
+                    item { QuickTaskField(quickText, quickDraft, quickSaving, { value -> if (quickText != value) { quickText = value; quickId = java.util.UUID.randomUUID().toString() } }, ::submitQuickTask) }
                     item { DailySummaryCard(isToday, completedCount, selectedTasks.size, nextTask?.time) }
                     if (com.example.taskorganizer.ui.theme.OrganizerPalette.currentTheme == com.example.taskorganizer.ui.theme.OrganizerTheme.CARTA_DORATA) item { GoldDivider() }
                     item { HomeFilters(filter, selectedTasks, completedCount) { filter = it } }

@@ -1,4 +1,14 @@
 <resources>
+    <string name="quick_add_label">Aggiungi velocemente</string>
+    <string name="quick_add_hint">Es. Dentista domani alle 18</string>
+    <string name="quick_add_action">Crea attività</string>
+    <string name="quick_date_today">Oggi</string>
+    <string name="quick_date_tomorrow">Domani</string>
+    <string name="quick_no_time">senza orario</string>
+    <string name="quick_preview">%1$s · %2$s</string>
+    <string name="quick_saved">Attività creata</string>
+    <string name="quick_saved_no_reminder">Attività salvata, ma non è stato possibile programmare il promemoria.</string>
+    <string name="quick_edit">Modifica</string>
     <string name="subtasks_title">Passaggi</string>
     <string name="subtasks_description">Aggiungi i passaggi da completare per questa attività.</string>
     <string name="subtasks_input">Nuovo passaggio</string>
