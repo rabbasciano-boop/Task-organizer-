@@ -7,6 +7,12 @@ internal object ReminderTiming {
     private const val MAX_SCHEDULED_REMINDERS = 48
     private const val MINUTE_MILLIS = 60_000L
 
+    internal fun useExactForReminder(index: Int, lastIndex: Int, exactAllowed: Boolean): Boolean =
+        exactAllowed && index == lastIndex
+
+    internal fun wouldMissAllFutureReminders(startAt: Long, minutesBefore: Int, repeatMinutes: Int, now: Long): Boolean =
+        startAt > now && plannedTriggerTimes(startAt, minutesBefore, repeatMinutes).none { it > now }
+
     fun plannedTriggerTimes(startAt: Long, minutesBefore: Int, repeatMinutes: Int): List<Long> {
         val firstTrigger = startAt - minutesBefore.coerceAtLeast(0) * MINUTE_MILLIS
         if (repeatMinutes <= 0) return listOf(firstTrigger)

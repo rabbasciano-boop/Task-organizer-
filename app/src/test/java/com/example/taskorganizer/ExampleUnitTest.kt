@@ -1,6 +1,7 @@
 package com.example.taskorganizer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -31,6 +32,24 @@ class SunsetContrastTest {
 }
 
 class ReminderTimingTest {
+    @Test
+    fun onlyTheFinalReminderUsesExactSchedulingWhenAllowed() {
+        assertTrue(ReminderTiming.useExactForReminder(0, 0, true))
+        assertFalse(ReminderTiming.useExactForReminder(0, 2, true))
+        assertTrue(ReminderTiming.useExactForReminder(2, 2, true))
+        assertFalse(ReminderTiming.useExactForReminder(2, 2, false))
+    }
+
+    @Test
+    fun warnsWhenTheChosenAdvanceLeavesNoFutureReminder() {
+        val now = 10_000_000L
+        val soon = now + 6 * 60_000L
+        assertTrue(ReminderTiming.wouldMissAllFutureReminders(soon, 15, 0, now))
+        assertFalse(ReminderTiming.wouldMissAllFutureReminders(soon, 0, 0, now))
+        assertFalse(ReminderTiming.wouldMissAllFutureReminders(soon, 15, 5, now))
+        assertFalse(ReminderTiming.wouldMissAllFutureReminders(now - 1, 15, 0, now))
+        assertFalse(ReminderTiming.wouldMissAllFutureReminders(now + 16 * 60_000L, 15, 0, now))
+    }
     @Test
     fun staleOrMissingProfileTokensCannotAccessAnotherProfile() {
         assertTrue(LocalProfiles.mayAccess("account_a", "account_a", switching = false))

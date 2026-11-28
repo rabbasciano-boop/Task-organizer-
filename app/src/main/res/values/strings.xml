@@ -1,4 +1,10 @@
 <resources>
+    <string name="reminder_exact_permission_message">Per ricevere il promemoria all’orario scelto, abilita “Sveglie e promemoria” nelle impostazioni Android. Altrimenti potrebbe arrivare in ritardo.</string>
+    <string name="reminder_advance_passed_title">Anticipo già passato</string>
+    <string name="reminder_advance_passed_message">L’anticipo impostato è già passato, quindi questo promemoria non arriverebbe. Puoi riceverlo all’orario dell’attività oppure tornare indietro e modificarla.</string>
+    <string name="reminder_notify_at_start">Avvisami all’orario</string>
+    <string name="reminder_change_advance">Modifica anticipo</string>
+    <string name="reminder_return_to_text">Torna al testo</string>
     <string name="suggestions_channel">Suggerimenti</string>
     <string name="backup_reminder_title">Fai un backup dei tuoi dati</string>
     <string name="backup_reminder_message">Una copia aggiornata ti aiuta a conservare i tuoi dati. Apri l’app quando vuoi.</string>

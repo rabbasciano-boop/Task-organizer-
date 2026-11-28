@@ -55,13 +55,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 import java.util.Locale
 @Composable
 internal fun TaskEditorScreen(
@@ -95,6 +98,7 @@ internal fun TaskEditorScreen(
     var subtaskDraft by rememberSaveable(task?.id) { mutableStateOf("") }
     var error by rememberSaveable(task?.id) { mutableStateOf("") }
     var discardDialogOpen by rememberSaveable(task?.id) { mutableStateOf(false) }
+    var reminderAdvanceDialogOpen by rememberSaveable(task?.id) { mutableStateOf(false) }
     var datePickerOpen by rememberSaveable(task?.id) { mutableStateOf(false) }
     val initialDate = remember(task?.id) { task?.date?.let(::formatItalianDate) ?: LocalDate.now().format(ItalianDateFormatter) }
     val hasUnsavedChanges = title != task?.title.orEmpty() ||
@@ -118,7 +122,7 @@ internal fun TaskEditorScreen(
         if (hasUnsavedChanges) discardDialogOpen = true else onCancel()
     }
 
-    fun attemptSave() {
+    fun attemptSave(reminderOverride: Int? = null) {
         val parsedDate = parseItalianDate(date)
         val normalizedTime = normalizeTime(time)
         val normalizedEndTime = normalizeTime(endTime)
@@ -135,13 +139,21 @@ internal fun TaskEditorScreen(
             else -> ""
         }
         if (error.isBlank()) {
+            val selectedAdvance = reminderOverride ?: reminderMinutesBefore
+            if (reminderEnabled && normalizedTime != null) {
+                val startAt = LocalDateTime.of(parsedDate, LocalTime.parse(normalizedTime)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                if (ReminderTiming.wouldMissAllFutureReminders(startAt, selectedAdvance, reminderRepeatMinutes, System.currentTimeMillis())) {
+                    reminderAdvanceDialogOpen = true
+                    return
+                }
+            }
             val recurrenceScheduleChanged = task != null &&
                 (task.date != parsedDate.toString() || task.recurrence != recurrence)
             onSave(
                 OrganizerTask(
                     id = task?.id ?: java.util.UUID.randomUUID().toString(), title = title.trim(), date = parsedDate.toString(),
                     time = normalizedTime, endTime = normalizedEndTime, category = category, categoryIcon = categoryIcon, priority = priority, note = note.trim(),
-                    completed = task?.completed ?: false, reminderEnabled = reminderEnabled && normalizedTime != null, reminderMinutesBefore = reminderMinutesBefore, reminderRepeatMinutes = reminderRepeatMinutes, alarmEnabled = alarmEnabled && reminderEnabled && normalizedTime != null, cardColor = cardColor, examStatus = if (category == "Esami") examStatus else null,
+                    completed = task?.completed ?: false, reminderEnabled = reminderEnabled && normalizedTime != null, reminderMinutesBefore = selectedAdvance, reminderRepeatMinutes = reminderRepeatMinutes, alarmEnabled = alarmEnabled && reminderEnabled && normalizedTime != null, cardColor = cardColor, examStatus = if (category == "Esami") examStatus else null,
                     createdAt = task?.createdAt ?: System.currentTimeMillis(), deletedAt = task?.deletedAt ?: 0L, recurrence = recurrence,
                     seriesId = if (recurrence == "none") null else task?.seriesId,
                     recurrenceAnchorDate = if (recurrence == "none" || recurrenceScheduleChanged) null else task?.recurrenceAnchorDate,
@@ -152,6 +164,16 @@ internal fun TaskEditorScreen(
     }
     BackHandler(onBack = ::requestClose)
 
+    if (reminderAdvanceDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { reminderAdvanceDialogOpen = false }, containerColor = CardBlue,
+            title = { Text(stringResource(R.string.reminder_advance_passed_title), color = MainText) },
+            text = { Text(stringResource(R.string.reminder_advance_passed_message), color = SoftText) },
+            confirmButton = { TextButton(onClick = { reminderAdvanceDialogOpen = false; reminderMinutesBefore = 0; attemptSave(0) }) { Text(stringResource(R.string.reminder_notify_at_start), color = Gold) } },
+            dismissButton = { TextButton(onClick = { reminderAdvanceDialogOpen = false }) { Text(stringResource(R.string.reminder_change_advance), color = SoftText) } }
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize().organizerBackground()) {
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
         Row(
@@ -161,7 +183,7 @@ internal fun TaskEditorScreen(
         ) {
             IconButton(onClick = ::requestClose) { Text("×", color = MainText, fontSize = 26.sp) }
             Text(if (task == null) "Nuova attività" else "Modifica attività", color = MainText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            TextButton(onClick = ::attemptSave) { Text("Salva", color = Gold, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = { attemptSave() }) { Text("Salva", color = Gold, fontWeight = FontWeight.Bold) }
         }
         if (error.isNotBlank()) {
             Text(error, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), color = Danger, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -298,8 +320,8 @@ internal fun TaskEditorScreen(
                 enabled = reminderEnabled && time.isNotBlank()
             )
         }
-        if (alarmEnabled && reminderEnabled && time.isNotBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !TaskReminderScheduler.canUseExactAlarms(context)) {
-            Text("Per far suonare la sveglia all'orario esatto, abilita “Sveglie e promemoria” nelle impostazioni Android.", color = SoftText, fontSize = 13.sp)
+        if (reminderEnabled && time.isNotBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !TaskReminderScheduler.canUseExactAlarms(context)) {
+            Text(stringResource(R.string.reminder_exact_permission_message), color = SoftText, fontSize = 13.sp)
             OutlinedButton(
                 onClick = {
                     context.startActivity(
@@ -348,7 +370,7 @@ internal fun TaskEditorScreen(
         }
         if (error.isNotBlank()) Text(error, color = Danger, fontSize = 13.sp)
         Button(
-            onClick = ::attemptSave,
+            onClick = { attemptSave() },
             modifier = Modifier.fillMaxWidth().height(54.dp).editorSunsetGlow(RoundedCornerShape(16.dp), strong = true), shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NightBlue)
         ) { Text("Salva attività", fontWeight = FontWeight.Bold) }

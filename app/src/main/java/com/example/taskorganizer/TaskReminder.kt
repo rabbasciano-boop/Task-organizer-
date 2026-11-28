@@ -46,8 +46,9 @@ object TaskReminderScheduler {
         triggerTimes.forEachIndexed { index, triggerAt ->
             if (triggerAt > System.currentTimeMillis()) {
                 val pendingIntent = reminderIntent(context, task, index, taskStartAt, profileId)
-                // A repeating reminder stays battery-friendly; its final scheduled alert is the precise alarm.
-                val useExactAlarm = task.alarmEnabled && index == triggerTimes.lastIndex && canUseExactAlarms(alarmManager)
+                // Keep the final user-selected reminder precise when Android allows it;
+                // intermediate repetitions remain inexact to limit battery use.
+                val useExactAlarm = ReminderTiming.useExactForReminder(index, triggerTimes.lastIndex, canUseExactAlarms(alarmManager))
                 if (useExactAlarm) {
                     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
                 } else {

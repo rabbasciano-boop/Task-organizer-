@@ -36,6 +36,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -111,18 +112,19 @@ internal fun TodayScreen(
     var quickId by rememberSaveable { mutableStateOf(java.util.UUID.randomUUID().toString()) }
     var quickSaving by remember { mutableStateOf(false) }
     var confirmPastQuickTask by rememberSaveable { mutableStateOf(false) }
+    var confirmQuickReminderAtStart by rememberSaveable { mutableStateOf(false) }
     var quickNow by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(quickText) {
         quickNow = LocalDateTime.now()
         while (quickText.isNotBlank()) { delay(15_000); quickNow = LocalDateTime.now() }
     }
     val quickDraft = remember(quickText, quickNow) { quickText.takeIf { it.isNotBlank() }?.let { parseQuickTask(it, quickNow) } }
-    fun saveQuickTask() {
+    fun saveQuickTask(reminderMinutesBefore: Int = 15) {
         if (quickText.isBlank() || quickSaving) return
         val textAtSubmit = quickText
         val idAtSubmit = quickId
         val parsed = parseQuickTask(textAtSubmit, LocalDateTime.now())
-        val task = OrganizerTask(id = idAtSubmit, title = parsed.title, date = parsed.date.toString(), time = parsed.time?.toString(), reminderEnabled = parsed.time != null)
+        val task = OrganizerTask(id = idAtSubmit, title = parsed.title, date = parsed.date.toString(), time = parsed.time?.toString(), reminderEnabled = parsed.time != null, reminderMinutesBefore = reminderMinutesBefore)
         quickSaving = true
         onQuickAdd(task) { result ->
             quickSaving = false
@@ -140,8 +142,14 @@ internal fun TodayScreen(
     }
     fun submitQuickTask() {
         if (quickText.isBlank() || quickSaving) return
-        if (parseQuickTask(quickText, LocalDateTime.now()).isPast(LocalDateTime.now())) confirmPastQuickTask = true
-        else saveQuickTask()
+        val now = LocalDateTime.now()
+        val draft = parseQuickTask(quickText, now)
+        val startAt = draft.time?.let { LocalDateTime.of(draft.date, it).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }
+        when {
+            draft.isPast(now) -> confirmPastQuickTask = true
+            startAt != null && ReminderTiming.wouldMissAllFutureReminders(startAt, 15, 0, System.currentTimeMillis()) -> confirmQuickReminderAtStart = true
+            else -> saveQuickTask()
+        }
     }
     if (confirmPastQuickTask) {
         AlertDialog(
@@ -151,6 +159,15 @@ internal fun TodayScreen(
             text = { Text(stringResource(R.string.quick_past_confirm_message), color = SoftText) },
             confirmButton = { TextButton(onClick = { confirmPastQuickTask = false; saveQuickTask() }) { Text(stringResource(R.string.quick_past_confirm_save), color = Gold) } },
             dismissButton = { TextButton(onClick = { confirmPastQuickTask = false }) { Text(stringResource(R.string.quick_past_confirm_edit), color = SoftText) } }
+        )
+    }
+    if (confirmQuickReminderAtStart) {
+        AlertDialog(
+            onDismissRequest = { confirmQuickReminderAtStart = false }, containerColor = CardBlue,
+            title = { Text(stringResource(R.string.reminder_advance_passed_title), color = MainText) },
+            text = { Text(stringResource(R.string.reminder_advance_passed_message), color = SoftText) },
+            confirmButton = { TextButton(onClick = { confirmQuickReminderAtStart = false; saveQuickTask(0) }) { Text(stringResource(R.string.reminder_notify_at_start), color = Gold) } },
+            dismissButton = { TextButton(onClick = { confirmQuickReminderAtStart = false }) { Text(stringResource(R.string.reminder_return_to_text), color = SoftText) } }
         )
     }
 

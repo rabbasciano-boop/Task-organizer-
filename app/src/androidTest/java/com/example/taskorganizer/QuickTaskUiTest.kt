@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performTextInput
 import com.example.taskorganizer.ui.theme.OrganizerTheme
 import com.example.taskorganizer.ui.theme.TaskOrganizerTheme
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -105,5 +106,26 @@ class QuickTaskUiTest {
         }
         compose.onNodeWithText(greetingFor(nickname)).assertIsDisplayed()
         compose.onNodeWithText("Aggiungi velocemente").assertIsDisplayed()
+    }
+
+    @Test fun quickTaskWarnsIfDefaultReminderIsAlreadyPast() {
+        var saved: OrganizerTask? = null
+        compose.setContent {
+            TaskOrganizerTheme(OrganizerTheme.CARTA_DORATA) {
+                TodayScreen(
+                    tasks = emptyList(), nickname = "Utente", signedInAccount = null, onAdd = {},
+                    onQuickAdd = { task, done -> saved = task; done(QuickTaskSaveResult.SAVED) },
+                    onToggleTask = {}, onCompleteTask = {}, onDeleteTask = {}, onRestoreTask = {}, onEdit = {},
+                    onOpenActivities = {}, onOpenLists = {}, onOpenCalendar = {}, onOpenTimeLog = {}, onManageAccount = {}, onOpenPrivacy = {}
+                )
+            }
+        }
+        val soon = LocalDateTime.now().plusMinutes(6)
+        val input = "Prova ${soon.format(DateTimeFormatter.ofPattern("dd/MM/uuuu"))} alle ${soon.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+        compose.onNodeWithText("Aggiungi velocemente").performTextInput(input)
+        compose.onNodeWithContentDescription("Crea attività").performClick()
+        compose.onNodeWithText("Anticipo già passato").assertExists()
+        compose.onNodeWithText("Avvisami all’orario").performClick()
+        compose.runOnIdle { assertEquals(0, saved?.reminderMinutesBefore) }
     }
 }
