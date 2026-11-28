@@ -28,6 +28,8 @@ object TaskReminderScheduler {
     private const val EXTRA_TASK_START = "task_start"
     private const val EXTRA_ALARM = "alarm"
     private const val EXTRA_PROFILE = "profile_id"
+    private const val EXTRA_SNOOZE_COUNT = "snooze_count"
+    internal const val SNOOZE_INDEX = 48
 
     /** Schedules the requested reminders and always keeps the final, most useful alert. */
     fun schedule(context: Context, task: OrganizerTask, profileId: String = LocalProfiles.currentId()) {
@@ -60,12 +62,24 @@ object TaskReminderScheduler {
     /** Cancels all reminders identified by one task id. */
     fun cancel(context: Context, taskId: String, profileId: String = LocalProfiles.currentId()) {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
-        repeat(MAX_SCHEDULED_REMINDERS) { index ->
+        repeat(MAX_SCHEDULED_REMINDERS + 1) { index ->
             existingReminderIntent(context, taskId, index, profileId)?.let { pendingIntent ->
                 alarmManager.cancel(pendingIntent)
                 pendingIntent.cancel()
             }
         }
+    }
+
+    internal fun scheduleSnooze(context: Context, task: OrganizerTask, profileId: String, count: Int, now: Long) {
+        if (!LocalProfiles.mayAccess(profileId, LocalProfiles.currentId(), LocalProfiles.isSwitching())) return
+        val time = task.time ?: return
+        val startAt = runCatching { LocalDateTime.of(LocalDate.parse(task.date), LocalTime.parse(time)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull() ?: return
+        val pending = reminderIntent(context, task, SNOOZE_INDEX, startAt, profileId, count)
+        val alarms = context.getSystemService(AlarmManager::class.java)
+        val triggerAt = snoozeTriggerAt(now)
+        if (canUseExactAlarms(alarms)) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+        else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+        // Snoozes are intentionally not persisted across a phone reboot.
     }
 
     fun rescheduleAll(context: Context) {
@@ -105,12 +119,13 @@ object TaskReminderScheduler {
     private fun canUseExactAlarms(alarmManager: AlarmManager): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
 
-    private fun reminderIntent(context: Context, task: OrganizerTask, index: Int, taskStartAt: Long, profileId: String): PendingIntent {
+    private fun reminderIntent(context: Context, task: OrganizerTask, index: Int, taskStartAt: Long, profileId: String, snoozeCount: Int = 0): PendingIntent {
         val intent = reminderBroadcastIntent(context, task.id, index, profileId)
             .putExtra(EXTRA_TITLE, task.title)
             .putExtra(EXTRA_TIME, task.time)
             .putExtra(EXTRA_TASK_START, taskStartAt)
             .putExtra(EXTRA_ALARM, task.alarmEnabled)
+            .putExtra(EXTRA_SNOOZE_COUNT, snoozeCount)
         // Il request code combina l'ID della task con l'indice per evitare collisioni
         // tra PendingIntent di task diverse con lo stesso indice di promemoria.
         return PendingIntent.getBroadcast(context, reminderRequestCode(task.id, index), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -142,6 +157,8 @@ object TaskReminderScheduler {
     internal fun time(intent: Intent) = intent.getStringExtra(EXTRA_TIME).orEmpty()
     internal fun taskStartAt(intent: Intent) = intent.getLongExtra(EXTRA_TASK_START, 0L)
     internal fun isAlarm(intent: Intent) = intent.getBooleanExtra(EXTRA_ALARM, false)
+    internal fun profileId(intent: Intent) = intent.getStringExtra(EXTRA_PROFILE).orEmpty()
+    internal fun snoozeCount(intent: Intent) = intent.getIntExtra(EXTRA_SNOOZE_COUNT, 0)
     internal fun isForCurrentProfile(intent: Intent): Boolean =
         LocalProfiles.mayAccess(intent.getStringExtra(EXTRA_PROFILE), LocalProfiles.currentId(), LocalProfiles.isSwitching())
 
@@ -153,6 +170,26 @@ object TaskReminderScheduler {
 
 class TaskReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (TaskReminderScheduler.reminderIndex(intent) == TaskReminderScheduler.SNOOZE_INDEX) {
+            val pendingResult = goAsync()
+            Thread {
+                try {
+                    if (!TaskReminderScheduler.isForCurrentProfile(intent)) return@Thread
+                    val store = EncryptedTaskStore(context.applicationContext, profileId = TaskReminderScheduler.profileId(intent))
+                    val current = if (store.hasArchive()) store.load().tasks.firstOrNull { it.id == TaskReminderScheduler.taskId(intent) } else null
+                    if (current != null && !current.completed && current.deletedAt == 0L && current.reminderEnabled && current.time != null) show(context, intent)
+                } catch (error: Exception) {
+                    android.util.Log.e("TaskReminder", "Could not verify postponed reminder", error)
+                } finally {
+                    pendingResult.finish()
+                }
+            }.start()
+            return
+        }
+        show(context, intent)
+    }
+
+    private fun show(context: Context, intent: Intent) {
         if (!TaskReminderScheduler.isForCurrentProfile(intent)) return
         if (!TaskReminderScheduler.notificationsAllowed(context)) return
         TaskReminderScheduler.ensureNotificationChannels(context)
@@ -185,7 +222,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
                     AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
                 )
         }
-        val notification = builder
+        builder
             .setSmallIcon(R.drawable.ic_stat_task_organizer)
             .setContentTitle(if (isAlarm) "Promemoria importante" else "Promemoria attività")
             .setContentText("$message · ${TaskReminderScheduler.time(intent)}")
@@ -196,7 +233,8 @@ class TaskReminderReceiver : BroadcastReceiver() {
             .setPublicVersion(publicVersion.build())
             .setCategory(if (isAlarm) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
             .setDefaults(notificationDefaults)
-            .build()
+        ReminderNotificationActions.add(context, builder, intent)
+        val notification = builder.build()
         manager.notify(TaskReminderScheduler.taskId(intent), TaskReminderScheduler.reminderIndex(intent), notification)
     }
 }

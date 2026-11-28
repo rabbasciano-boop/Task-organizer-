@@ -178,6 +178,14 @@ class EncryptedTaskStore(context: Context, keyAlias: String = KEY_ALIAS, profile
         updated
     }
 
+    /** Applies a conditional change without rewriting or recreating an archive for a stale action. */
+    internal fun updateIf(transform: (TaskArchive) -> TaskArchive?): TaskArchive? = synchronized(archiveLock) {
+        if (!hasArchive()) return@synchronized null
+        val updated = transform(loadUnlocked()) ?: return@synchronized null
+        saveUnlocked(updated)
+        updated
+    }
+
     /**
      * Creates a portable encrypted copy of organizer data. The password is never stored and the
      * local Keystore key, PIN, profile and sign-in state are deliberately excluded.

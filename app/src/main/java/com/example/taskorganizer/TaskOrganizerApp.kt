@@ -1,6 +1,11 @@
 package com.example.taskorganizer
 
 import android.net.Uri
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -172,21 +177,28 @@ internal fun TaskOrganizerApp(
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_START) {
-                appScope.launch {
-                    archiveUpdateMutex.withLock {
-                        when (val latest = withContext(Dispatchers.IO) { store.loadSafely() }) {
-                            is TaskArchiveLoadResult.Loaded -> applyArchive(latest.archive)
-                            is TaskArchiveLoadResult.Unreadable -> archiveLoadResult = latest
-                        }
+    DisposableEffect(lifecycleOwner, profileId) {
+        fun reloadArchive() {
+            appScope.launch {
+                archiveUpdateMutex.withLock {
+                    when (val latest = withContext(Dispatchers.IO) { store.loadSafely() }) {
+                        is TaskArchiveLoadResult.Loaded -> applyArchive(latest.archive)
+                        is TaskArchiveLoadResult.Unreadable -> archiveLoadResult = latest
                     }
                 }
             }
         }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) reloadArchive()
+        }
+        val changes = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.getStringExtra(EXTRA_CHANGED_PROFILE) == profileId) reloadArchive()
+            }
+        }
+        ContextCompat.registerReceiver(context, changes, IntentFilter(ACTION_ARCHIVE_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED)
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); context.unregisterReceiver(changes) }
     }
 
     LaunchedEffect(openNewFromWidget) {
